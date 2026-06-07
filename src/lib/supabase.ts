@@ -1,9 +1,11 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-let adminClient: SupabaseClient | null = null;
+const globalForSupabase = globalThis as unknown as { supabaseAdmin?: SupabaseClient };
 
 export function getSupabaseAdmin(): SupabaseClient {
-  if (adminClient) return adminClient;
+  if (globalForSupabase.supabaseAdmin) {
+    return globalForSupabase.supabaseAdmin;
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,11 +14,11 @@ export function getSupabaseAdmin(): SupabaseClient {
     throw new Error("Supabase environment variables are not configured");
   }
 
-  adminClient = createClient(url, serviceKey, {
+  globalForSupabase.supabaseAdmin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  return adminClient;
+  return globalForSupabase.supabaseAdmin;
 }
 
 export function getStorageBucket(): string {

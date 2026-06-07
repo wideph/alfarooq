@@ -15,8 +15,9 @@ interface SiteSettingsPanelProps {
 }
 
 export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps) {
-  const [open, setOpen] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SiteSettingsForm>({
     siteName: "Alfarooq Services",
@@ -28,6 +29,9 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
   const [removeLogo, setRemoveLogo] = useState(false);
 
   useEffect(() => {
+    if (!open || loaded) return;
+
+    setLoading(true);
     fetch("/api/settings")
       .then((r) => r.json())
       .then((data) => {
@@ -37,10 +41,11 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
           whatsappNumber: data.whatsappNumber || "",
           logoFilename: data.logoFilename || null,
         });
-        setLoading(false);
+        setLoaded(true);
       })
-      .catch(() => setLoading(false));
-  }, []);
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, loaded]);
 
   async function handleSave() {
     setSaving(true);
@@ -74,7 +79,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
     setSaving(false);
   }
 
-  if (loading) {
+  if (open && loading && !loaded) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-6 flex justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary-500" />

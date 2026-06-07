@@ -34,7 +34,6 @@ export default function AdminLoginPage() {
       }
 
       router.push("/admin");
-      router.refresh();
     } catch {
       setError("Connection error");
       setLoading(false);
@@ -45,7 +44,7 @@ export default function AdminLoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-gradient-to-br from-primary-600/5 via-accent-500/5 to-emerald-500/5" />
 
-      <div className="relative w-full max-w-md animate-fade-in">
+      <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg">

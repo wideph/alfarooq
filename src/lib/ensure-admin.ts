@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 const globalForAdminSync = globalThis as unknown as { adminEnvSynced?: boolean };
 
 /**
- * Keeps the Admin row in sync with ADMIN_EMAIL / ADMIN_PASSWORD env vars.
- * Login reads from the database, not env directly — this runs once per server instance.
+ * Syncs Admin row with env vars only when missing or password changed.
+ * Skips expensive bcrypt.hash when credentials already match.
  */
 export async function ensureAdminFromEnv() {
   if (globalForAdminSync.adminEnvSynced) return;
@@ -13,7 +13,20 @@ export async function ensureAdminFromEnv() {
   const email = process.env.ADMIN_EMAIL?.trim();
   const password = process.env.ADMIN_PASSWORD;
 
-  if (!email || !password) return;
+  if (!email || !password) {
+    globalForAdminSync.adminEnvSynced = true;
+    return;
+  }
+
+  const existing = await prisma.admin.findUnique({
+    where: { email },
+    select: { password: true },
+  });
+
+  if (existing && (await bcrypt.compare(password, existing.password))) {
+    globalForAdminSync.adminEnvSynced = true;
+    return;
+  }
 
   const hashedPassword = await bcrypt.hash(password, 10);
 

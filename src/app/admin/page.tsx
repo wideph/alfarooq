@@ -125,6 +125,10 @@ export default function AdminDashboard() {
     });
   }
 
+  function refreshCourseViews(courseId: string) {
+    return Promise.all([loadCourseDetail(courseId), loadCourses()]);
+  }
+
   async function answerUserQuestion(questionId: string) {
     if (!selectedCourse) return;
     const answer = userAnswerForm[questionId]?.trim();
@@ -280,8 +284,7 @@ export default function AdminDashboard() {
       setMessage("Sample upload ho gaya!");
       setUploadFile(null);
       setUploadTitle("");
-      loadCourseDetail(selectedCourse);
-      loadCourses();
+      await refreshCourseViews(selectedCourse);
     } else {
       const data = await res.json();
       setMessage(`Error: ${data.error}`);
@@ -299,8 +302,7 @@ export default function AdminDashboard() {
 
     if (res.ok) {
       setMessage("Sample delete ho gaya");
-      loadCourseDetail(selectedCourse);
-      loadCourses();
+      await refreshCourseViews(selectedCourse);
     }
   }
 
@@ -333,8 +335,7 @@ export default function AdminDashboard() {
         setQaForm({ question: "", answer: "" });
         setQaMediaFile(null);
         setRemoveQaMedia(false);
-        loadCourseDetail(selectedCourse);
-        loadCourses();
+        await refreshCourseViews(selectedCourse);
       }
     } else {
       const res = await fetch(`/api/courses/${selectedCourse}/questions`, {
@@ -345,8 +346,7 @@ export default function AdminDashboard() {
         setMessage("Question add ho gaya!");
         setQaForm({ question: "", answer: "" });
         setQaMediaFile(null);
-        loadCourseDetail(selectedCourse);
-        loadCourses();
+        await refreshCourseViews(selectedCourse);
       }
     }
     setSaving(false);
@@ -362,8 +362,7 @@ export default function AdminDashboard() {
 
     if (res.ok) {
       setMessage("Question delete ho gaya");
-      loadCourseDetail(selectedCourse);
-      loadCourses();
+      await refreshCourseViews(selectedCourse);
     }
   }
 

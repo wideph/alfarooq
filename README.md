@@ -50,6 +50,7 @@ npm run dev
 3. **Install Command:** `npm install`
 4. **Build Command:** `prisma generate && next build`
 5. Add all environment variables from `.env.example` in Vercel → Settings → Environment Variables
+6. **Optional speed tip:** set Vercel project region to **Singapore (sin1)** — Supabase DB is in ap-southeast-1; closer region = faster admin/login/saves
 
 **Important — connection strings (Supabase Dashboard → Database → Connect):**
 

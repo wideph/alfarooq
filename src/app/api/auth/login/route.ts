@@ -15,7 +15,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await ensureAdminFromEnv();
+    const envEmail = process.env.ADMIN_EMAIL?.trim();
+    if (envEmail && email === envEmail) {
+      await ensureAdminFromEnv();
+    }
 
     const admin = await prisma.admin.findUnique({ where: { email } });
 
