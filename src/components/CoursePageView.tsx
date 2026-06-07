@@ -63,53 +63,46 @@ export default function CoursePageView({
   const allQuestions = buildQuestions(course);
 
   return (
-    <div className="app-page">
+    <div className="min-h-screen flex flex-col">
       <Header />
       <SubmitQuestionModal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm text-app-text-muted hover:text-app-primary mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-primary-600 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Courses and Services
         </Link>
 
-        <div className="space-y-8">
-          <div className="surface-elevated p-6 sm:p-8 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <span className="badge-live">Live Course</span>
-              {course.samples.length > 0 && <span className="badge-premium">Resources Included</span>}
-            </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-app-text mb-4 urdu-text leading-snug">
+        <div className="space-y-10">
+          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 sm:p-8">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 mb-4 urdu-text leading-snug">
               {course.title}
             </h1>
-            <p className="text-app-text-secondary leading-relaxed text-base sm:text-lg urdu-text whitespace-pre-line">
+            <p className="text-slate-600 leading-loose text-base sm:text-lg urdu-text whitespace-pre-line">
               {course.description}
             </p>
           </div>
 
           {hasSamples && (
-            <section className="space-y-6">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-app-primary mb-1">Materials</p>
-                <h2 className="text-xl sm:text-2xl font-semibold text-app-text flex items-center gap-2 urdu-text">
-                  <FileText className="w-5 h-5 text-app-primary" />
-                  Sample Materials
-                </h2>
-              </div>
+            <section className="space-y-8">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2 urdu-text">
+                <FileText className="w-6 h-6 text-primary-500" />
+                Sample Materials
+              </h2>
 
               {course.samples.map((sample, index) => (
-                <div key={sample.id} className="surface-card p-4 sm:p-5 space-y-3">
+                <div key={sample.id} className="space-y-3">
                   <div className="flex items-center gap-2 px-1">
                     {sample.type === "pdf" ? (
-                      <FileText className="w-5 h-5 text-app-error flex-shrink-0" />
+                      <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
                     ) : (
-                      <ImageIcon className="w-5 h-5 text-app-teal flex-shrink-0" />
+                      <ImageIcon className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                     )}
-                    <h3 className="font-medium text-app-text urdu-text">{sample.title}</h3>
-                    <span className="text-xs text-app-text-muted uppercase tracking-wide">{sample.type}</span>
+                    <h3 className="font-semibold text-slate-800 urdu-text">{sample.title}</h3>
+                    <span className="text-xs text-slate-400 uppercase">{sample.type}</span>
                   </div>
 
                   {sample.type === "pdf" ? (
@@ -118,25 +111,24 @@ export default function CoursePageView({
                     <ImageViewer filename={sample.filename} title={sample.title} />
                   )}
 
-                  {index < course.samples.length - 1 && <div className="border-b border-app-border pt-2" />}
+                  {index < course.samples.length - 1 && (
+                    <div className="border-b border-slate-200 pt-2" />
+                  )}
                 </div>
               ))}
             </section>
           )}
 
           <section>
-            <div className="mb-5">
-              <p className="text-xs uppercase tracking-wide text-app-teal mb-1">Support</p>
-              <h2 className="text-xl sm:text-2xl font-semibold text-app-text flex items-center gap-2 urdu-text">
-                <HelpCircle className="w-5 h-5 text-app-teal" />
-                Questions & Answers
-              </h2>
-            </div>
-            <div className="surface-card p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-5 flex items-center gap-2 urdu-text">
+              <HelpCircle className="w-6 h-6 text-accent-500" />
+              Questions & Answers
+            </h2>
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
               {allQuestions.length > 0 ? (
                 <QASection questions={allQuestions} />
               ) : (
-                <p className="text-app-text-muted text-center py-6 urdu-text">
+                <p className="text-slate-500 text-center py-6 urdu-text">
                   Abhi koi sawal jawab available nahi hai
                 </p>
               )}
