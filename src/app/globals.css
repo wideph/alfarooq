@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
+    "Urdu Typesetting", "Noto Nastaliq Urdu", "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f0fdf4 100%);
+  min-height: 100vh;
+  line-height: 1.9;
+}
+
+.font-urdu,
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+input,
+textarea {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+.urdu-text {
+  font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
+    "Urdu Typesetting", "Noto Nastaliq Urdu", serif;
+  line-height: 2.2;
+}
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.no-download {
+  -webkit-touch-callout: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}

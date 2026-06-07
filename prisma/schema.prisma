@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id            String         @id @default(cuid())
+  title         String
+  description   String
+  thumbnail     String?
+  isPublished   Boolean        @default(true)
+  order         Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  samples       Sample[]
+  questions     Question[]
+  userQuestions UserQuestion[]
+}
+
+model SiteSettings {
+  id             String   @id @default("site")
+  siteName       String   @default("Alfarooq Services")
+  logoFilename   String?
+  heroText       String   @default("")
+  whatsappNumber String   @default("")
+  updatedAt      DateTime @updatedAt
+}
+
+model UserQuestion {
+  id                   String    @id @default(cuid())
+  courseId             String
+  question             String
+  answer               String?
+  answerMediaFilename  String?
+  answerMediaType      String?
+  status               String    @default("pending")
+  createdAt            DateTime  @default(now())
+  answeredAt           DateTime?
+  course               Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Sample {
+  id        String   @id @default(cuid())
+  courseId  String
+  title     String
+  type      String
+  filename  String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Question {
+  id                  String   @id @default(cuid())
+  courseId            String
+  question            String
+  answer              String
+  answerMediaFilename String?
+  answerMediaType     String?
+  order               Int      @default(0)
+  createdAt           DateTime @default(now())
+  course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
