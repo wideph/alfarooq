@@ -22,15 +22,15 @@ export default function AnswerContent({
   return (
     <div className="space-y-4">
       {hasText && (
-        <p className="text-slate-700 leading-loose whitespace-pre-wrap urdu-text">{answer}</p>
+        <p className="text-slate-300 leading-loose whitespace-pre-wrap urdu-text">{answer}</p>
       )}
       {hasMedia && mediaType === "pdf" && (
-        <div className="rounded-xl overflow-hidden border border-slate-200">
+        <div className="rounded-xl overflow-hidden border border-slate-700/50">
           <PdfViewer filename={mediaFilename!} title="Answer PDF" compact />
         </div>
       )}
       {hasMedia && mediaType === "image" && (
-        <div className="rounded-xl overflow-hidden border border-slate-200">
+        <div className="rounded-xl overflow-hidden border border-emerald-900/40">
           <ImageViewer filename={mediaFilename!} title="Answer Image" compact />
         </div>
       )}

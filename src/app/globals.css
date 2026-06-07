@@ -27,7 +27,8 @@ html {
 body {
   font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
     "Urdu Typesetting", "Noto Nastaliq Urdu", "Segoe UI", system-ui, sans-serif;
-  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f0fdf4 100%);
+  background: #020617;
+  color: #e2e8f0;
   min-height: 100vh;
   line-height: 1.9;
 }
@@ -51,6 +52,21 @@ textarea {
     "Urdu Typesetting", "Noto Nastaliq Urdu", serif;
   line-height: 2.2;
 }
+
+.theme-home {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(88, 28, 135, 0.22), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 50%, rgba(37, 99, 235, 0.12), transparent 50%),
+    linear-gradient(180deg, #020617 0%, #0f172a 45%, #020617 100%);
+}
+
+.theme-course {
+  background:
+    radial-gradient(ellipse 70% 45% at 0% 0%, rgba(16, 185, 129, 0.14), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(20, 184, 166, 0.1), transparent 50%),
+    linear-gradient(165deg, #050807 0%, #0a1210 40%, #071010 100%);
+}
+
 .no-select {
   -webkit-user-select: none;
   user-select: none;
@@ -75,7 +91,7 @@ textarea {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

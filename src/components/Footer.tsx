@@ -3,34 +3,50 @@
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import type { PageTheme } from "@/lib/theme";
 
-export default function Footer() {
+const styles = {
+  home: {
+    shell: "border-violet-500/15 bg-slate-950/70",
+    brand: "text-slate-300",
+    copy: "text-slate-500",
+    link: "text-slate-500 hover:text-violet-300",
+    icon: "text-violet-400",
+  },
+  course: {
+    shell: "border-emerald-500/15 bg-[#060a09]/70",
+    brand: "text-slate-300",
+    copy: "text-slate-500",
+    link: "text-slate-500 hover:text-emerald-300",
+    icon: "text-emerald-400",
+  },
+} as const;
+
+export default function Footer({ theme = "home" }: { theme?: PageTheme }) {
   const { settings } = useSiteSettings();
+  const t = styles[theme];
 
   return (
-    <footer className="mt-auto border-t border-slate-200/60 bg-white/60 backdrop-blur-sm">
+    <footer className={`mt-auto border-t backdrop-blur-sm ${t.shell}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-slate-600">
+          <div className={`flex items-center gap-2 ${t.brand}`}>
             {settings.logoFilename ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`/api/media/${encodeURIComponent(settings.logoFilename)}`}
                 alt=""
-                className="w-5 h-5 rounded object-cover"
+                className="w-5 h-5 rounded object-cover ring-1 ring-white/10"
               />
             ) : (
-              <GraduationCap className="w-5 h-5 text-primary-500" />
+              <GraduationCap className={`w-5 h-5 ${t.icon}`} />
             )}
             <span className="font-semibold urdu-text">{settings.siteName}</span>
           </div>
-          <p className="text-sm text-slate-500 text-center">
+          <p className={`text-sm text-center ${t.copy}`}>
             © {new Date().getFullYear()} {settings.siteName}
           </p>
-          <Link
-            href="/admin/login"
-            className="text-sm text-slate-400 hover:text-primary-600 transition-colors"
-          >
+          <Link href="/admin/login" className={`text-sm transition-colors ${t.link}`}>
             Admin Panel
           </Link>
         </div>

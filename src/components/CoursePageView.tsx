@@ -63,46 +63,51 @@ export default function CoursePageView({
   const allQuestions = buildQuestions(course);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <SubmitQuestionModal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} />
+    <div className="theme-course min-h-screen flex flex-col">
+      <Header theme="course" />
+      <SubmitQuestionModal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} theme="course" />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-primary-600 mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-emerald-300 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Courses and Services
         </Link>
 
         <div className="space-y-10">
-          <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 sm:p-8">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 mb-4 urdu-text leading-snug">
+          <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/25 backdrop-blur-sm shadow-xl shadow-black/25 p-6 sm:p-8">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-emerald-50 mb-4 urdu-text leading-snug">
               {course.title}
             </h1>
-            <p className="text-slate-600 leading-loose text-base sm:text-lg urdu-text whitespace-pre-line">
+            <p className="text-slate-300 leading-loose text-base sm:text-lg urdu-text whitespace-pre-line">
               {course.description}
             </p>
           </div>
 
           {hasSamples && (
             <section className="space-y-8">
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2 urdu-text">
-                <FileText className="w-6 h-6 text-primary-500" />
+              <h2 className="text-xl sm:text-2xl font-bold text-emerald-50 flex items-center gap-2 urdu-text">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-400/25">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                </span>
                 Sample Materials
               </h2>
 
               {course.samples.map((sample, index) => (
-                <div key={sample.id} className="space-y-3">
+                <div
+                  key={sample.id}
+                  className="space-y-3 rounded-2xl border border-emerald-900/40 bg-[#0a100e]/80 p-4 sm:p-5"
+                >
                   <div className="flex items-center gap-2 px-1">
                     {sample.type === "pdf" ? (
-                      <FileText className="w-5 h-5 text-red-500 flex-shrink-0" />
+                      <FileText className="w-5 h-5 text-rose-400 flex-shrink-0" />
                     ) : (
-                      <ImageIcon className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                      <ImageIcon className="w-5 h-5 text-teal-400 flex-shrink-0" />
                     )}
-                    <h3 className="font-semibold text-slate-800 urdu-text">{sample.title}</h3>
-                    <span className="text-xs text-slate-400 uppercase">{sample.type}</span>
+                    <h3 className="font-semibold text-slate-200 urdu-text">{sample.title}</h3>
+                    <span className="text-xs text-emerald-600 uppercase tracking-wide">{sample.type}</span>
                   </div>
 
                   {sample.type === "pdf" ? (
@@ -112,7 +117,7 @@ export default function CoursePageView({
                   )}
 
                   {index < course.samples.length - 1 && (
-                    <div className="border-b border-slate-200 pt-2" />
+                    <div className="border-b border-emerald-900/40 pt-2" />
                   )}
                 </div>
               ))}
@@ -120,15 +125,17 @@ export default function CoursePageView({
           )}
 
           <section>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-5 flex items-center gap-2 urdu-text">
-              <HelpCircle className="w-6 h-6 text-accent-500" />
+            <h2 className="text-xl sm:text-2xl font-bold text-emerald-50 mb-5 flex items-center gap-2 urdu-text">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/15 ring-1 ring-teal-400/25">
+                <HelpCircle className="w-5 h-5 text-teal-400" />
+              </span>
               Questions & Answers
             </h2>
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm">
+            <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 backdrop-blur-sm p-4 sm:p-6 shadow-lg shadow-black/20">
               {allQuestions.length > 0 ? (
-                <QASection questions={allQuestions} />
+                <QASection questions={allQuestions} theme="course" />
               ) : (
-                <p className="text-slate-500 text-center py-6 urdu-text">
+                <p className="text-slate-400 text-center py-6 urdu-text">
                   Abhi koi sawal jawab available nahi hai
                 </p>
               )}
@@ -138,6 +145,7 @@ export default function CoursePageView({
           <section>
             <AskQuestionForm
               courseId={course.id}
+              theme="course"
               onSubmitted={() => {
                 setShowSubmitModal(true);
                 reloadCourse();
@@ -147,7 +155,7 @@ export default function CoursePageView({
         </div>
       </main>
 
-      <Footer />
+      <Footer theme="course" />
     </div>
   );
 }
