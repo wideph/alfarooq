@@ -46,9 +46,26 @@ npm run dev
 ## Vercel Deployment
 
 1. Push repo to GitHub
-2. Import project in Vercel
-3. Add all environment variables from `.env.example`
-4. Deploy — `vercel.json` runs migrations on build
+2. Import project in Vercel (Framework: **Next.js**)
+3. **Install Command:** `npm install`
+4. **Build Command:** `prisma generate && next build`
+5. Add all environment variables from `.env.example` in Vercel → Settings → Environment Variables
+
+**Important — connection strings (Supabase Dashboard → Database → Connect):**
+
+| Variable | Supabase mode | Port |
+|----------|---------------|------|
+| `DATABASE_URL` | Transaction pooler | 6543 + `?pgbouncer=true` |
+| `DIRECT_URL` | Session pooler | 5432 on `pooler.supabase.com` |
+
+Do **not** use `db.xxx.supabase.co:5432` as `DIRECT_URL` on Vercel — build/runtime often cannot reach it (P1001).
+
+**Database tables:** run once in Supabase SQL Editor before first deploy:
+
+- `supabase/migrations/001_initial_schema.sql`
+- `supabase/migrations/002_storage_bucket.sql`
+
+Then seed admin locally: `npm run db:seed` (with `.env` set), or insert admin via Supabase.
 
 ## Admin Access
 
