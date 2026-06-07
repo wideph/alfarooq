@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { deleteUploadedFile } from "@/lib/storage";
+import { revalidateCourseCache } from "@/lib/revalidate-course";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -59,7 +59,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    revalidateTag("courses");
+    revalidateCourseCache(id);
 
     return NextResponse.json(course);
   } catch {
@@ -101,7 +101,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
     await prisma.course.delete({ where: { id } });
 
-    revalidateTag("courses");
+    revalidateCourseCache(id);
 
     return NextResponse.json({ success: true });
   } catch {

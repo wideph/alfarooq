@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
+import { revalidateCourseCache } from "@/lib/revalidate-course";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -51,6 +52,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    revalidateCourseCache(courseId);
+
     return NextResponse.json(sample, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload fail";
@@ -83,6 +86,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     await deleteUploadedFile(sample.filename);
     await prisma.sample.delete({ where: { id: sampleId } });
+
+    revalidateCourseCache(courseId);
 
     return NextResponse.json({ success: true });
   } catch {
