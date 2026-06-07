@@ -3,50 +3,35 @@
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
-import type { PageTheme } from "@/lib/theme";
 
-const styles = {
-  home: {
-    shell: "border-violet-500/15 bg-slate-950/70",
-    brand: "text-slate-300",
-    copy: "text-slate-500",
-    link: "text-slate-500 hover:text-violet-300",
-    icon: "text-violet-400",
-  },
-  course: {
-    shell: "border-emerald-500/15 bg-[#060a09]/70",
-    brand: "text-slate-300",
-    copy: "text-slate-500",
-    link: "text-slate-500 hover:text-emerald-300",
-    icon: "text-emerald-400",
-  },
-} as const;
-
-export default function Footer({ theme = "home" }: { theme?: PageTheme }) {
+export default function Footer() {
   const { settings } = useSiteSettings();
-  const t = styles[theme];
 
   return (
-    <footer className={`mt-auto border-t backdrop-blur-sm ${t.shell}`}>
+    <footer className="app-footer mt-auto">
+      <div className="h-px bg-gradient-to-r from-transparent via-app-primary/30 to-transparent" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className={`flex items-center gap-2 ${t.brand}`}>
+          <div className="flex items-center gap-2 text-app-text-secondary">
             {settings.logoFilename ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`/api/media/${encodeURIComponent(settings.logoFilename)}`}
                 alt=""
-                className="w-5 h-5 rounded object-cover ring-1 ring-white/10"
+                className="w-5 h-5 rounded object-cover ring-1 ring-app-border"
               />
             ) : (
-              <GraduationCap className={`w-5 h-5 ${t.icon}`} />
+              <GraduationCap className="w-5 h-5 text-app-primary" />
             )}
-            <span className="font-semibold urdu-text">{settings.siteName}</span>
+            <span className="font-medium urdu-text">{settings.siteName}</span>
           </div>
-          <p className={`text-sm text-center ${t.copy}`}>
+          <p className="text-sm text-app-text-muted text-center">
             © {new Date().getFullYear()} {settings.siteName}
           </p>
-          <Link href="/admin/login" className={`text-sm transition-colors ${t.link}`}>
+          <Link
+            href="/admin/login"
+            className="text-sm text-app-text-muted hover:text-app-primary transition-colors"
+          >
             Admin Panel
           </Link>
         </div>

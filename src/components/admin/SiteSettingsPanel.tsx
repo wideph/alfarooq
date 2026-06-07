@@ -81,30 +81,30 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
 
   if (open && loading && !loaded) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+      <div className="bg-app-surface rounded-2xl border border-app-border p-6 flex justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-app-primary" />
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+    <div className="bg-app-surface rounded-2xl border border-app-border shadow-sm overflow-hidden mb-6">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 border-b border-slate-100 hover:bg-slate-50"
+        className="w-full flex items-center justify-between p-4 border-b border-app-border hover:bg-app-elevated"
       >
-        <span className="font-bold text-slate-900 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-primary-500" />
+        <span className="font-bold text-app-text flex items-center gap-2">
+          <Settings className="w-5 h-5 text-app-primary" />
           Website Settings (Logo, Hero Text)
         </span>
-        <span className="text-sm text-slate-400">{open ? "Hide" : "Show"}</span>
+        <span className="text-sm text-app-text-muted">{open ? "Hide" : "Show"}</span>
       </button>
 
       {open && (
         <div className="p-5 sm:p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-app-text-secondary mb-1">
                 Site Name / Logo Text
               </label>
               <input
@@ -112,11 +112,11 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                 value={form.siteName}
                 onChange={(e) => setForm({ ...form, siteName: e.target.value })}
                 placeholder="Alfarooq Services"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none urdu-text"
+                className="input-app urdu-text"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-app-text-secondary mb-1">
                 WhatsApp Number (optional)
               </label>
               <input
@@ -124,13 +124,13 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                 value={form.whatsappNumber}
                 onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })}
                 placeholder="+92 300 1234567"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                className="input-app"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-app-text-secondary mb-1">
               Hero Section Text (single line — center aligned)
             </label>
             <textarea
@@ -138,20 +138,20 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
               onChange={(e) => setForm({ ...form, heroText: e.target.value })}
               rows={2}
               placeholder="Apni hero line yahan likhein..."
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-none urdu-text leading-loose"
+              className="input-app resize-none urdu-text leading-loose"
             />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-app-text-muted mt-1">
               Khali chhorne par hero section hide ho jayega
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-app-text-secondary mb-2">
               Logo Image
             </label>
             <div className="flex flex-wrap items-center gap-4">
               {(form.logoFilename && !removeLogo) || logoFile ? (
-                <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-xl border border-app-border overflow-hidden bg-app-secondary flex items-center justify-center">
                   {logoFile ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -167,7 +167,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <ImageIcon className="w-6 h-6 text-slate-300" />
+                    <ImageIcon className="w-6 h-6 text-app-text-muted" />
                   )}
                 </div>
               ) : null}
@@ -178,7 +178,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                   setLogoFile(e.target.files?.[0] || null);
                   setRemoveLogo(false);
                 }}
-                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-app-primary/15 file:text-app-primary"
               />
               {form.logoFilename && !removeLogo && (
                 <button
@@ -187,7 +187,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                     setRemoveLogo(true);
                     setLogoFile(null);
                   }}
-                  className="text-sm text-red-600 hover:underline flex items-center gap-1"
+                  className="text-sm text-app-error hover:underline flex items-center gap-1"
                 >
                   <X className="w-4 h-4" /> Remove logo
                 </button>
@@ -198,7 +198,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
           <button
             onClick={handleSave}
             disabled={saving || !form.siteName.trim()}
-            className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl btn-primary disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings

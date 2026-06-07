@@ -385,33 +385,33 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      <div className="min-h-screen flex items-center justify-center bg-app-main">
+        <Loader2 className="w-8 h-8 animate-spin text-app-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-app-main">
       {/* Admin Header */}
-      <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+      <header className="app-navbar sticky top-0 z-50 shadow-lg shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Admin Dashboard</h1>
-              {admin && <p className="text-xs text-slate-500">Welcome, {admin.name}</p>}
+              <h1 className="text-lg font-bold text-app-text">Admin Dashboard</h1>
+              {admin && <p className="text-xs text-app-text-muted">Welcome, {admin.name}</p>}
             </div>
             <div className="flex items-center gap-2">
               <Link
                 href="/"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-app-text-secondary hover:bg-app-elevated transition-colors"
               >
                 <Home className="w-4 h-4" />
                 <span className="hidden sm:inline">Website</span>
               </Link>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-app-error hover:bg-app-error/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="hidden sm:inline">Logout</span>
@@ -425,7 +425,7 @@ export default function AdminDashboard() {
         <SiteSettingsPanel onMessage={setMessage} />
 
         {message && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center justify-between">
+          <div className="mb-6 p-4 rounded-xl alert-success text-sm flex items-center justify-between">
             {message}
             <button onClick={() => setMessage("")}>
               <X className="w-4 h-4" />
@@ -436,10 +436,10 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Courses List */}
           <div className="lg:col-span-4">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-900 flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-primary-500" />
+            <div className="bg-app-surface rounded-2xl border border-app-border shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-app-border">
+                <h2 className="font-bold text-app-text flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-app-primary" />
                   Courses ({courses.length})
                 </h2>
                 <button
@@ -448,38 +448,38 @@ export default function AdminDashboard() {
                     setCourseForm({ title: "", description: "", isPublished: true });
                     setShowCourseForm(true);
                   }}
-                  className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                  className="p-2 rounded-lg bg-app-primary text-white hover:brightness-110 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
+              <div className="max-h-[60vh] overflow-y-auto divide-y divide-app-border">
                 {courses.length === 0 ? (
-                  <p className="p-6 text-center text-slate-400 text-sm">Koi course nahi hai</p>
+                  <p className="p-6 text-center text-app-text-muted text-sm">Koi course nahi hai</p>
                 ) : (
                   courses.map((course) => (
                     <div
                       key={course.id}
                       className={`p-4 cursor-pointer transition-colors ${
                         selectedCourse === course.id
-                          ? "bg-primary-50 border-l-4 border-primary-500"
-                          : "hover:bg-slate-50"
+                          ? "bg-app-primary/10 border-l-4 border-app-primary"
+                          : "hover:bg-app-main"
                       }`}
                       onClick={() => loadCourseDetail(course.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-slate-800 truncate">{course.title}</p>
-                          <div className="flex gap-3 mt-1 text-xs text-slate-400">
+                          <p className="font-semibold text-app-text truncate">{course.title}</p>
+                          <div className="flex gap-3 mt-1 text-xs text-app-text-muted">
                             <span>{course._count.samples} samples</span>
                             <span>{course._count.questions} Q&A</span>
                           </div>
                           <span
                             className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full ${
                               course.isPublished
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
+                                ? "bg-app-success/10 text-app-success border border-app-success/25"
+                                : "bg-app-warning/10 text-app-warning border border-app-warning/25"
                             }`}
                           >
                             {course.isPublished ? "Published" : "Draft"}
@@ -491,7 +491,7 @@ export default function AdminDashboard() {
                               e.stopPropagation();
                               startEditCourse(course);
                             }}
-                            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                            className="p-1.5 rounded-lg hover:bg-slate-200 text-app-text-muted"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
@@ -500,7 +500,7 @@ export default function AdminDashboard() {
                               e.stopPropagation();
                               deleteCourse(course.id);
                             }}
-                            className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                            className="p-1.5 rounded-lg hover:bg-red-100 text-app-error"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -516,16 +516,16 @@ export default function AdminDashboard() {
           {/* Course Detail Panel */}
           <div className="lg:col-span-8">
             {!selectedCourse ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <div className="bg-app-surface rounded-2xl border border-app-border p-12 text-center">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-200" />
-                <p className="text-slate-500">Manage karne ke liye ek course select karein</p>
+                <p className="text-app-text-muted">Manage karne ke liye ek course select karein</p>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Upload Sample */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
-                  <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
-                    <Upload className="w-5 h-5 text-primary-500" />
+                <div className="bg-app-surface rounded-2xl border border-app-border p-5 sm:p-6 shadow-sm">
+                  <h3 className="font-bold text-app-text flex items-center gap-2 mb-4">
+                    <Upload className="w-5 h-5 text-app-primary" />
                     Sample Upload (PDF / Image)
                   </h3>
                   <div className="space-y-3">
@@ -534,19 +534,19 @@ export default function AdminDashboard() {
                       placeholder="Sample title (optional)"
                       value={uploadTitle}
                       onChange={(e) => setUploadTitle(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm"
+                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm"
                     />
                     <div className="flex flex-col sm:flex-row gap-3">
                       <input
                         type="file"
                         accept=".pdf,image/*"
                         onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                        className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-medium hover:file:bg-primary-100"
+                        className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-app-primary/10 file:text-app-primary file:font-medium hover:file:bg-primary-100"
                       />
                       <button
                         onClick={uploadSample}
                         disabled={!uploadFile || uploading}
-                        className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        className="px-6 py-2.5 rounded-xl bg-app-primary text-white font-medium hover:brightness-110 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                       >
                         {uploading ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -564,16 +564,16 @@ export default function AdminDashboard() {
                       {courseDetail.samples.map((sample) => (
                         <div
                           key={sample.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100"
+                          className="flex items-center justify-between p-3 rounded-lg bg-app-main border border-app-border"
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                            <FileText className="w-4 h-4 text-app-text-muted flex-shrink-0" />
                             <span className="text-sm truncate">{sample.title}</span>
-                            <span className="text-xs text-slate-400 uppercase">{sample.type}</span>
+                            <span className="text-xs text-app-text-muted uppercase">{sample.type}</span>
                           </div>
                           <button
                             onClick={() => deleteSample(sample.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                            className="p-1.5 rounded-lg hover:bg-red-100 text-app-error"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -586,7 +586,7 @@ export default function AdminDashboard() {
                 {/* User Submitted Questions */}
                 {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "pending").length > 0 && (
                   <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5 sm:p-6 shadow-sm">
-                    <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                    <h3 className="font-bold text-app-text flex items-center gap-2 mb-4">
                       <MessageCircle className="w-5 h-5 text-amber-600" />
                       User ke Sawal (Pending)
                     </h3>
@@ -596,9 +596,9 @@ export default function AdminDashboard() {
                         .map((q) => (
                           <div
                             key={q.id}
-                            className="p-4 rounded-xl bg-white border border-amber-100"
+                            className="p-4 rounded-xl bg-app-surface border border-amber-100"
                           >
-                            <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-3">
+                            <p className="text-sm font-medium text-app-text urdu-text leading-loose mb-3">
                               {q.question}
                             </p>
                             <textarea
@@ -608,15 +608,15 @@ export default function AdminDashboard() {
                               }
                               rows={3}
                               placeholder="Answer likhein..."
-                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 outline-none text-sm resize-none urdu-text"
+                              className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 outline-none text-sm resize-none urdu-text"
                             />
                             <input
                               type="file"
                               accept=".pdf,image/*"
                               onChange={(e) => setUserAnswerMediaFile(e.target.files?.[0] || null)}
-                              className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+                              className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-app-primary/10 file:text-app-primary"
                             />
-                            <p className="text-xs text-slate-400">Optional: Answer mein PDF ya image attach karein</p>
+                            <p className="text-xs text-app-text-muted">Optional: Answer mein PDF ya image attach karein</p>
                             <div className="flex gap-2 mt-2">
                               <button
                                 onClick={() => answerUserQuestion(q.id)}
@@ -629,7 +629,7 @@ export default function AdminDashboard() {
                               </button>
                               <button
                                 onClick={() => deleteUserQuestion(q.id)}
-                                className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"
+                                className="px-4 py-2 rounded-lg border border-app-error/30 text-app-error text-sm hover:bg-app-error/10"
                               >
                                 Delete
                               </button>
@@ -643,7 +643,7 @@ export default function AdminDashboard() {
                 {/* Answered User Questions - CRUD */}
                 {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "answered").length > 0 && (
                   <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-5 sm:p-6 shadow-sm">
-                    <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                    <h3 className="font-bold text-app-text flex items-center gap-2 mb-4">
                       <MessageCircle className="w-5 h-5 text-emerald-600" />
                       User ke Sawal (Answered)
                     </h3>
@@ -653,7 +653,7 @@ export default function AdminDashboard() {
                         .map((q) => (
                           <div
                             key={q.id}
-                            className="p-4 rounded-xl bg-white border border-emerald-100"
+                            className="p-4 rounded-xl bg-app-surface border border-emerald-100"
                           >
                             {editingAnsweredUser?.id === q.id ? (
                               <div className="space-y-2">
@@ -666,7 +666,7 @@ export default function AdminDashboard() {
                                     })
                                   }
                                   rows={2}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-none urdu-text"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-app-border outline-none text-sm resize-none urdu-text"
                                 />
                                 <textarea
                                   value={answeredUserEditForm.answer}
@@ -677,7 +677,7 @@ export default function AdminDashboard() {
                                     })
                                   }
                                   rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-none urdu-text"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-app-border outline-none text-sm resize-none urdu-text"
                                 />
                                 <input
                                   type="file"
@@ -685,13 +685,13 @@ export default function AdminDashboard() {
                                   onChange={(e) =>
                                     setAnsweredUserMediaFile(e.target.files?.[0] || null)
                                   }
-                                  className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+                                  className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-app-primary/10 file:text-app-primary"
                                 />
                                 {editingAnsweredUser.answerMediaFilename && !removeAnsweredUserMedia && (
                                   <button
                                     type="button"
                                     onClick={() => setRemoveAnsweredUserMedia(true)}
-                                    className="text-xs text-red-600 hover:underline"
+                                    className="text-xs text-app-error hover:underline"
                                   >
                                     Current media remove karein
                                   </button>
@@ -717,7 +717,7 @@ export default function AdminDashboard() {
                                     setAnsweredUserMediaFile(null);
                                     setRemoveAnsweredUserMedia(false);
                                   }}
-                                    className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm"
+                                    className="px-4 py-2 rounded-lg border border-app-border text-app-text-secondary text-sm"
                                   >
                                     Cancel
                                   </button>
@@ -726,10 +726,10 @@ export default function AdminDashboard() {
                             ) : (
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium text-slate-800 urdu-text leading-loose">
+                                  <p className="text-sm font-medium text-app-text urdu-text leading-loose">
                                     Q: {q.question}
                                   </p>
-                                  <p className="text-xs text-slate-500 mt-1 urdu-text leading-loose">
+                                  <p className="text-xs text-app-text-muted mt-1 urdu-text leading-loose">
                                     A: {q.answer}
                                   </p>
                                   {q.answerMediaFilename && (
@@ -741,13 +741,13 @@ export default function AdminDashboard() {
                                 <div className="flex gap-1 flex-shrink-0">
                                   <button
                                     onClick={() => startEditAnsweredUser(q)}
-                                    className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                                    className="p-1.5 rounded-lg hover:bg-slate-200 text-app-text-muted"
                                   >
                                     <Edit className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     onClick={() => deleteUserQuestion(q.id)}
-                                    className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                                    className="p-1.5 rounded-lg hover:bg-red-100 text-app-error"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -761,8 +761,8 @@ export default function AdminDashboard() {
                 )}
 
                 {/* Q&A Management */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
-                  <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
+                <div className="bg-app-surface rounded-2xl border border-app-border p-5 sm:p-6 shadow-sm">
+                  <h3 className="font-bold text-app-text flex items-center gap-2 mb-4">
                     <HelpCircle className="w-5 h-5 text-accent-500" />
                     Questions & Answers
                     {editingQuestion && (
@@ -775,17 +775,17 @@ export default function AdminDashboard() {
                       value={qaForm.question}
                       onChange={(e) => setQaForm({ ...qaForm, question: e.target.value })}
                       rows={2}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none"
+                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none"
                     />
                     <textarea
                       placeholder="Answer likhein..."
                       value={qaForm.answer}
                       onChange={(e) => setQaForm({ ...qaForm, answer: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none urdu-text"
+                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none urdu-text"
                     />
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">
+                      <label className="block text-xs text-app-text-muted mb-1">
                         Answer Media (PDF / Image) — optional
                       </label>
                       <input
@@ -795,13 +795,13 @@ export default function AdminDashboard() {
                           setQaMediaFile(e.target.files?.[0] || null);
                           setRemoveQaMedia(false);
                         }}
-                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-app-primary/10 file:text-app-primary"
                       />
                       {editingQuestion?.answerMediaFilename && !removeQaMedia && (
                         <button
                           type="button"
                           onClick={() => setRemoveQaMedia(true)}
-                          className="text-xs text-red-600 mt-1 hover:underline"
+                          className="text-xs text-app-error mt-1 hover:underline"
                         >
                           Current answer media remove karein
                         </button>
@@ -834,7 +834,7 @@ export default function AdminDashboard() {
                             setQaMediaFile(null);
                             setRemoveQaMedia(false);
                           }}
-                          className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          className="px-4 py-2.5 rounded-xl border border-app-border text-app-text-secondary hover:bg-app-main"
                         >
                           Cancel
                         </button>
@@ -848,27 +848,27 @@ export default function AdminDashboard() {
                       {courseDetail.questions.map((q, i) => (
                         <div
                           key={q.id}
-                          className="p-3 rounded-lg bg-slate-50 border border-slate-100"
+                          className="p-3 rounded-lg bg-app-main border border-app-border"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-slate-800">
+                              <p className="text-sm font-medium text-app-text">
                                 {i + 1}. {q.question}
                               </p>
-                              <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                              <p className="text-xs text-app-text-muted mt-1 line-clamp-2">
                                 A: {q.answer}
                               </p>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
                               <button
                                 onClick={() => startEditQuestion(q)}
-                                className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                                className="p-1.5 rounded-lg hover:bg-slate-200 text-app-text-muted"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => deleteQuestion(q.id)}
-                                className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                                className="p-1.5 rounded-lg hover:bg-red-100 text-app-error"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -888,8 +888,8 @@ export default function AdminDashboard() {
       {/* Course Form Modal */}
       {showCourseForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div className="bg-app-surface rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in">
+            <div className="flex items-center justify-between p-5 border-b border-app-border">
               <h3 className="font-bold text-lg">
                 {editingCourse ? "Edit Course" : "New Course"}
               </h3>
@@ -898,24 +898,24 @@ export default function AdminDashboard() {
                   setShowCourseForm(false);
                   setEditingCourse(null);
                 }}
-                className="p-2 rounded-lg hover:bg-slate-100"
+                className="p-2 rounded-lg hover:bg-app-elevated"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
+                <label className="block text-sm font-medium text-app-text-secondary mb-1">Title</label>
                 <input
                   type="text"
                   value={courseForm.title}
                   onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
                   placeholder="Course ka naam"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-app-text-secondary mb-1">
                   Description
                 </label>
                 <textarea
@@ -924,7 +924,7 @@ export default function AdminDashboard() {
                     setCourseForm({ ...courseForm, description: e.target.value })
                   }
                   rows={4}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-none"
                   placeholder="Course ki detail..."
                 />
               </div>
@@ -935,9 +935,9 @@ export default function AdminDashboard() {
                   onChange={(e) =>
                     setCourseForm({ ...courseForm, isPublished: e.target.checked })
                   }
-                  className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  className="w-4 h-4 rounded border-slate-300 text-app-primary focus:ring-primary-500"
                 />
-                <span className="text-sm text-slate-700 flex items-center gap-1">
+                <span className="text-sm text-app-text-secondary flex items-center gap-1">
                   {courseForm.isPublished ? (
                     <Eye className="w-4 h-4 text-emerald-500" />
                   ) : (
@@ -947,20 +947,20 @@ export default function AdminDashboard() {
                 </span>
               </label>
             </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-slate-100">
+            <div className="flex justify-end gap-3 p-5 border-t border-app-border">
               <button
                 onClick={() => {
                   setShowCourseForm(false);
                   setEditingCourse(null);
                 }}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                className="px-5 py-2.5 rounded-xl border border-app-border text-app-text-secondary hover:bg-app-main"
               >
                 Cancel
               </button>
               <button
                 onClick={saveCourse}
                 disabled={!courseForm.title.trim() || !courseForm.description.trim() || saving}
-                className="px-5 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2.5 rounded-xl bg-app-primary text-white font-medium hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save

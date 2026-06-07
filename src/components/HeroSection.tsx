@@ -1,10 +1,12 @@
+import Link from "next/link";
 import type { SiteSettingsData } from "@/lib/site-settings";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 function getHeroPadding(text: string) {
   const len = text.length;
-  if (len > 150) return "py-8 sm:py-10";
-  if (len > 80) return "py-6 sm:py-8";
-  return "py-5 sm:py-6";
+  if (len > 150) return "py-12 sm:py-14";
+  if (len > 80) return "py-10 sm:py-12";
+  return "py-9 sm:py-11";
 }
 
 function getHeroTextSize(text: string) {
@@ -22,12 +24,11 @@ export default function HeroSection({ settings }: { settings: SiteSettingsData }
     : null;
 
   return (
-    <section className={`relative overflow-hidden ${getHeroPadding(settings.heroText)}`}>
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-700/90 via-slate-600/75 to-slate-800/90" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(139,92,246,0.22),transparent_65%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_50%)]" />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/30 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-blue-400/20 to-transparent" />
+    <section
+      className={`relative overflow-hidden border-b border-app-border ${getHeroPadding(settings.heroText)}`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-b from-app-main via-app-secondary to-app-main" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(79,124,255,0.12),transparent_62%)]" />
 
       {logoSrc ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -35,16 +36,29 @@ export default function HeroSection({ settings }: { settings: SiteSettingsData }
           src={logoSrc}
           alt=""
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[calc(100%-1.5rem)] max-h-36 w-auto -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.035] select-none sm:max-h-40"
+          className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[calc(100%-2rem)] max-h-36 w-auto -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.04] select-none sm:max-h-40"
         />
       ) : null}
 
-      <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+        <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-app-border bg-app-surface/60 text-xs font-medium text-app-teal">
+          <Sparkles className="w-3.5 h-3.5" />
+          Premium Learning Experience
+        </div>
         <p
-          className={`text-center font-semibold leading-relaxed text-slate-50 urdu-text whitespace-pre-line drop-shadow-sm ${getHeroTextSize(settings.heroText)}`}
+          className={`font-semibold leading-relaxed text-app-text urdu-text whitespace-pre-line ${getHeroTextSize(settings.heroText)}`}
         >
           {settings.heroText}
         </p>
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link href="#courses" className="btn-primary min-w-[180px]">
+            Browse Courses
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link href="/admin/login" className="btn-outline min-w-[180px]">
+            Admin Access
+          </Link>
+        </div>
       </div>
     </section>
   );
