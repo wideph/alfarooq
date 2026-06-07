@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { deleteUploadedFile } from "@/lib/storage";
@@ -58,6 +59,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    revalidateTag("courses");
+
     return NextResponse.json(course);
   } catch {
     return NextResponse.json({ error: "Update fail" }, { status: 500 });
@@ -97,6 +100,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     }
 
     await prisma.course.delete({ where: { id } });
+
+    revalidateTag("courses");
 
     return NextResponse.json({ success: true });
   } catch {

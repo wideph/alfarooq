@@ -1,33 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
-import {
-  DEFAULT_SITE_SETTINGS,
-  SITE_SETTINGS_ID,
-} from "@/lib/site-settings";
-
-async function getOrCreateSettings() {
-  let settings = await prisma.siteSettings.findUnique({
-    where: { id: SITE_SETTINGS_ID },
-  });
-
-  if (!settings) {
-    settings = await prisma.siteSettings.create({
-      data: {
-        id: SITE_SETTINGS_ID,
-        siteName: DEFAULT_SITE_SETTINGS.siteName,
-        heroText: DEFAULT_SITE_SETTINGS.heroText,
-        whatsappNumber: DEFAULT_SITE_SETTINGS.whatsappNumber,
-      },
-    });
-  }
-
-  return settings;
-}
+import { fetchSiteSettingsFromDb } from "@/lib/get-site-settings";
+import { SITE_SETTINGS_ID } from "@/lib/site-settings";
 
 export async function GET() {
-  const settings = await getOrCreateSettings();
+  const settings = await fetchSiteSettingsFromDb();
   return NextResponse.json(settings);
 }
 
@@ -38,7 +18,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const existing = await getOrCreateSettings();
+    const existing = await fetchSiteSettingsFromDb();
     const contentType = request.headers.get("content-type") || "";
 
     if (contentType.includes("multipart/form-data")) {
@@ -80,6 +60,10 @@ export async function PUT(request: NextRequest) {
         },
       });
 
+      revalidateTag("site-settings");
+      revalidatePath("/", "layout");
+      revalidatePath("/");
+
       return NextResponse.json(settings);
     }
 
@@ -94,6 +78,10 @@ export async function PUT(request: NextRequest) {
         }),
       },
     });
+
+    revalidateTag("site-settings");
+    revalidatePath("/", "layout");
+    revalidatePath("/");
 
     return NextResponse.json(settings);
   } catch (error) {

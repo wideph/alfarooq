@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
@@ -20,7 +21,11 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return NextResponse.json(courses);
+  return NextResponse.json(courses, {
+    headers: {
+      "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -48,6 +53,8 @@ export async function POST(request: NextRequest) {
         order: Number(order) || 0,
       },
     });
+
+    revalidateTag("courses");
 
     return NextResponse.json(course, { status: 201 });
   } catch {
