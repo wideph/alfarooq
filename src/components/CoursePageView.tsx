@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { getPdfJs } from "@/lib/pdfjs";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -48,6 +49,10 @@ export default function CoursePageView({
 }) {
   const [course, setCourse] = useState(initialCourse);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+
+  useEffect(() => {
+    void getPdfJs();
+  }, []);
 
   const reloadCourse = useCallback(() => {
     fetch(`/api/courses/${course.id}`)

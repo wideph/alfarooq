@@ -98,12 +98,12 @@ export default function QASection({
           >
             <button
               onClick={() => toggleOne(q.id)}
-              className={`w-full flex items-start gap-3 p-4 sm:p-5 text-left transition-colors ${
+              className={`w-full flex items-start gap-2.5 sm:gap-3 p-3.5 sm:p-5 text-left transition-colors min-w-0 ${
                 isCourse ? "hover:bg-violet-50/50" : "hover:bg-slate-50"
               }`}
             >
               <span
-                className={`flex-shrink-0 w-8 h-8 rounded-lg text-white text-sm font-bold flex items-center justify-center ${
+                className={`shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-white text-xs sm:text-sm font-bold flex items-center justify-center ${
                   isCourse
                     ? "bg-gradient-to-br from-violet-500 to-indigo-600"
                     : "bg-gradient-to-br from-primary-500 to-accent-500"
@@ -111,25 +111,25 @@ export default function QASection({
               >
                 {index + 1}
               </span>
-              <span className="flex-1 font-medium text-slate-800 pt-1 urdu-text leading-loose">
+              <span className="flex-1 min-w-0 font-medium text-slate-800 pt-0.5 urdu-text leading-relaxed break-words [overflow-wrap:anywhere] text-sm sm:text-base">
                 {q.question}
                 {q.fromUser && (
-                  <span className="inline-flex items-center gap-1 ml-2 text-xs font-normal text-accent-600 bg-accent-50 px-2 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 ml-1.5 mt-1 text-[10px] sm:text-xs font-normal text-accent-600 bg-accent-50 px-2 py-0.5 rounded-full whitespace-nowrap">
                     <User className="w-3 h-3" />
                     User
                   </span>
                 )}
               </span>
               {isOpen ? (
-                <ChevronUp className="w-5 h-5 text-slate-400 flex-shrink-0 mt-1" />
+                <ChevronUp className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0 mt-1" />
+                <ChevronDown className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
               )}
             </button>
             {isOpen && (q.answer || q.answerMediaFilename) && (
-              <div className="px-4 sm:px-5 pb-4 sm:pb-5 pl-15 sm:pl-16">
+              <div className="border-t border-slate-100/80 px-3.5 sm:px-5 pb-3.5 sm:pb-5 pt-3 min-w-0 overflow-hidden">
                 <div
-                  className={`p-4 rounded-lg border ${
+                  className={`p-3 sm:p-4 rounded-lg border min-w-0 overflow-hidden ${
                     isCourse
                       ? "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100"
                       : "bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100"
