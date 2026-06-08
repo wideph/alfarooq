@@ -19,7 +19,7 @@ export default function HomePageView({
   courses: PublishedCourse[];
 }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="page-home min-h-screen flex flex-col">
       <Header />
 
       <main className="flex-1">
@@ -42,8 +42,8 @@ export default function HomePageView({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {courses.map((course) => (
                 <Link key={course.id} href={`/courses/${course.id}`} className="group">
-                  <article className="min-h-[22rem] h-full rounded-2xl bg-white border border-slate-200/80 shadow-md hover:shadow-2xl hover:border-primary-200 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
-                    <div className="h-3 bg-gradient-to-r from-primary-500 via-accent-500 to-emerald-500" />
+                  <article className="min-h-[22rem] h-full rounded-2xl bg-white/90 backdrop-blur-sm border border-sky-100/80 shadow-md shadow-sky-100/50 hover:shadow-xl hover:shadow-sky-200/40 hover:border-sky-200 hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col">
+                    <div className="h-3 bg-gradient-to-r from-sky-500 via-primary-500 to-emerald-400" />
                     <div className="p-7 sm:p-8 flex flex-col flex-1">
                       <h4 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary-600 transition-colors line-clamp-2 urdu-text leading-snug">
                         {course.title}

@@ -79,3 +79,13 @@ textarea {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* Home — airy sky / violet / mint */
+.page-home {
+  background: linear-gradient(160deg, #f0f9ff 0%, #eef2ff 38%, #f0fdf4 72%, #faf5ff 100%);
+}
+
+/* Course detail — warmer slate / indigo / teal */
+.page-course {
+  background: linear-gradient(165deg, #f1f5f9 0%, #e8edf5 30%, #eef2ff 55%, #ecfdf5 100%);
+}

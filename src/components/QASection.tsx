@@ -17,12 +17,15 @@ export interface QAItem {
 interface QASectionProps {
   questions: QAItem[];
   emptyMessage?: string;
+  variant?: "default" | "course";
 }
 
 export default function QASection({
   questions,
   emptyMessage = "Abhi koi questions nahi hain",
+  variant = "default",
 }: QASectionProps) {
+  const isCourse = variant === "course";
   const questionIds = useMemo(() => questions.map((q) => q.id), [questions]);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set(questionIds));
 
@@ -63,7 +66,11 @@ export default function QASection({
       <div className="flex justify-end">
         <button
           onClick={toggleAll}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors urdu-text"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors urdu-text ${
+            isCourse
+              ? "text-violet-700 bg-violet-100 hover:bg-violet-200"
+              : "text-slate-600 bg-slate-100 hover:bg-slate-200"
+          }`}
         >
           {allOpen ? (
             <>
@@ -82,14 +89,26 @@ export default function QASection({
         return (
           <div
             key={q.id}
-            className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow animate-fade-in"
-            style={{ animationDelay: `${index * 50}ms` }}
+            className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow ${
+              isCourse
+                ? "border border-violet-200/60 bg-white/90 hover:border-violet-300"
+                : "border border-slate-200 bg-white animate-fade-in"
+            }`}
+            style={isCourse ? undefined : { animationDelay: `${index * 50}ms` }}
           >
             <button
               onClick={() => toggleOne(q.id)}
-              className="w-full flex items-start gap-3 p-4 sm:p-5 text-left hover:bg-slate-50 transition-colors"
+              className={`w-full flex items-start gap-3 p-4 sm:p-5 text-left transition-colors ${
+                isCourse ? "hover:bg-violet-50/50" : "hover:bg-slate-50"
+              }`}
             >
-              <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 text-white text-sm font-bold flex items-center justify-center">
+              <span
+                className={`flex-shrink-0 w-8 h-8 rounded-lg text-white text-sm font-bold flex items-center justify-center ${
+                  isCourse
+                    ? "bg-gradient-to-br from-violet-500 to-indigo-600"
+                    : "bg-gradient-to-br from-primary-500 to-accent-500"
+                }`}
+              >
                 {index + 1}
               </span>
               <span className="flex-1 font-medium text-slate-800 pt-1 urdu-text leading-loose">
@@ -109,8 +128,20 @@ export default function QASection({
             </button>
             {isOpen && (q.answer || q.answerMediaFilename) && (
               <div className="px-4 sm:px-5 pb-4 sm:pb-5 pl-15 sm:pl-16">
-                <div className="p-4 rounded-lg bg-gradient-to-r from-primary-50 to-accent-50 border border-primary-100">
-                  <p className="text-sm font-semibold text-primary-700 mb-2 urdu-text">جواب:</p>
+                <div
+                  className={`p-4 rounded-lg border ${
+                    isCourse
+                      ? "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100"
+                      : "bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100"
+                  }`}
+                >
+                  <p
+                    className={`text-sm font-semibold mb-2 urdu-text ${
+                      isCourse ? "text-violet-700" : "text-primary-700"
+                    }`}
+                  >
+                    جواب:
+                  </p>
                   <AnswerContent
                     answer={q.answer}
                     mediaFilename={q.answerMediaFilename}
