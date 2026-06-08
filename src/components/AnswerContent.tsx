@@ -29,12 +29,12 @@ export default function AnswerContent({
         </div>
       )}
       {hasMedia && mediaType === "pdf" && (
-        <div className="mt-3 w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-3 w-full max-w-full min-w-0 rounded-xl border border-slate-200">
           <PdfViewer filename={mediaFilename!} title="Answer PDF" compact />
         </div>
       )}
       {hasMedia && mediaType === "image" && (
-        <div className="mt-3 w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-3 w-full max-w-full min-w-0 rounded-xl border border-slate-200">
           <ImageViewer filename={mediaFilename!} title="Answer Image" compact />
         </div>
       )}

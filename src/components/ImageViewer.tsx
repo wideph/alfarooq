@@ -11,7 +11,7 @@ interface ImageViewerProps {
 
 export default function ImageViewer({ filename, title, compact = false }: ImageViewerProps) {
   const [scale, setScale] = useState(1);
-  const maxHeight = compact ? "max-h-[40vh]" : "max-h-[70vh] sm:max-h-[75vh]";
+  const maxHeight = compact ? "max-h-none sm:max-h-[40vh]" : "max-h-none sm:max-h-[75vh]";
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
@@ -51,7 +51,7 @@ export default function ImageViewer({ filename, title, compact = false }: ImageV
       </div>
 
       <div
-        className={`overflow-auto ${maxHeight} flex justify-center p-4 bg-slate-50`}
+        className={`touch-scroll-y overflow-x-hidden ${maxHeight} flex justify-center p-4 bg-slate-50`}
         onContextMenu={handleContextMenu}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

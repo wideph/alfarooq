@@ -55,24 +55,44 @@ textarea {
   text-align: start;
 }
 
+/* When an inner area hits top/bottom, scroll continues on the page */
 .touch-scroll-y {
-  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   touch-action: pan-y;
 }
 
+@media (max-width: 639px) {
+  .touch-scroll-y {
+    overflow-y: visible;
+  }
+}
+
+@media (min-width: 640px) {
+  .touch-scroll-y {
+    overflow-y: scroll;
+  }
+}
+
 .scroll-field {
-  overflow-y: auto;
+  overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
   touch-action: pan-y;
   max-height: min(45vh, 360px);
 }
 
+@media (max-width: 639px) {
+  .scroll-field-question {
+    max-height: min(30vh, 220px);
+  }
+}
+
 @media (min-width: 640px) {
-  .scroll-field {
+  .scroll-field,
+  .scroll-field-question {
     max-height: none;
+    overflow-y: visible;
   }
 }
 .no-select {

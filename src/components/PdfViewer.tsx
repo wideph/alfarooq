@@ -207,11 +207,13 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
   }, [pdfDoc, numPages, zoom, containerWidth, compact, renderPageToCanvas, cancelActiveRenders]);
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
-  const maxHeight = compact ? "max-h-[45vh] sm:max-h-[50vh]" : "max-h-[65vh] sm:max-h-[75vh]";
+  const maxHeight = compact
+    ? "max-h-none sm:max-h-[50vh]"
+    : "max-h-none sm:max-h-[75vh]";
 
   return (
     <div
-      className="no-select no-download w-full max-w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 shadow-xl"
+      className="no-select no-download w-full max-w-full rounded-2xl border border-slate-200 bg-slate-900 shadow-xl"
       onContextMenu={handleContextMenu}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-800 text-white">

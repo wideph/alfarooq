@@ -111,7 +111,7 @@ export default function QASection({
               >
                 {index + 1}
               </span>
-              <span className="flex-1 min-w-0 font-medium text-slate-800 pt-0.5 urdu-text leading-relaxed break-words [overflow-wrap:anywhere] text-sm sm:text-base">
+              <span className="flex-1 min-w-0 block font-medium text-slate-800 pt-0.5 urdu-text leading-relaxed break-words [overflow-wrap:anywhere] text-sm sm:text-base scroll-field scroll-field-question">
                 {q.question}
                 {q.fromUser && (
                   <span className="inline-flex items-center gap-1 ml-1.5 mt-1 text-[10px] sm:text-xs font-normal text-accent-600 bg-accent-50 px-2 py-0.5 rounded-full whitespace-nowrap">
