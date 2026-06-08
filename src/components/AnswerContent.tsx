@@ -20,11 +20,13 @@ export default function AnswerContent({
   if (!hasText && !hasMedia) return null;
 
   return (
-    <div className="min-w-0 w-full max-w-full overflow-hidden">
+    <div className="min-w-0 w-full max-w-full">
       {hasText && (
-        <p className="text-slate-700 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] urdu-text text-sm sm:text-base">
-          {answer}
-        </p>
+        <div className="touch-scroll-y scroll-field rounded-lg">
+          <p className="text-slate-700 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] urdu-text text-sm sm:text-base">
+            {answer}
+          </p>
+        </div>
       )}
       {hasMedia && mediaType === "pdf" && (
         <div className="mt-3 w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-slate-200">

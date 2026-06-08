@@ -582,7 +582,7 @@ export default function AdminDashboard() {
                     <div className="flex flex-col sm:flex-row gap-3">
                       <input
                         type="file"
-                        accept=".pdf,image/*"
+                        accept="application/pdf,.pdf,image/*"
                         onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                         className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-medium hover:file:bg-primary-100"
                       />
@@ -676,11 +676,11 @@ export default function AdminDashboard() {
                               }
                               rows={3}
                               placeholder="Answer likhein..."
-                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 outline-none text-sm resize-none urdu-text"
+                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 outline-none text-sm resize-y scroll-field urdu-text"
                             />
                             <input
                               type="file"
-                              accept=".pdf,image/*"
+                              accept="application/pdf,.pdf,image/*"
                               onChange={(e) => setUserAnswerMediaFile(e.target.files?.[0] || null)}
                               className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
                             />
@@ -748,7 +748,7 @@ export default function AdminDashboard() {
                                     })
                                   }
                                   rows={2}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-none urdu-text"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-y scroll-field urdu-text"
                                 />
                                 <textarea
                                   value={answeredUserEditForm.answer}
@@ -759,11 +759,11 @@ export default function AdminDashboard() {
                                     })
                                   }
                                   rows={3}
-                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-none urdu-text"
+                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 outline-none text-sm resize-y scroll-field urdu-text"
                                 />
                                 <input
                                   type="file"
-                                  accept=".pdf,image/*"
+                                  accept="application/pdf,.pdf,image/*"
                                   onChange={(e) =>
                                     setAnsweredUserMediaFile(e.target.files?.[0] || null)
                                   }
@@ -872,14 +872,14 @@ export default function AdminDashboard() {
                       value={qaForm.question}
                       onChange={(e) => setQaForm({ ...qaForm, question: e.target.value })}
                       rows={2}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-y scroll-field urdu-text"
                     />
                     <textarea
                       placeholder="Answer likhein..."
                       value={qaForm.answer}
                       onChange={(e) => setQaForm({ ...qaForm, answer: e.target.value })}
                       rows={3}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-none urdu-text"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm resize-y scroll-field urdu-text"
                     />
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">
@@ -887,7 +887,7 @@ export default function AdminDashboard() {
                       </label>
                       <input
                         type="file"
-                        accept=".pdf,image/*"
+                        accept="application/pdf,.pdf,image/*"
                         onChange={(e) => {
                           setQaMediaFile(e.target.files?.[0] || null);
                           setRemoveQaMedia(false);
@@ -1042,7 +1042,7 @@ export default function AdminDashboard() {
                     setCourseForm({ ...courseForm, description: e.target.value })
                   }
                   rows={4}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-y scroll-field"
                   placeholder="Course ki detail..."
                 />
               </div>

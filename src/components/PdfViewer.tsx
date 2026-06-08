@@ -10,6 +10,11 @@ interface PdfViewerProps {
   compact?: boolean;
 }
 
+type PdfRenderTask = {
+  promise: Promise<void>;
+  cancel: () => void;
+};
+
 type PdfDocument = {
   numPages: number;
   getPage: (n: number) => Promise<PdfPage>;
@@ -21,7 +26,7 @@ type PdfPage = {
     canvasContext: CanvasRenderingContext2D;
     viewport: { width: number; height: number };
     transform?: number[];
-  }) => { promise: Promise<void> };
+  }) => PdfRenderTask;
 };
 
 function getContainerWidth(el: HTMLElement | null, compact: boolean) {
@@ -35,6 +40,8 @@ function getContainerWidth(el: HTMLElement | null, compact: boolean) {
 export default function PdfViewer({ filename, title, compact = false }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const renderGenerationRef = useRef(0);
+  const activeTasksRef = useRef<PdfRenderTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [renderingMore, setRenderingMore] = useState(false);
   const [error, setError] = useState("");
@@ -51,13 +58,27 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 
-    const update = () => setContainerWidth(getContainerWidth(el, compact));
+    const update = () => {
+      const next = getContainerWidth(el, compact);
+      setContainerWidth((prev) => (prev === next ? prev : next));
+    };
     update();
 
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [compact, loading]);
+  }, [compact]);
+
+  const cancelActiveRenders = useCallback(() => {
+    for (const task of activeTasksRef.current) {
+      try {
+        task.cancel();
+      } catch {
+        // ignore cancelled render errors
+      }
+    }
+    activeTasksRef.current = [];
+  }, []);
 
   const renderPageToCanvas = useCallback(
     async (
@@ -76,20 +97,31 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
       const scale = fitScale * zoomMultiplier;
       const viewport = page.getViewport({ scale });
       const outputScale = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      const displayWidth = Math.min(viewport.width, width);
-      const displayHeight = (displayWidth / viewport.width) * viewport.height;
 
       canvas.width = Math.floor(viewport.width * outputScale);
       canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${Math.floor(displayWidth)}px`;
-      canvas.style.height = `${Math.floor(displayHeight)}px`;
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
       canvas.style.maxWidth = "100%";
 
-      const transform =
-        outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
-
       context.setTransform(1, 0, 0, 1, 0, 0);
-      await page.render({ canvasContext: context, viewport, transform }).promise;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      const renderTask = page.render({
+        canvasContext: context,
+        viewport,
+        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+      });
+
+      activeTasksRef.current.push(renderTask);
+      try {
+        await renderTask.promise;
+      } catch (err) {
+        const name = err instanceof Error ? err.name : "";
+        if (name !== "RenderingCancelledException") throw err;
+      } finally {
+        activeTasksRef.current = activeTasksRef.current.filter((task) => task !== renderTask);
+      }
     },
     []
   );
@@ -97,6 +129,7 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
   useEffect(() => {
     let cancelled = false;
     canvasRefs.current = [];
+    cancelActiveRenders();
 
     async function loadPdf() {
       try {
@@ -111,9 +144,7 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
         if (!response.ok) throw new Error("PDF load nahi ho saki");
 
         const buffer = await response.arrayBuffer();
-        const pdf = (await pdfjs
-          .getDocument({ data: new Uint8Array(buffer), disableAutoFetch: true })
-          .promise) as unknown as PdfDocument;
+        const pdf = (await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise) as unknown as PdfDocument;
 
         if (cancelled) return;
 
@@ -130,24 +161,28 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
     loadPdf();
     return () => {
       cancelled = true;
+      cancelActiveRenders();
     };
-  }, [filename]);
+  }, [filename, cancelActiveRenders]);
 
   useEffect(() => {
     if (!pdfDoc || numPages === 0) return;
 
-    let cancelled = false;
+    const generation = ++renderGenerationRef.current;
+    cancelActiveRenders();
 
     async function renderPages() {
       const width = containerWidth || getContainerWidth(containerRef.current, compact);
       const doc = pdfDoc!;
 
+      if (numPages > 1) setRenderingMore(true);
+
       for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-        if (cancelled) return;
+        if (generation !== renderGenerationRef.current) return;
 
         let canvas = canvasRefs.current[pageNum - 1];
         let attempts = 0;
-        while (!canvas && attempts < 30) {
+        while (!canvas && attempts < 40) {
           await new Promise((r) => requestAnimationFrame(r));
           canvas = canvasRefs.current[pageNum - 1];
           attempts++;
@@ -156,20 +191,20 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
 
         await renderPageToCanvas(doc, pageNum, canvas, width, zoom);
 
-        if (pageNum === 1) {
-          setLoading(false);
-          if (numPages > 1) setRenderingMore(true);
-        }
+        if (generation !== renderGenerationRef.current) return;
+
+        if (pageNum === 1) setLoading(false);
       }
 
-      if (!cancelled) setRenderingMore(false);
+      if (generation === renderGenerationRef.current) setRenderingMore(false);
     }
 
     renderPages();
     return () => {
-      cancelled = true;
+      renderGenerationRef.current += 1;
+      cancelActiveRenders();
     };
-  }, [pdfDoc, numPages, zoom, containerWidth, compact, renderPageToCanvas]);
+  }, [pdfDoc, numPages, zoom, containerWidth, compact, renderPageToCanvas, cancelActiveRenders]);
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
   const maxHeight = compact ? "max-h-[45vh] sm:max-h-[50vh]" : "max-h-[65vh] sm:max-h-[75vh]";
@@ -209,7 +244,7 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
 
       <div
         ref={containerRef}
-        className={`overflow-x-hidden overflow-y-auto ${maxHeight} p-2 sm:p-4 bg-slate-950`}
+        className={`touch-scroll-y overflow-x-hidden ${maxHeight} p-2 sm:p-4 bg-slate-950`}
         onContextMenu={handleContextMenu}
       >
         {loading && (
@@ -240,7 +275,7 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
                     ref={(el) => {
                       canvasRefs.current[index] = el;
                     }}
-                    className="shadow-2xl max-w-full h-auto block"
+                    className="shadow-2xl max-w-full block"
                     onContextMenu={handleContextMenu}
                   />
                 </div>

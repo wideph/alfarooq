@@ -89,7 +89,7 @@ export default function QASection({
         return (
           <div
             key={q.id}
-            className={`rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow ${
+            className={`rounded-xl shadow-sm hover:shadow-md transition-shadow ${
               isCourse
                 ? "border border-violet-200/60 bg-white/90 hover:border-violet-300"
                 : "border border-slate-200 bg-white animate-fade-in"
@@ -127,9 +127,9 @@ export default function QASection({
               )}
             </button>
             {isOpen && (q.answer || q.answerMediaFilename) && (
-              <div className="border-t border-slate-100/80 px-3.5 sm:px-5 pb-3.5 sm:pb-5 pt-3 min-w-0 overflow-hidden">
+              <div className="border-t border-slate-100/80 px-3.5 sm:px-5 pb-3.5 sm:pb-5 pt-3 min-w-0">
                 <div
-                  className={`p-3 sm:p-4 rounded-lg border min-w-0 overflow-hidden ${
+                  className={`p-3 sm:p-4 rounded-lg border min-w-0 ${
                     isCourse
                       ? "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100"
                       : "bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100"

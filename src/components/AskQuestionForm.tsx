@@ -77,7 +77,7 @@ export default function AskQuestionForm({
           onChange={(e) => setQuestion(e.target.value)}
           rows={4}
           placeholder="Apna sawal yahan likhein..."
-          className={`w-full px-4 py-3 rounded-xl border border-slate-200 outline-none resize-none urdu-text leading-loose focus:ring-2 ${
+          className={`w-full px-4 py-3 rounded-xl border border-slate-200 outline-none resize-y scroll-field urdu-text leading-loose focus:ring-2 ${
             isCourse
               ? "focus:border-teal-400 focus:ring-teal-100"
               : "focus:border-primary-400 focus:ring-primary-100"

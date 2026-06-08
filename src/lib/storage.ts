@@ -1,9 +1,19 @@
 import path from "path";
 import { getSupabaseAdmin, getStorageBucket } from "@/lib/supabase";
 
-export function getFileType(mimeType: string): "pdf" | "image" | null {
-  if (mimeType === "application/pdf") return "pdf";
-  if (mimeType.startsWith("image/")) return "image";
+export function getFileType(mimeType: string, filename?: string): "pdf" | "image" | null {
+  const normalizedMime = mimeType.trim().toLowerCase();
+  if (normalizedMime === "application/pdf" || normalizedMime === "application/x-pdf") {
+    return "pdf";
+  }
+  if (normalizedMime.startsWith("image/")) return "image";
+
+  if (filename) {
+    const ext = path.extname(filename).toLowerCase();
+    if (ext === ".pdf") return "pdf";
+    if ([".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"].includes(ext)) return "image";
+  }
+
   return null;
 }
 
@@ -15,7 +25,7 @@ export async function saveUploadedFile(
   file: File,
   prefix: string
 ): Promise<{ filename: string; type: "pdf" | "image" }> {
-  const fileType = getFileType(file.type);
+  const fileType = getFileType(file.type, file.name);
   if (!fileType) {
     throw new Error("Only PDF and image files are allowed");
   }
@@ -23,12 +33,13 @@ export async function saveUploadedFile(
   const ext = path.extname(file.name) || (fileType === "pdf" ? ".pdf" : ".jpg");
   const filename = `${prefix}_${Date.now()}_${sanitizeFilename(path.basename(file.name, ext))}${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
+  const contentType = file.type?.trim() || getMimeType(filename);
 
   const supabase = getSupabaseAdmin();
   const bucket = getStorageBucket();
 
   const { error } = await supabase.storage.from(bucket).upload(filename, buffer, {
-    contentType: file.type || getMimeType(filename),
+    contentType,
     upsert: false,
   });
 

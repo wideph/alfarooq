@@ -25,14 +25,23 @@ html {
 }
 
 body {
-  font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
-    "Urdu Typesetting", "Noto Nastaliq Urdu", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-inter), "Segoe UI", system-ui, -apple-system, sans-serif;
   background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f0fdf4 100%);
   min-height: 100vh;
-  line-height: 1.9;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
 }
 
 .font-urdu,
+.urdu-text {
+  font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
+    "Urdu Typesetting", "Noto Nastaliq Urdu", serif;
+}
+
+.font-urdu {
+  line-height: 2.2;
+}
+
 input,
 textarea,
 select,
@@ -46,10 +55,25 @@ textarea {
   text-align: start;
 }
 
-.urdu-text {
-  font-family: var(--font-urdu-nastaliq), var(--font-urdu-sans), "Jameel Noori Nastaleeq",
-    "Urdu Typesetting", "Noto Nastaliq Urdu", serif;
-  line-height: 2.2;
+.touch-scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.scroll-field {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  max-height: min(45vh, 360px);
+}
+
+@media (min-width: 640px) {
+  .scroll-field {
+    max-height: none;
+  }
 }
 .no-select {
   -webkit-user-select: none;

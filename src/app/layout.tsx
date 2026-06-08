@@ -1,9 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
+import { Inter, Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
 import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
 import PreloadAssets from "@/components/PreloadAssets";
 import { getSiteSettings } from "@/lib/get-site-settings";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+  preload: true,
+});
 
 const urduNastaliq = Noto_Nastaliq_Urdu({
   subsets: ["arabic"],
@@ -58,14 +66,14 @@ export default async function RootLayout({
     <html
       lang="ur"
       dir="ltr"
-      className={`${urduNastaliq.variable} ${urduSans.variable}`}
+      className={`${inter.variable} ${urduNastaliq.variable} ${urduSans.variable}`}
       suppressHydrationWarning
     >
       <head>
         <link rel="preload" href="/pdf.worker.min.mjs" as="script" />
         {logoUrl ? <link rel="preload" href={logoUrl} as="image" /> : null}
       </head>
-      <body className="antialiased text-slate-800 font-urdu">
+      <body className="antialiased text-slate-800">
         <PreloadAssets logoUrl={logoUrl} />
         <SiteSettingsProvider initialSettings={settings}>{children}</SiteSettingsProvider>
       </body>

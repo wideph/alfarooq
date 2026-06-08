@@ -6,6 +6,8 @@ import { revalidateCourseCache } from "@/lib/revalidate-course";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
+export const maxDuration = 60;
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
