@@ -279,7 +279,7 @@ async function runTests() {
     const res = await fetch(`${BASE_URL}/`);
     if (!res.ok) throw new Error(`Status ${res.status}`);
     const html = await res.text();
-    if (!html.includes("Courses and Services")) throw new Error("Missing page content");
+    if (!html.includes("Types of Diploma and services")) throw new Error("Missing page content");
   });
 
   await test("Course page loads (200)", async () => {

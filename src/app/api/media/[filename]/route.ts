@@ -19,7 +19,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       headers: {
         "Content-Type": mimeType,
         "Content-Disposition": "inline",
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": "public, max-age=604800, stale-while-revalidate=86400, immutable",
         "X-Content-Type-Options": "nosniff",
       },
     });

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
+import { parseOrder } from "@/lib/parse-order";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -15,7 +16,7 @@ async function parseQuestionBody(request: NextRequest) {
       questionId: (formData.get("questionId") as string) || undefined,
       question: (formData.get("question") as string) || "",
       answer: (formData.get("answer") as string) || "",
-      order: Number(formData.get("order")) || 0,
+      order: parseOrder(formData.get("order")),
       answerMedia: (formData.get("answerMedia") as File | null) || null,
       removeAnswerMedia: formData.get("removeAnswerMedia") === "true",
     };
@@ -26,7 +27,7 @@ async function parseQuestionBody(request: NextRequest) {
     questionId: body.questionId as string | undefined,
     question: (body.question as string) || "",
     answer: (body.answer as string) || "",
-    order: Number(body.order) || 0,
+    order: parseOrder(body.order),
     answerMedia: null as File | null,
     removeAnswerMedia: Boolean(body.removeAnswerMedia),
   };

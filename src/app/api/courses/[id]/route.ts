@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
+import { parseOrder } from "@/lib/parse-order";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -55,7 +56,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(title !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description: description.trim() }),
         ...(isPublished !== undefined && { isPublished: Boolean(isPublished) }),
-        ...(order !== undefined && { order: Number(order) || 0 }),
+        ...(order !== undefined && { order: parseOrder(order) }),
       },
     });
 

@@ -22,7 +22,7 @@ model Course {
   description   String
   thumbnail     String?
   isPublished   Boolean        @default(true)
-  order         Int            @default(0)
+  order         Float          @default(0)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   samples       Sample[]
@@ -47,6 +47,7 @@ model UserQuestion {
   answerMediaFilename  String?
   answerMediaType      String?
   status               String    @default("pending")
+  order                Float     @default(0)
   createdAt            DateTime  @default(now())
   answeredAt           DateTime?
   course               Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
@@ -70,7 +71,7 @@ model Question {
   answer              String
   answerMediaFilename String?
   answerMediaType     String?
-  order               Int      @default(0)
+  order               Float    @default(0)
   createdAt           DateTime @default(now())
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }

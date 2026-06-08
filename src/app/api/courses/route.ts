@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { parseOrder } from "@/lib/parse-order";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         description: description.trim(),
         isPublished: Boolean(isPublished),
-        order: Number(order) || 0,
+        order: parseOrder(order),
       },
     });
 

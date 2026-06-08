@@ -10,7 +10,7 @@ async function fetchPublishedCourse(id: string) {
       questions: { orderBy: { order: "asc" } },
       userQuestions: {
         where: { status: "answered" },
-        orderBy: { answeredAt: "desc" },
+        orderBy: [{ order: "asc" }, { answeredAt: "desc" }],
       },
     },
   });

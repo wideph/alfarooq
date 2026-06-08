@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 function buildQuestions(course: PublishedCourseDetail): QAItem[] {
-  return [
+  const items: QAItem[] = [
     ...course.questions.map((q) => ({
       id: q.id,
       question: q.question,
@@ -35,11 +35,14 @@ function buildQuestions(course: PublishedCourseDetail): QAItem[] {
         id: `user-${q.id}`,
         question: q.question,
         answer: q.answer || "",
+        order: q.order,
         fromUser: true,
         answerMediaFilename: q.answerMediaFilename,
         answerMediaType: q.answerMediaType,
       })),
   ];
+
+  return items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 export default function CoursePageView({
@@ -78,7 +81,7 @@ export default function CoursePageView({
           className="inline-flex items-center gap-2 text-sm text-indigo-600/80 hover:text-indigo-700 mb-6 transition-colors font-medium"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Courses and Services
+          Back to Types of Diploma and services
         </Link>
 
         <div className="space-y-10">

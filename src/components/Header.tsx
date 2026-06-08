@@ -17,6 +17,11 @@ export default function Header() {
               <img
                 src={`/api/media/${encodeURIComponent(settings.logoFilename)}`}
                 alt={settings.siteName}
+                width={40}
+                height={40}
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
                 className="w-10 h-10 rounded-xl object-cover shadow-lg group-hover:scale-105 transition-transform"
               />
             ) : (

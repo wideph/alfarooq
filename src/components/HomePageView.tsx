@@ -29,7 +29,7 @@ export default function HomePageView({
           <div className="mb-8">
             <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-3 urdu-text">
               <BookOpen className="w-7 h-7 text-primary-500" />
-              Courses and Services
+              Types of Diploma and services
             </h3>
           </div>
 

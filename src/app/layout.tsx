@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
 import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
+import PreloadAssets from "@/components/PreloadAssets";
 import { getSiteSettings } from "@/lib/get-site-settings";
 import "./globals.css";
 
@@ -25,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: settings.siteName,
-    description: "Courses and Services platform",
+    description: "Types of Diploma and services platform",
     ...(settings.logoFilename
       ? {
           icons: {
@@ -49,6 +50,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const settings = await getSiteSettings();
+  const logoUrl = settings.logoFilename
+    ? `/api/media/${encodeURIComponent(settings.logoFilename)}`
+    : null;
 
   return (
     <html
@@ -57,7 +61,12 @@ export default async function RootLayout({
       className={`${urduNastaliq.variable} ${urduSans.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <link rel="preload" href="/pdf.worker.min.mjs" as="script" />
+        {logoUrl ? <link rel="preload" href={logoUrl} as="image" /> : null}
+      </head>
       <body className="antialiased text-slate-800 font-urdu">
+        <PreloadAssets logoUrl={logoUrl} />
         <SiteSettingsProvider initialSettings={settings}>{children}</SiteSettingsProvider>
       </body>
     </html>

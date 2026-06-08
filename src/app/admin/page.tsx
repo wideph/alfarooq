@@ -42,6 +42,7 @@ interface Question {
   id: string;
   question: string;
   answer: string;
+  order: number;
   answerMediaFilename?: string | null;
   answerMediaType?: string | null;
 }
@@ -51,9 +52,15 @@ interface UserQuestion {
   question: string;
   answer: string | null;
   status: string;
+  order: number;
   createdAt: string;
   answerMediaFilename?: string | null;
   answerMediaType?: string | null;
+}
+
+function nextPreference(items: { order: number }[]) {
+  if (items.length === 0) return 1;
+  return Math.max(...items.map((i) => i.order)) + 1;
 }
 
 export default function AdminDashboard() {
@@ -71,17 +78,27 @@ export default function AdminDashboard() {
   // Form states
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [courseForm, setCourseForm] = useState({ title: "", description: "", isPublished: true });
+  const [courseForm, setCourseForm] = useState({
+    title: "",
+    description: "",
+    isPublished: true,
+    order: 1,
+  });
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [qaForm, setQaForm] = useState({ question: "", answer: "" });
+  const [qaForm, setQaForm] = useState({ question: "", answer: "", order: 1 });
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [userAnswerForm, setUserAnswerForm] = useState<Record<string, string>>({});
+  const [userAnswerOrderForm, setUserAnswerOrderForm] = useState<Record<string, string>>({});
   const [editingAnsweredUser, setEditingAnsweredUser] = useState<UserQuestion | null>(null);
-  const [answeredUserEditForm, setAnsweredUserEditForm] = useState({ question: "", answer: "" });
+  const [answeredUserEditForm, setAnsweredUserEditForm] = useState({
+    question: "",
+    answer: "",
+    order: "1",
+  });
   const [qaMediaFile, setQaMediaFile] = useState<File | null>(null);
   const [removeQaMedia, setRemoveQaMedia] = useState(false);
   const [userAnswerMediaFile, setUserAnswerMediaFile] = useState<File | null>(null);
@@ -118,11 +135,18 @@ export default function AdminDashboard() {
     setSelectedCourse(courseId);
     const res = await fetch(`/api/courses/${courseId}?admin=true`);
     const data = await res.json();
+    const questions = data.questions || [];
+    const userQuestions = data.userQuestions || [];
     setCourseDetail({
       samples: data.samples || [],
-      questions: data.questions || [],
-      userQuestions: data.userQuestions || [],
+      questions,
+      userQuestions,
     });
+    const qaItems = [
+      ...questions,
+      ...userQuestions.filter((q: UserQuestion) => q.status === "answered"),
+    ];
+    setQaForm((prev) => ({ ...prev, order: nextPreference(qaItems) }));
   }
 
   function refreshCourseViews(courseId: string) {
@@ -138,6 +162,11 @@ export default function AdminDashboard() {
     const formData = new FormData();
     formData.append("questionId", questionId);
     formData.append("answer", answer || "");
+    const qaItems = [
+      ...(courseDetail?.questions || []),
+      ...(courseDetail?.userQuestions || []).filter((q) => q.status === "answered"),
+    ];
+    formData.append("order", userAnswerOrderForm[questionId] || String(nextPreference(qaItems)));
     if (userAnswerMediaFile) formData.append("answerMedia", userAnswerMediaFile);
 
     const res = await fetch(`/api/courses/${selectedCourse}/user-questions`, {
@@ -170,7 +199,7 @@ export default function AdminDashboard() {
       setMessage("User question delete ho gaya");
       if (editingAnsweredUser?.id === questionId) {
         setEditingAnsweredUser(null);
-        setAnsweredUserEditForm({ question: "", answer: "" });
+        setAnsweredUserEditForm({ question: "", answer: "", order: "1" });
       }
       loadCourseDetail(selectedCourse);
     }
@@ -181,6 +210,7 @@ export default function AdminDashboard() {
     setAnsweredUserEditForm({
       question: q.question,
       answer: q.answer || "",
+      order: String(q.order),
     });
     setAnsweredUserMediaFile(null);
     setRemoveAnsweredUserMedia(false);
@@ -203,6 +233,7 @@ export default function AdminDashboard() {
     formData.append("questionId", editingAnsweredUser.id);
     formData.append("question", answeredUserEditForm.question);
     formData.append("answer", answeredUserEditForm.answer);
+    formData.append("order", answeredUserEditForm.order);
     if (removeAnsweredUserMedia) formData.append("removeAnswerMedia", "true");
     if (answeredUserMediaFile) formData.append("answerMedia", answeredUserMediaFile);
 
@@ -214,7 +245,7 @@ export default function AdminDashboard() {
     if (res.ok) {
       setMessage("User sawal/jawab update ho gaya!");
       setEditingAnsweredUser(null);
-      setAnsweredUserEditForm({ question: "", answer: "" });
+      setAnsweredUserEditForm({ question: "", answer: "", order: "1" });
       setAnsweredUserMediaFile(null);
       setRemoveAnsweredUserMedia(false);
       loadCourseDetail(selectedCourse);
@@ -244,7 +275,7 @@ export default function AdminDashboard() {
       setMessage("Course save ho gaya!");
       setShowCourseForm(false);
       setEditingCourse(null);
-      setCourseForm({ title: "", description: "", isPublished: true });
+      setCourseForm({ title: "", description: "", isPublished: true, order: nextPreference(courses) });
       loadCourses();
     } else {
       setMessage("Error: Course save nahi ho saka");
@@ -320,6 +351,7 @@ export default function AdminDashboard() {
     const formData = new FormData();
     formData.append("question", qaForm.question);
     formData.append("answer", qaForm.answer);
+    formData.append("order", String(qaForm.order));
     if (removeQaMedia) formData.append("removeAnswerMedia", "true");
     if (qaMediaFile) formData.append("answerMedia", qaMediaFile);
 
@@ -332,7 +364,7 @@ export default function AdminDashboard() {
       if (res.ok) {
         setMessage("Question update ho gaya!");
         setEditingQuestion(null);
-        setQaForm({ question: "", answer: "" });
+        setQaForm({ question: "", answer: "", order: nextPreference(courseDetail?.questions || []) });
         setQaMediaFile(null);
         setRemoveQaMedia(false);
         await refreshCourseViews(selectedCourse);
@@ -344,7 +376,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         setMessage("Question add ho gaya!");
-        setQaForm({ question: "", answer: "" });
+        setQaForm({ question: "", answer: "", order: nextPreference(courseDetail?.questions || []) });
         setQaMediaFile(null);
         await refreshCourseViews(selectedCourse);
       }
@@ -372,13 +404,14 @@ export default function AdminDashboard() {
       title: course.title,
       description: course.description,
       isPublished: course.isPublished,
+      order: course.order,
     });
     setShowCourseForm(true);
   }
 
   function startEditQuestion(q: Question) {
     setEditingQuestion(q);
-    setQaForm({ question: q.question, answer: q.answer });
+    setQaForm({ question: q.question, answer: q.answer, order: q.order });
     setQaMediaFile(null);
     setRemoveQaMedia(false);
   }
@@ -445,7 +478,12 @@ export default function AdminDashboard() {
                 <button
                   onClick={() => {
                     setEditingCourse(null);
-                    setCourseForm({ title: "", description: "", isPublished: true });
+                    setCourseForm({
+                      title: "",
+                      description: "",
+                      isPublished: true,
+                      order: nextPreference(courses),
+                    });
                     setShowCourseForm(true);
                   }}
                   className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
@@ -470,7 +508,12 @@ export default function AdminDashboard() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-slate-800 truncate">{course.title}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                              #{course.order}
+                            </span>
+                            <p className="font-semibold text-slate-800 truncate">{course.title}</p>
+                          </div>
                           <div className="flex gap-3 mt-1 text-xs text-slate-400">
                             <span>{course._count.samples} samples</span>
                             <span>{course._count.questions} Q&A</span>
@@ -601,6 +644,31 @@ export default function AdminDashboard() {
                             <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-3">
                               {q.question}
                             </p>
+                            <label className="block text-xs text-slate-500 mb-1">
+                              Preference # (e.g. 1, 1.5, 2)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={
+                                userAnswerOrderForm[q.id] ??
+                                String(
+                                  nextPreference([
+                                    ...(courseDetail?.questions || []),
+                                    ...(courseDetail?.userQuestions || []).filter(
+                                      (uq) => uq.status === "answered"
+                                    ),
+                                  ])
+                                )
+                              }
+                              onChange={(e) =>
+                                setUserAnswerOrderForm({
+                                  ...userAnswerOrderForm,
+                                  [q.id]: e.target.value,
+                                })
+                              }
+                              className="w-full max-w-[8rem] mb-2 px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                            />
                             <textarea
                               value={userAnswerForm[q.id] || ""}
                               onChange={(e) =>
@@ -650,6 +718,7 @@ export default function AdminDashboard() {
                     <div className="space-y-3">
                       {courseDetail.userQuestions
                         .filter((q) => q.status === "answered")
+                        .sort((a, b) => a.order - b.order)
                         .map((q) => (
                           <div
                             key={q.id}
@@ -657,6 +726,19 @@ export default function AdminDashboard() {
                           >
                             {editingAnsweredUser?.id === q.id ? (
                               <div className="space-y-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={answeredUserEditForm.order}
+                                  onChange={(e) =>
+                                    setAnsweredUserEditForm({
+                                      ...answeredUserEditForm,
+                                      order: e.target.value,
+                                    })
+                                  }
+                                  className="w-full max-w-[8rem] px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                                  placeholder="Preference #"
+                                />
                                 <textarea
                                   value={answeredUserEditForm.question}
                                   onChange={(e) =>
@@ -713,7 +795,7 @@ export default function AdminDashboard() {
                                   <button
                                   onClick={() => {
                                     setEditingAnsweredUser(null);
-                                    setAnsweredUserEditForm({ question: "", answer: "" });
+                                    setAnsweredUserEditForm({ question: "", answer: "", order: "1" });
                                     setAnsweredUserMediaFile(null);
                                     setRemoveAnsweredUserMedia(false);
                                   }}
@@ -727,6 +809,7 @@ export default function AdminDashboard() {
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium text-slate-800 urdu-text leading-loose">
+                                    <span className="text-slate-400 mr-1">#{q.order}</span>
                                     Q: {q.question}
                                   </p>
                                   <p className="text-xs text-slate-500 mt-1 urdu-text leading-loose">
@@ -770,6 +853,20 @@ export default function AdminDashboard() {
                     )}
                   </h3>
                   <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">
+                        Preference # (e.g. 1, 1.5, 2)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={qaForm.order}
+                        onChange={(e) =>
+                          setQaForm({ ...qaForm, order: parseFloat(e.target.value) || 0 })
+                        }
+                        className="w-full max-w-[8rem] px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                      />
+                    </div>
                     <textarea
                       placeholder="Question likhein..."
                       value={qaForm.question}
@@ -830,7 +927,11 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => {
                             setEditingQuestion(null);
-                            setQaForm({ question: "", answer: "" });
+                            setQaForm({
+                              question: "",
+                              answer: "",
+                              order: nextPreference(courseDetail?.questions || []),
+                            });
                             setQaMediaFile(null);
                             setRemoveQaMedia(false);
                           }}
@@ -845,7 +946,9 @@ export default function AdminDashboard() {
                   {/* Questions List */}
                   {courseDetail && courseDetail.questions.length > 0 && (
                     <div className="mt-4 space-y-2">
-                      {courseDetail.questions.map((q, i) => (
+                      {[...courseDetail.questions]
+                        .sort((a, b) => a.order - b.order)
+                        .map((q) => (
                         <div
                           key={q.id}
                           className="p-3 rounded-lg bg-slate-50 border border-slate-100"
@@ -853,7 +956,8 @@ export default function AdminDashboard() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-slate-800">
-                                {i + 1}. {q.question}
+                                <span className="text-slate-400 mr-1">#{q.order}</span>
+                                {q.question}
                               </p>
                               <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                                 A: {q.answer}
@@ -911,7 +1015,21 @@ export default function AdminDashboard() {
                   value={courseForm.title}
                   onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
-                  placeholder="Course ka naam"
+                  placeholder="Diploma ka naam"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Preference # (e.g. 1, 1.5, 2)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={courseForm.order}
+                  onChange={(e) =>
+                    setCourseForm({ ...courseForm, order: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full max-w-[10rem] px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
                 />
               </div>
               <div>

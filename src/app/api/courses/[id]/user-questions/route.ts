@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
+import { parseOrder } from "@/lib/parse-order";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -17,6 +18,7 @@ async function parseUserQuestionBody(request: NextRequest) {
       answer: (formData.get("answer") as string) || "",
       answerMedia: (formData.get("answerMedia") as File | null) || null,
       removeAnswerMedia: formData.get("removeAnswerMedia") === "true",
+      order: formData.has("order") ? parseOrder(formData.get("order")) : undefined,
     };
   }
 
@@ -27,6 +29,7 @@ async function parseUserQuestionBody(request: NextRequest) {
     answer: (body.answer as string) || "",
     answerMedia: null as File | null,
     removeAnswerMedia: Boolean(body.removeAnswerMedia),
+    order: body.order !== undefined ? parseOrder(body.order) : undefined,
   };
 }
 
@@ -178,6 +181,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         ...(body.answer !== undefined && { answer: body.answer.trim() }),
         answerMediaFilename: media.answerMediaFilename,
         answerMediaType: media.answerMediaType,
+        ...(body.order !== undefined && { order: body.order }),
         ...(isNewAnswer && {
           status: "answered",
           answeredAt: new Date(),
