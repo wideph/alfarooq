@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
 import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
 import PreloadAssets from "@/components/PreloadAssets";
+import FloatingHomeButton from "@/components/FloatingHomeButton";
 import { getSiteSettings } from "@/lib/get-site-settings";
 import "./globals.css";
 
@@ -76,6 +77,7 @@ export default async function RootLayout({
       <body className="antialiased text-slate-800">
         <PreloadAssets logoUrl={logoUrl} />
         <SiteSettingsProvider initialSettings={settings}>{children}</SiteSettingsProvider>
+        <FloatingHomeButton />
       </body>
     </html>
   );

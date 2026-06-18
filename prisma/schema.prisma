@@ -43,6 +43,7 @@ model UserQuestion {
   id                   String    @id @default(cuid())
   courseId             String
   question             String
+  whatsappNumber       String?
   answer               String?
   answerMediaFilename  String?
   answerMediaType      String?

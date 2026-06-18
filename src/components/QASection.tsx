@@ -130,17 +130,23 @@ export default function QASection({
               <div className="border-t border-slate-100/80 px-3.5 sm:px-5 pb-3.5 sm:pb-5 pt-3 min-w-0">
                 <div
                   className={`p-3 sm:p-4 rounded-lg border min-w-0 ${
-                    isCourse
-                      ? "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100"
-                      : "bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100"
+                    q.fromUser
+                      ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200"
+                      : isCourse
+                        ? "bg-gradient-to-r from-violet-50 to-indigo-50 border-violet-100"
+                        : "bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100"
                   }`}
                 >
                   <p
                     className={`text-sm font-semibold mb-2 urdu-text ${
-                      isCourse ? "text-violet-700" : "text-primary-700"
+                      q.fromUser
+                        ? "text-emerald-700"
+                        : isCourse
+                          ? "text-violet-700"
+                          : "text-primary-700"
                     }`}
                   >
-                    جواب:
+                    {q.fromUser ? "آپ کے سوال کا جواب:" : "جواب:"}
                   </p>
                   <AnswerContent
                     answer={q.answer}

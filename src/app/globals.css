@@ -38,8 +38,19 @@ body {
     "Urdu Typesetting", "Noto Nastaliq Urdu", serif;
 }
 
+/* Urdu text ko parhne mein asaan aur khoobsurat banane ke liye zyada line spacing.
+   @layer base mein rakha gaya hai taake explicit Tailwind leading-* classes (e.g.
+   headings ki leading-snug) is par override kar sakein. */
+@layer base {
+  .urdu-text {
+    line-height: 2.15;
+    word-spacing: 0.06em;
+  }
+}
+
 .font-urdu {
-  line-height: 2.2;
+  line-height: 2.3;
+  word-spacing: 0.06em;
 }
 
 input,
@@ -57,6 +68,17 @@ textarea {
 
 /* When an inner area hits top/bottom, scroll continues on the page */
 .touch-scroll-y {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+/* PDF viewer: har screen (mobile bhi) par andar apna scroll, aur jab andar ka
+   scroll top/bottom par khatam ho to overscroll-behavior auto page ko scroll
+   karne deta hai (chaining). */
+.pdf-scroll-y {
+  overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: auto;
   touch-action: pan-y;

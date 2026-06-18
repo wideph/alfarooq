@@ -50,6 +50,7 @@ interface Question {
 interface UserQuestion {
   id: string;
   question: string;
+  whatsappNumber?: string | null;
   answer: string | null;
   status: string;
   order: number;
@@ -641,9 +642,21 @@ export default function AdminDashboard() {
                             key={q.id}
                             className="p-4 rounded-xl bg-white border border-amber-100"
                           >
-                            <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-3">
+                            <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-2">
                               {q.question}
                             </p>
+                            {q.whatsappNumber && (
+                              <a
+                                href={`https://wa.me/${q.whatsappNumber.replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 mb-3 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors"
+                                dir="ltr"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                WhatsApp: {q.whatsappNumber}
+                              </a>
+                            )}
                             <label className="block text-xs text-slate-500 mb-1">
                               Preference # (e.g. 1, 1.5, 2)
                             </label>
@@ -815,6 +828,18 @@ export default function AdminDashboard() {
                                   <p className="text-xs text-slate-500 mt-1 urdu-text leading-loose">
                                     A: {q.answer}
                                   </p>
+                                  {q.whatsappNumber && (
+                                    <a
+                                      href={`https://wa.me/${q.whatsappNumber.replace(/\D/g, "")}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors"
+                                      dir="ltr"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                      WhatsApp: {q.whatsappNumber}
+                                    </a>
+                                  )}
                                   {q.answerMediaFilename && (
                                     <p className="text-xs text-emerald-600 mt-1">
                                       Media attached ({q.answerMediaType})

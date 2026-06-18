@@ -23,6 +23,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         : {
             where: { status: "answered" },
             orderBy: { answeredAt: "desc" },
+            // Public response se whatsappNumber exclude karein (privacy).
+            select: {
+              id: true,
+              question: true,
+              answer: true,
+              answerMediaFilename: true,
+              answerMediaType: true,
+              status: true,
+              order: true,
+              answeredAt: true,
+            },
           },
     },
   });

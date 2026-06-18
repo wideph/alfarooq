@@ -11,6 +11,18 @@ async function fetchPublishedCourse(id: string) {
       userQuestions: {
         where: { status: "answered" },
         orderBy: [{ order: "asc" }, { answeredAt: "desc" }],
+        // whatsappNumber jaan boojh kar exclude — woh sirf admin ke liye hai,
+        // public par expose nahi hona chahiye.
+        select: {
+          id: true,
+          question: true,
+          answer: true,
+          answerMediaFilename: true,
+          answerMediaType: true,
+          status: true,
+          order: true,
+          answeredAt: true,
+        },
       },
     },
   });

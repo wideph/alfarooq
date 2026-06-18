@@ -14,8 +14,10 @@ async function parseUserQuestionBody(request: NextRequest) {
     const formData = await request.formData();
     return {
       questionId: (formData.get("questionId") as string) || undefined,
-      question: (formData.get("question") as string) || "",
-      answer: (formData.get("answer") as string) || "",
+      // Sirf tab include karein jab field maujood ho, warna existing question/answer
+      // ghalti se khali ("") ho jata hai (e.g. pending sawal ka jawab dete waqt).
+      question: formData.has("question") ? (formData.get("question") as string) || "" : undefined,
+      answer: formData.has("answer") ? (formData.get("answer") as string) || "" : undefined,
       answerMedia: (formData.get("answerMedia") as File | null) || null,
       removeAnswerMedia: formData.get("removeAnswerMedia") === "true",
       order: formData.has("order") ? parseOrder(formData.get("order")) : undefined,
@@ -25,8 +27,8 @@ async function parseUserQuestionBody(request: NextRequest) {
   const body = await request.json();
   return {
     questionId: body.questionId as string | undefined,
-    question: (body.question as string) || "",
-    answer: (body.answer as string) || "",
+    question: body.question !== undefined ? (body.question as string) || "" : undefined,
+    answer: body.answer !== undefined ? (body.answer as string) || "" : undefined,
     answerMedia: null as File | null,
     removeAnswerMedia: Boolean(body.removeAnswerMedia),
     order: body.order !== undefined ? parseOrder(body.order) : undefined,
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { question } = body;
+    const { question, whatsappNumber } = body;
 
     if (!question?.trim()) {
       return NextResponse.json(
@@ -121,10 +123,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    if (!whatsappNumber?.trim()) {
+      return NextResponse.json(
+        { error: "WhatsApp number likhna zaroori hai" },
+        { status: 400 }
+      );
+    }
+
     const userQuestion = await prisma.userQuestion.create({
       data: {
         courseId,
         question: question.trim(),
+        whatsappNumber: whatsappNumber.trim(),
         status: "pending",
       },
     });

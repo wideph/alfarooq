@@ -207,9 +207,11 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
   }, [pdfDoc, numPages, zoom, containerWidth, compact, renderPageToCanvas, cancelActiveRenders]);
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
+  // Mobile par bhi PDF ka apna scroll area (bounded height) ho taake saare pages
+  // aik scrollable box mein ho aur end par page scroll chaining chale.
   const maxHeight = compact
-    ? "max-h-none sm:max-h-[50vh]"
-    : "max-h-none sm:max-h-[75vh]";
+    ? "max-h-[60vh] sm:max-h-[50vh]"
+    : "max-h-[72vh] sm:max-h-[75vh]";
 
   return (
     <div
@@ -246,7 +248,7 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
 
       <div
         ref={containerRef}
-        className={`touch-scroll-y overflow-x-hidden ${maxHeight} p-2 sm:p-4 bg-slate-950`}
+        className={`pdf-scroll-y ${maxHeight} p-2 sm:p-4 bg-slate-950`}
         onContextMenu={handleContextMenu}
       >
         {loading && (

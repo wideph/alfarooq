@@ -16,12 +16,13 @@ export default function AskQuestionForm({
 }: AskQuestionFormProps) {
   const isCourse = variant === "course";
   const [question, setQuestion] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!question.trim()) return;
+    if (!question.trim() || !whatsappNumber.trim()) return;
 
     setSubmitting(true);
     setError("");
@@ -30,7 +31,10 @@ export default function AskQuestionForm({
       const res = await fetch(`/api/courses/${courseId}/user-questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: question.trim() }),
+        body: JSON.stringify({
+          question: question.trim(),
+          whatsappNumber: whatsappNumber.trim(),
+        }),
       });
 
       if (!res.ok) {
@@ -39,6 +43,7 @@ export default function AskQuestionForm({
       }
 
       setQuestion("");
+      setWhatsappNumber("");
       onSubmitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submit fail");
@@ -84,13 +89,35 @@ export default function AskQuestionForm({
           }`}
         />
 
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1.5 urdu-text">
+            آپ کا واٹس ایپ نمبر
+          </label>
+          <input
+            type="tel"
+            inputMode="tel"
+            value={whatsappNumber}
+            onChange={(e) => setWhatsappNumber(e.target.value)}
+            placeholder="مثلاً 03001234567"
+            dir="ltr"
+            className={`w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 ${
+              isCourse
+                ? "focus:border-teal-400 focus:ring-teal-100"
+                : "focus:border-primary-400 focus:ring-primary-100"
+            }`}
+          />
+          <p className="text-xs text-slate-400 mt-1 urdu-text">
+            تاکہ ضرورت پڑنے پر ایڈمن آپ سے واٹس ایپ پر رابطہ کر سکے
+          </p>
+        </div>
+
         {error && (
           <p className="text-sm text-red-600 urdu-text">{error}</p>
         )}
 
         <button
           type="submit"
-          disabled={!question.trim() || submitting}
+          disabled={!question.trim() || !whatsappNumber.trim() || submitting}
           className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-xl text-white font-semibold disabled:opacity-50 transition-all ${
             isCourse
               ? "bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700"
