@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { getPdfJs } from "@/lib/pdfjs";
+import { useScrollChaining } from "@/hooks/useScrollChaining";
 
 interface PdfViewerProps {
   filename: string;
@@ -49,6 +50,9 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
   const [zoom, setZoom] = useState(1);
   const [pdfDoc, setPdfDoc] = useState<PdfDocument | null>(null);
   const [containerWidth, setContainerWidth] = useState(320);
+
+  // Mobile par andar ka scroll khatam hote hi page scroll usi swipe mein chal pare.
+  useScrollChaining(containerRef);
 
   useEffect(() => {
     void getPdfJs();

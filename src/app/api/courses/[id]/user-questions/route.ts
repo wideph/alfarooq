@@ -187,7 +187,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     await prisma.userQuestion.update({
       where: { id: body.questionId },
       data: {
-        ...(body.question !== undefined && { question: body.question.trim() }),
+        // User ka asal sawal kabhi khali na ho jaye: sirf tab update karein jab
+        // koi non-empty question bheja gaya ho (pending answer ke waqt question
+        // bheja hi nahi jata, is liye woh mehfooz rehta hai).
+        ...(body.question !== undefined &&
+          body.question.trim() !== "" && { question: body.question.trim() }),
         ...(body.answer !== undefined && { answer: body.answer.trim() }),
         answerMediaFilename: media.answerMediaFilename,
         answerMediaType: media.answerMediaType,

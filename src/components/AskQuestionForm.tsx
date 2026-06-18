@@ -54,12 +54,17 @@ export default function AskQuestionForm({
 
   return (
     <div
-      className={`rounded-2xl shadow-sm p-5 sm:p-8 border ${
+      className={`relative overflow-hidden rounded-3xl shadow-lg p-5 sm:p-8 ring-1 ${
         isCourse
-          ? "bg-gradient-to-br from-teal-50/60 via-white to-indigo-50/40 border-teal-200/50 shadow-teal-100/30"
-          : "bg-gradient-to-br from-white to-primary-50/40 border-primary-100"
+          ? "bg-gradient-to-br from-teal-50/70 via-white to-indigo-50/50 ring-teal-200/60 shadow-teal-100/40"
+          : "bg-gradient-to-br from-white to-primary-50/50 ring-primary-100 shadow-primary-100/40"
       }`}
     >
+      <div
+        className={`pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full blur-3xl animate-float-slow ${
+          isCourse ? "bg-teal-300/20" : "bg-primary-300/20"
+        }`}
+      />
       <div className="flex items-center gap-3 mb-5">
         <div
           className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -118,10 +123,10 @@ export default function AskQuestionForm({
         <button
           type="submit"
           disabled={!question.trim() || !whatsappNumber.trim() || submitting}
-          className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 rounded-xl text-white font-semibold disabled:opacity-50 transition-all ${
+          className={`group w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-white font-bold disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-95 shadow-lg ${
             isCourse
-              ? "bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700"
-              : "bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700"
+              ? "bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 shadow-teal-500/30"
+              : "bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700 shadow-primary-500/30"
           }`}
         >
           {submitting ? (

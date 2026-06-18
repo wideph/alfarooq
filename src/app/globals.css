@@ -201,6 +201,53 @@ textarea {
   animation: gradientShift 8s ease infinite;
 }
 
+/* Frosted glass surface */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
+/* Animated conic gradient ring (used behind logo / badges) */
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 9s linear infinite;
+}
+
+/* Subtle sheen sweep on hover for premium cards */
+@keyframes sheen {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  100% { transform: translateX(220%) skewX(-18deg); }
+}
+
+.sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.sheen:hover::after {
+  animation: sheen 0.9s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow,
+  .sheen:hover::after {
+    animation: none !important;
+  }
+}
+
 /* Home — airy sky / violet / mint, gently drifting */
 .page-home {
   background: linear-gradient(135deg, #eef6ff 0%, #e7edff 26%, #f1ebff 50%, #e9fbf3 74%, #eef6ff 100%);
