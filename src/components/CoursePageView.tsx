@@ -87,7 +87,7 @@ export default function CoursePageView({
         <div className="space-y-10">
           <div className="animate-fade-in-up relative overflow-hidden rounded-3xl border border-indigo-200/60 bg-gradient-to-br from-indigo-50/90 via-white to-teal-50/50 shadow-lg shadow-indigo-100/50 p-6 sm:p-9">
             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-indigo-500 via-violet-500 to-teal-500" />
-            <div className="pointer-events-none absolute -top-16 -right-16 h-44 w-44 rounded-full bg-violet-300/20 blur-3xl animate-float-slow" />
+            <div className="pointer-events-none absolute -top-16 -right-16 h-44 w-44 rounded-full bg-violet-300/20 blur-3xl" />
             <h1 className="relative text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 mb-4 urdu-text leading-[1.7] pl-3">
               {course.title}
             </h1>

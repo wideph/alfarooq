@@ -61,6 +61,7 @@ export async function PUT(request: NextRequest) {
       });
 
       revalidateTag("site-settings");
+      revalidateTag("media-access");
       revalidatePath("/", "layout");
       revalidatePath("/");
 

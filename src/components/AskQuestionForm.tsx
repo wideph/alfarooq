@@ -61,7 +61,7 @@ export default function AskQuestionForm({
       }`}
     >
       <div
-        className={`pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full blur-3xl animate-float-slow ${
+        className={`pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full blur-3xl ${
           isCourse ? "bg-teal-300/20" : "bg-primary-300/20"
         }`}
       />

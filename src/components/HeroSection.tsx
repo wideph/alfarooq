@@ -30,9 +30,9 @@ export default function HeroSection({ settings }: { settings: SiteSettingsData }
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(56,189,248,0.22),transparent_50%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_100%,rgba(139,92,246,0.16),transparent_50%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(255,255,255,0.55),transparent_70%)]" />
-      <div className="absolute -top-24 left-1/4 h-48 w-48 rounded-full bg-sky-300/25 blur-3xl animate-float" />
-      <div className="absolute -bottom-16 right-1/4 h-56 w-56 rounded-full bg-violet-300/20 blur-3xl animate-float-slow" />
-      <div className="absolute top-1/3 right-10 h-32 w-32 rounded-full bg-emerald-300/15 blur-3xl animate-float" />
+      <div className="absolute -top-24 left-1/4 h-48 w-48 rounded-full bg-sky-300/25 blur-3xl" />
+      <div className="absolute -bottom-16 right-1/4 h-56 w-56 rounded-full bg-violet-300/20 blur-3xl" />
+      <div className="absolute top-1/3 right-10 h-32 w-32 rounded-full bg-emerald-300/15 blur-3xl" />
       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#f0f9ff]/90 to-transparent" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/50 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-indigo-200/40 to-transparent" />

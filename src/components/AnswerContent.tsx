@@ -63,9 +63,11 @@ export default function AnswerContent({
   return (
     <div className="min-w-0 w-full max-w-full">
       {hasText && (
-        <p className="text-slate-700 leading-loose whitespace-pre-wrap break-words [overflow-wrap:anywhere] urdu-text text-sm sm:text-base">
-          {linkify(answer)}
-        </p>
+        <div className="scroll-field rounded-lg">
+          <p className="text-slate-700 leading-loose whitespace-pre-wrap break-words [overflow-wrap:anywhere] urdu-text text-sm sm:text-base">
+            {linkify(answer)}
+          </p>
+        </div>
       )}
       {hasMedia && mediaType === "pdf" && (
         <div className="mt-3 w-full max-w-full min-w-0 rounded-xl border border-slate-200">

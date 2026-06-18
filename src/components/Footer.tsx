@@ -9,7 +9,7 @@ export default function Footer() {
 
   return (
     <footer className="mt-auto relative glass border-t border-white/40">
-      <div className="h-0.5 w-full bg-gradient-to-r from-primary-500 via-accent-500 to-emerald-400 bg-[length:200%_100%] animate-[gradientShift_8s_ease_infinite]" />
+      <div className="h-0.5 w-full bg-gradient-to-r from-primary-500 via-accent-500 to-emerald-400" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 text-slate-700">
