@@ -9,11 +9,16 @@ datasource db {
 }
 
 model Admin {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  email          String   @unique
+  password       String
+  name           String
+  role           String   @default("admin")
+  permissions    String   @default("[]")
+  isActive       Boolean  @default(true)
+  createdByAdmin String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
 }
 
 model Course {
@@ -28,15 +33,26 @@ model Course {
   samples       Sample[]
   questions     Question[]
   userQuestions UserQuestion[]
+  botTraining   BotTrainingEntry[]
+  botChats      BotConversation[]
 }
 
 model SiteSettings {
-  id             String   @id @default("site")
-  siteName       String   @default("Alfarooq Services")
-  logoFilename   String?
-  heroText       String   @default("")
-  whatsappNumber String   @default("")
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default("site")
+  siteName        String   @default("Alfarooq Services")
+  logoFilename    String?
+  heroText        String   @default("")
+  whatsappNumber  String   @default("")
+  metaPixelId     String   @default("")
+  metaAccessToken String   @default("")
+  googleAdsTagId  String   @default("")
+  tiktokPixelId   String   @default("")
+  botEnabled      Boolean  @default(false)
+  botProvider     String   @default("openai")
+  botModel        String   @default("")
+  botApiKey       String   @default("")
+  botSystemNote   String   @default("")
+  updatedAt       DateTime @updatedAt
 }
 
 model UserQuestion {
@@ -48,10 +64,16 @@ model UserQuestion {
   answerMediaFilename  String?
   answerMediaType      String?
   status               String    @default("pending")
+  source               String    @default("user")
+  publishForUsers      Boolean   @default(true)
+  trainingOnly         Boolean   @default(false)
+  visitorId            String?
+  botConversationId    String?
   order                Float     @default(0)
   createdAt            DateTime  @default(now())
   answeredAt           DateTime?
   course               Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  visitor              Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
 }
 
 model Sample {
@@ -75,4 +97,72 @@ model Question {
   order               Float    @default(0)
   createdAt           DateTime @default(now())
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Visitor {
+  id               String            @id @default(cuid())
+  visitorKey       String            @unique
+  source           String?
+  medium           String?
+  campaign         String?
+  referrer         String?
+  landingPage      String?
+  currentPath      String?
+  userAgent        String?
+  status           String            @default("visitor")
+  timeSpentSeconds Int               @default(0)
+  firstSeenAt      DateTime          @default(now())
+  lastSeenAt       DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  events           VisitorEvent[]
+  botChats         BotConversation[]
+  userQuestions    UserQuestion[]
+}
+
+model VisitorEvent {
+  id             String   @id @default(cuid())
+  visitorId      String
+  eventName      String
+  status         String?
+  payload        Json?
+  sentToMeta     Boolean  @default(false)
+  sentToGoogle   Boolean  @default(false)
+  sentToTikTok   Boolean  @default(false)
+  error          String?
+  createdAt      DateTime @default(now())
+  visitor        Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+}
+
+model BotTrainingEntry {
+  id        String   @id @default(cuid())
+  courseId  String
+  question  String
+  answer    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model BotConversation {
+  id         String       @id @default(cuid())
+  visitorId String?
+  courseId  String?
+  isPinned   Boolean      @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  visitor    Visitor?     @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  course     Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  messages   BotMessage[]
+}
+
+model BotMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+  conversation   BotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }

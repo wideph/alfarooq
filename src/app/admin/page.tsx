@@ -21,6 +21,17 @@ import {
   MessageCircle,
 } from "lucide-react";
 import SiteSettingsPanel from "@/components/admin/SiteSettingsPanel";
+import VisitorTrackingPanel from "@/components/admin/VisitorTrackingPanel";
+import BotAdminPanel from "@/components/admin/BotAdminPanel";
+import SubAdminPanel from "@/components/admin/SubAdminPanel";
+
+type AdminPermission =
+  | "manageSettings"
+  | "manageCourses"
+  | "manageContent"
+  | "manageVisitors"
+  | "manageBot"
+  | "manageAdmins";
 
 interface Course {
   id: string;
@@ -53,6 +64,10 @@ interface UserQuestion {
   whatsappNumber?: string | null;
   answer: string | null;
   status: string;
+  source?: string;
+  publishForUsers?: boolean;
+  trainingOnly?: boolean;
+  visitor?: { visitorKey: string } | null;
   order: number;
   createdAt: string;
   answerMediaFilename?: string | null;
@@ -66,7 +81,12 @@ function nextPreference(items: { order: number }[]) {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [admin, setAdmin] = useState<{ name: string; email: string } | null>(null);
+  const [admin, setAdmin] = useState<{
+    name: string;
+    email: string;
+    role?: string;
+    permissions?: AdminPermission[];
+  } | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
@@ -94,6 +114,7 @@ export default function AdminDashboard() {
   const [message, setMessage] = useState("");
   const [userAnswerForm, setUserAnswerForm] = useState<Record<string, string>>({});
   const [userAnswerOrderForm, setUserAnswerOrderForm] = useState<Record<string, string>>({});
+  const [userAnswerModeForm, setUserAnswerModeForm] = useState<Record<string, "publish" | "training">>({});
   const [editingAnsweredUser, setEditingAnsweredUser] = useState<UserQuestion | null>(null);
   const [answeredUserEditForm, setAnsweredUserEditForm] = useState({
     question: "",
@@ -105,6 +126,10 @@ export default function AdminDashboard() {
   const [userAnswerMediaFile, setUserAnswerMediaFile] = useState<File | null>(null);
   const [answeredUserMediaFile, setAnsweredUserMediaFile] = useState<File | null>(null);
   const [removeAnsweredUserMedia, setRemoveAnsweredUserMedia] = useState(false);
+
+  function can(permission: AdminPermission) {
+    return admin?.role === "admin" || Boolean(admin?.permissions?.includes(permission));
+  }
 
   async function loadCourses() {
     const res = await fetch("/api/courses?admin=true");
@@ -168,6 +193,7 @@ export default function AdminDashboard() {
       ...(courseDetail?.userQuestions || []).filter((q) => q.status === "answered"),
     ];
     formData.append("order", userAnswerOrderForm[questionId] || String(nextPreference(qaItems)));
+    formData.append("publishMode", userAnswerModeForm[questionId] || "publish");
     if (userAnswerMediaFile) formData.append("answerMedia", userAnswerMediaFile);
 
     const res = await fetch(`/api/courses/${selectedCourse}/user-questions`, {
@@ -178,6 +204,11 @@ export default function AdminDashboard() {
     if (res.ok) {
       setMessage("User ka sawal answer ho gaya aur frontend par show hoga!");
       setUserAnswerForm((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+      setUserAnswerModeForm((prev) => {
         const next = { ...prev };
         delete next[questionId];
         return next;
@@ -456,7 +487,12 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <SiteSettingsPanel onMessage={setMessage} />
+        {can("manageSettings") && <SiteSettingsPanel onMessage={setMessage} />}
+        {can("manageVisitors") && <VisitorTrackingPanel />}
+        {can("manageBot") && (
+          <BotAdminPanel courses={courses.map((course) => ({ id: course.id, title: course.title }))} />
+        )}
+        {can("manageAdmins") && <SubAdminPanel />}
 
         {message && (
           <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center justify-between">
@@ -467,6 +503,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {(can("manageCourses") || can("manageContent")) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Courses List */}
           <div className="lg:col-span-4">
@@ -476,21 +513,23 @@ export default function AdminDashboard() {
                   <BookOpen className="w-5 h-5 text-primary-500" />
                   Courses ({courses.length})
                 </h2>
-                <button
-                  onClick={() => {
-                    setEditingCourse(null);
-                    setCourseForm({
-                      title: "",
-                      description: "",
-                      isPublished: true,
-                      order: nextPreference(courses),
-                    });
-                    setShowCourseForm(true);
-                  }}
-                  className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+                {can("manageCourses") && (
+                  <button
+                    onClick={() => {
+                      setEditingCourse(null);
+                      setCourseForm({
+                        title: "",
+                        description: "",
+                        isPublished: true,
+                        order: nextPreference(courses),
+                      });
+                      setShowCourseForm(true);
+                    }}
+                    className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
               <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
@@ -529,26 +568,28 @@ export default function AdminDashboard() {
                             {course.isPublished ? "Published" : "Draft"}
                           </span>
                         </div>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditCourse(course);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteCourse(course.id);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {can("manageCourses") && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditCourse(course);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteCourse(course.id);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -563,6 +604,11 @@ export default function AdminDashboard() {
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-200" />
                 <p className="text-slate-500">Manage karne ke liye ek course select karein</p>
+              </div>
+            ) : !can("manageContent") ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-200" />
+                <p className="text-slate-500">Is course ke content ke liye permission zaroori hai</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -642,6 +688,18 @@ export default function AdminDashboard() {
                             key={q.id}
                             className="p-4 rounded-xl bg-white border border-amber-100"
                           >
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              {q.source === "bot" && (
+                                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                                  AI posted
+                                </span>
+                              )}
+                              {q.visitor?.visitorKey && (
+                                <span className="break-all rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                                  Visitor: {q.visitor.visitorKey}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-2">
                               {q.question}
                             </p>
@@ -697,6 +755,19 @@ export default function AdminDashboard() {
                               onChange={(e) => setUserAnswerMediaFile(e.target.files?.[0] || null)}
                               className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
                             />
+                            <select
+                              value={userAnswerModeForm[q.id] || "publish"}
+                              onChange={(e) =>
+                                setUserAnswerModeForm({
+                                  ...userAnswerModeForm,
+                                  [q.id]: e.target.value as "publish" | "training",
+                                })
+                              }
+                              className="mt-2 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                            >
+                              <option value="publish">Publish for user + train bot</option>
+                              <option value="training">Only bot training</option>
+                            </select>
                             <p className="text-xs text-slate-400">Optional: Answer mein PDF ya image attach karein</p>
                             <div className="flex gap-2 mt-2">
                               <button
@@ -722,15 +793,15 @@ export default function AdminDashboard() {
                 )}
 
                 {/* Answered User Questions - CRUD */}
-                {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "answered").length > 0 && (
+                {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "answered" || q.status === "training").length > 0 && (
                   <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-5 sm:p-6 shadow-sm">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
                       <MessageCircle className="w-5 h-5 text-emerald-600" />
-                      User ke Sawal (Answered)
+                      User ke Sawal (Answered / Training)
                     </h3>
                     <div className="space-y-3">
                       {courseDetail.userQuestions
-                        .filter((q) => q.status === "answered")
+                        .filter((q) => q.status === "answered" || q.status === "training")
                         .sort((a, b) => a.order - b.order)
                         .map((q) => (
                           <div
@@ -821,6 +892,23 @@ export default function AdminDashboard() {
                             ) : (
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
+                                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                                    {q.source === "bot" && (
+                                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                                        AI posted
+                                      </span>
+                                    )}
+                                    {(q.trainingOnly || q.status === "training") && (
+                                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                                        Bot training only
+                                      </span>
+                                    )}
+                                    {q.visitor?.visitorKey && (
+                                      <span className="break-all rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                                        Visitor: {q.visitor.visitorKey}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-sm font-medium text-slate-800 urdu-text leading-loose">
                                     <span className="text-slate-400 mr-1">#{q.order}</span>
                                     Q: {q.question}
@@ -1012,6 +1100,7 @@ export default function AdminDashboard() {
             )}
           </div>
         </div>
+        )}
       </main>
 
       {/* Course Form Modal */}

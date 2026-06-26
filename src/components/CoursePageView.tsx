@@ -108,6 +108,7 @@ export default function CoursePageView({
               {course.samples.map((sample, index) => (
                 <div
                   key={sample.id}
+                  id={`sample-${sample.id}`}
                   className="space-y-3 rounded-2xl border border-teal-200/50 bg-white/80 backdrop-blur-sm p-4 sm:p-5 shadow-sm shadow-teal-100/30"
                 >
                   <div className="flex items-center gap-2 px-1">

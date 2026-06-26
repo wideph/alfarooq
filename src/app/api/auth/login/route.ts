@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { createSession } from "@/lib/auth";
+import { createSession, parsePermissions } from "@/lib/auth";
 import { ensureAdminFromEnv } from "@/lib/ensure-admin";
 
 export async function POST(request: NextRequest) {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     const admin = await prisma.admin.findUnique({ where: { email } });
 
-    if (!admin) {
+    if (!admin || !admin.isActive) {
       return NextResponse.json(
         { error: "Galat email ya password" },
         { status: 401 }
@@ -41,11 +41,23 @@ export async function POST(request: NextRequest) {
       adminId: admin.id,
       email: admin.email,
       name: admin.name,
+      role: admin.role,
+      permissions: parsePermissions(admin.permissions),
+    });
+
+    await prisma.admin.update({
+      where: { id: admin.id },
+      data: { lastLoginAt: new Date() },
     });
 
     const response = NextResponse.json({
       success: true,
-      admin: { name: admin.name, email: admin.email },
+      admin: {
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        permissions: parsePermissions(admin.permissions),
+      },
     });
 
     response.cookies.set("admin_session", token, {

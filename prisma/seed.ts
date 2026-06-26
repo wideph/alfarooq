@@ -13,11 +13,14 @@ async function main() {
 
   await prisma.admin.upsert({
     where: { email: process.env.ADMIN_EMAIL || "admin@example.com" },
-    update: { password: hashedPassword },
+    update: { password: hashedPassword, role: "admin", isActive: true },
     create: {
       email: process.env.ADMIN_EMAIL || "admin@example.com",
       password: hashedPassword,
       name: "Alfarooq Admin",
+      role: "admin",
+      permissions: "[]",
+      isActive: true,
     },
   });
 
@@ -29,6 +32,9 @@ async function main() {
       siteName: "Alfarooq Services",
       heroText: "",
       whatsappNumber: "",
+      botProvider: "openai",
+      botModel: "",
+      botEnabled: false,
     },
   });
 

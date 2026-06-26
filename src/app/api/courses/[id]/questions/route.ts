@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
 import { parseOrder } from "@/lib/parse-order";
@@ -76,9 +76,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageContent");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id: courseId } = await params;
@@ -125,9 +127,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageContent");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id: courseId } = await params;
@@ -175,9 +179,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageContent");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id: courseId } = await params;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib/auth";
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
 import { parseOrder } from "@/lib/parse-order";
@@ -21,6 +21,9 @@ async function parseUserQuestionBody(request: NextRequest) {
       answerMedia: (formData.get("answerMedia") as File | null) || null,
       removeAnswerMedia: formData.get("removeAnswerMedia") === "true",
       order: formData.has("order") ? parseOrder(formData.get("order")) : undefined,
+      publishMode: formData.has("publishMode")
+        ? ((formData.get("publishMode") as string) || "publish")
+        : undefined,
     };
   }
 
@@ -32,6 +35,7 @@ async function parseUserQuestionBody(request: NextRequest) {
     answerMedia: null as File | null,
     removeAnswerMedia: Boolean(body.removeAnswerMedia),
     order: body.order !== undefined ? parseOrder(body.order) : undefined,
+    publishMode: body.publishMode as string | undefined,
   };
 }
 
@@ -70,14 +74,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id: courseId } = await params;
   const { searchParams } = new URL(request.url);
   const adminView = searchParams.get("admin") === "true";
-  const session = await getSession();
+  const session = await getFreshAdminSession();
+  const canSeeAdminQuestions =
+    adminView && hasAnyPermission(session, ["manageContent", "manageBot"]);
 
   const course = await prisma.course.findUnique({ where: { id: courseId } });
-  if (!course || (!course.isPublished && !(adminView && session))) {
+  if (!course || (!course.isPublished && !canSeeAdminQuestions)) {
     return NextResponse.json({ error: "Course nahi mila" }, { status: 404 });
   }
 
-  if (adminView && session) {
+  if (canSeeAdminQuestions) {
     const questions = await prisma.userQuestion.findMany({
       where: { courseId },
       orderBy: { createdAt: "desc" },
@@ -86,7 +92,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   const questions = await prisma.userQuestion.findMany({
-    where: { courseId, status: "answered" },
+    where: { courseId, status: "answered", publishForUsers: true },
     orderBy: { answeredAt: "desc" },
     select: {
       id: true,
@@ -114,7 +120,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { question, whatsappNumber } = body;
+    const { question, whatsappNumber, visitorKey } = body;
 
     if (!question?.trim()) {
       return NextResponse.json(
@@ -123,19 +129,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (!whatsappNumber?.trim()) {
-      return NextResponse.json(
-        { error: "WhatsApp number likhna zaroori hai" },
-        { status: 400 }
-      );
-    }
+    const visitor =
+      typeof visitorKey === "string" && visitorKey.trim()
+        ? await prisma.visitor.upsert({
+            where: { visitorKey: visitorKey.trim() },
+            update: { lastSeenAt: new Date() },
+            create: { visitorKey: visitorKey.trim(), source: "question_form" },
+          })
+        : null;
 
     const userQuestion = await prisma.userQuestion.create({
       data: {
         courseId,
         question: question.trim(),
-        whatsappNumber: whatsappNumber.trim(),
+        whatsappNumber: whatsappNumber?.trim() || null,
         status: "pending",
+        source: "user",
+        visitorId: visitor?.id,
       },
     });
 
@@ -149,9 +159,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageContent");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id: courseId } = await params;
@@ -172,6 +184,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const isNewAnswer = existing.status === "pending" && (body.answer?.trim() || body.answerMedia);
+    const trainingOnly = body.publishMode === "training";
 
     if (existing.status === "pending" && !body.answer?.trim() && !body.answerMedia) {
       return NextResponse.json({ error: "Answer zaroori hai" }, { status: 400 });
@@ -197,9 +210,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         answerMediaType: media.answerMediaType,
         ...(body.order !== undefined && { order: body.order }),
         ...(isNewAnswer && {
-          status: "answered",
+          status: trainingOnly ? "training" : "answered",
           answeredAt: new Date(),
+          publishForUsers: !trainingOnly,
+          trainingOnly,
         }),
+        ...(body.publishMode !== undefined &&
+          !isNewAnswer && {
+            status: trainingOnly ? "training" : "answered",
+            publishForUsers: !trainingOnly,
+            trainingOnly,
+          }),
       },
     });
 
@@ -217,9 +238,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageContent");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id: courseId } = await params;

@@ -89,6 +89,7 @@ export default function QASection({
         return (
           <div
             key={q.id}
+            id={`qa-${q.id}`}
             className={`group/qa animate-fade-in-up relative overflow-hidden rounded-2xl ring-1 transition-all duration-300 hover:-translate-y-0.5 ${
               isCourse
                 ? "ring-violet-200/60 bg-white/85 backdrop-blur-sm shadow-md shadow-violet-100/40 hover:ring-violet-300 hover:shadow-xl hover:shadow-violet-200/40"

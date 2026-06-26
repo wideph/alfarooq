@@ -1,14 +1,58 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET || "fallback-secret-key"
 );
 
+export const ADMIN_PERMISSIONS = [
+  "manageSettings",
+  "manageCourses",
+  "manageContent",
+  "manageVisitors",
+  "manageBot",
+  "manageAdmins",
+] as const;
+
+export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
+
 export interface AdminSession {
   adminId: string;
   email: string;
   name: string;
+  role?: string;
+  permissions?: AdminPermission[];
+}
+
+export function parsePermissions(value: string | null | undefined): AdminPermission[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is AdminPermission =>
+      ADMIN_PERMISSIONS.includes(item as AdminPermission)
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function hasPermission(
+  session: AdminSession | null,
+  permission: AdminPermission
+): boolean {
+  if (!session) return false;
+  if (session.role === "admin") return true;
+  return Boolean(session.permissions?.includes(permission));
+}
+
+export function hasAnyPermission(
+  session: AdminSession | null,
+  permissions: AdminPermission[]
+): boolean {
+  return permissions.some((permission) => hasPermission(session, permission));
 }
 
 export async function createSession(payload: AdminSession): Promise<string> {
@@ -41,4 +85,44 @@ export async function requireAdmin(): Promise<AdminSession> {
     throw new Error("Unauthorized");
   }
   return session;
+}
+
+export async function requirePermission(
+  permission: AdminPermission
+): Promise<AdminSession> {
+  const session = await getFreshAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+  if (!hasPermission(session, permission)) {
+    throw new Error("Forbidden");
+  }
+  return session;
+}
+
+export async function getFreshAdminSession(): Promise<AdminSession | null> {
+  const session = await getSession();
+  if (!session) return null;
+
+  const admin = await prisma.admin.findUnique({
+    where: { id: session.adminId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      permissions: true,
+      isActive: true,
+    },
+  });
+
+  if (!admin?.isActive) return null;
+
+  return {
+    adminId: admin.id,
+    email: admin.email,
+    name: admin.name,
+    role: admin.role,
+    permissions: parsePermissions(admin.permissions),
+  };
 }

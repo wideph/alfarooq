@@ -1,13 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Settings, X, Image as ImageIcon } from "lucide-react";
+import {
+  Bot,
+  KeyRound,
+  Loader2,
+  Megaphone,
+  Save,
+  Settings,
+  X,
+  Image as ImageIcon,
+} from "lucide-react";
 
 interface SiteSettingsForm {
   siteName: string;
   heroText: string;
   whatsappNumber: string;
   logoFilename: string | null;
+  metaPixelId: string;
+  googleAdsTagId: string;
+  tiktokPixelId: string;
+  botEnabled: boolean;
+  botProvider: string;
+  botModel: string;
+  botSystemNote: string;
+  botApiKeySet: boolean;
 }
 
 interface SiteSettingsPanelProps {
@@ -24,9 +41,28 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
     heroText: "",
     whatsappNumber: "",
     logoFilename: null,
+    metaPixelId: "",
+    googleAdsTagId: "",
+    tiktokPixelId: "",
+    botEnabled: false,
+    botProvider: "openai",
+    botModel: "",
+    botSystemNote: "",
+    botApiKeySet: false,
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [metaAccessToken, setMetaAccessToken] = useState("");
+  const [clearMetaAccessToken, setClearMetaAccessToken] = useState(false);
+  const [botApiKey, setBotApiKey] = useState("");
+  const [clearBotApiKey, setClearBotApiKey] = useState(false);
+
+  const modelOptions =
+    form.botProvider === "claude"
+      ? ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest"]
+      : form.botProvider === "deepseek"
+        ? ["deepseek-chat", "deepseek-reasoner"]
+        : ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"];
 
   useEffect(() => {
     if (!open || loaded) return;
@@ -40,6 +76,14 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
           heroText: data.heroText || "",
           whatsappNumber: data.whatsappNumber || "",
           logoFilename: data.logoFilename || null,
+          metaPixelId: data.metaPixelId || "",
+          googleAdsTagId: data.googleAdsTagId || "",
+          tiktokPixelId: data.tiktokPixelId || "",
+          botEnabled: Boolean(data.botEnabled),
+          botProvider: data.botProvider || "openai",
+          botModel: data.botModel || "",
+          botSystemNote: data.botSystemNote || "",
+          botApiKeySet: Boolean(data.botApiKeySet),
         });
         setLoaded(true);
       })
@@ -54,6 +98,17 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
     formData.append("siteName", form.siteName);
     formData.append("heroText", form.heroText);
     formData.append("whatsappNumber", form.whatsappNumber);
+    formData.append("metaPixelId", form.metaPixelId);
+    formData.append("googleAdsTagId", form.googleAdsTagId);
+    formData.append("tiktokPixelId", form.tiktokPixelId);
+    formData.append("botEnabled", String(form.botEnabled));
+    formData.append("botProvider", form.botProvider);
+    formData.append("botModel", form.botModel);
+    formData.append("botSystemNote", form.botSystemNote);
+    if (metaAccessToken.trim()) formData.append("metaAccessToken", metaAccessToken.trim());
+    if (clearMetaAccessToken) formData.append("clearMetaAccessToken", "true");
+    if (botApiKey.trim()) formData.append("botApiKey", botApiKey.trim());
+    if (clearBotApiKey) formData.append("clearBotApiKey", "true");
     if (removeLogo) formData.append("removeLogo", "true");
     if (logoFile) formData.append("logo", logoFile);
 
@@ -69,9 +124,21 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
         heroText: data.heroText,
         whatsappNumber: data.whatsappNumber,
         logoFilename: data.logoFilename,
+        metaPixelId: data.metaPixelId || "",
+        googleAdsTagId: data.googleAdsTagId || "",
+        tiktokPixelId: data.tiktokPixelId || "",
+        botEnabled: Boolean(data.botEnabled),
+        botProvider: data.botProvider || "openai",
+        botModel: data.botModel || "",
+        botSystemNote: data.botSystemNote || "",
+        botApiKeySet: Boolean(data.botApiKeySet),
       });
       setLogoFile(null);
       setRemoveLogo(false);
+      setMetaAccessToken("");
+      setClearMetaAccessToken(false);
+      setBotApiKey("");
+      setClearBotApiKey(false);
       onMessage("Website settings save ho gayi!");
     } else {
       onMessage("Settings save nahi ho saki");
@@ -192,6 +259,175 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
                   <X className="w-4 h-4" /> Remove logo
                 </button>
               )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-primary-600" />
+              Advertisement Tracking
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Meta Pixel ID
+                </label>
+                <input
+                  type="text"
+                  value={form.metaPixelId}
+                  onChange={(e) => setForm({ ...form, metaPixelId: e.target.value })}
+                  placeholder="1234567890"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Google Ads / GTM ID
+                </label>
+                <input
+                  type="text"
+                  value={form.googleAdsTagId}
+                  onChange={(e) => setForm({ ...form, googleAdsTagId: e.target.value })}
+                  placeholder="G-... / AW-..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  TikTok Pixel ID
+                </label>
+                <input
+                  type="text"
+                  value={form.tiktokPixelId}
+                  onChange={(e) => setForm({ ...form, tiktokPixelId: e.target.value })}
+                  placeholder="C..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Meta Conversions API Token
+                </label>
+                <input
+                  type="password"
+                  value={metaAccessToken}
+                  onChange={(e) => {
+                    setMetaAccessToken(e.target.value);
+                    setClearMetaAccessToken(false);
+                  }}
+                  placeholder="Blank rakhein to existing token save rahega"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-600 pb-2">
+                <input
+                  type="checkbox"
+                  checked={clearMetaAccessToken}
+                  onChange={(e) => setClearMetaAccessToken(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-primary-600"
+                />
+                Clear token
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Bot className="w-4 h-4 text-accent-600" />
+              AI Bot Settings
+            </h3>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.botEnabled}
+                onChange={(e) => setForm({ ...form, botEnabled: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-300 text-primary-600"
+              />
+              <span className="text-sm text-slate-700">
+                Frontend par سوال پوچھیں bot show karein
+              </span>
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Provider
+                </label>
+                <select
+                  value={form.botProvider}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      botProvider: e.target.value,
+                      botModel: "",
+                    })
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                >
+                  <option value="openai">GPT / OpenAI</option>
+                  <option value="claude">Claude</option>
+                  <option value="deepseek">DeepSeek</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Model
+                </label>
+                <select
+                  value={form.botModel}
+                  onChange={(e) => setForm({ ...form, botModel: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                >
+                  <option value="">Model select karein</option>
+                  {modelOptions.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  API Key {form.botApiKeySet ? "(saved)" : ""}
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="password"
+                    value={botApiKey}
+                    onChange={(e) => {
+                      setBotApiKey(e.target.value);
+                      setClearBotApiKey(false);
+                    }}
+                    placeholder="Blank rakhein to existing key save rahegi"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-600 pb-2">
+                <input
+                  type="checkbox"
+                  checked={clearBotApiKey}
+                  onChange={(e) => setClearBotApiKey(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-primary-600"
+                />
+                Clear key
+              </label>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Extra Bot Instruction (optional)
+              </label>
+              <textarea
+                value={form.botSystemNote}
+                onChange={(e) => setForm({ ...form, botSystemNote: e.target.value })}
+                rows={2}
+                placeholder="Example: jawab Roman Urdu mein short rakhna"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none resize-y scroll-field urdu-text"
+              />
             </div>
           </div>
 

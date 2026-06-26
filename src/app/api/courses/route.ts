@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib/auth";
 import { parseOrder } from "@/lib/parse-order";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const adminView = searchParams.get("admin") === "true";
-  const session = await getSession();
+  const session = await getFreshAdminSession();
+  const canSeeAdminCourses =
+    adminView && hasAnyPermission(session, ["manageCourses", "manageContent", "manageBot"]);
 
   const where =
-    adminView && session
+    canSeeAdminCourses
       ? {}
       : { isPublished: true };
 
@@ -30,9 +32,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageCourses");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   try {

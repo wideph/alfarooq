@@ -20,10 +20,15 @@ export async function ensureAdminFromEnv() {
 
   const existing = await prisma.admin.findUnique({
     where: { email },
-    select: { password: true },
+    select: { password: true, role: true, isActive: true },
   });
 
-  if (existing && (await bcrypt.compare(password, existing.password))) {
+  if (
+    existing &&
+    existing.role === "admin" &&
+    existing.isActive &&
+    (await bcrypt.compare(password, existing.password))
+  ) {
     globalForAdminSync.adminEnvSynced = true;
     return;
   }
@@ -32,11 +37,14 @@ export async function ensureAdminFromEnv() {
 
   await prisma.admin.upsert({
     where: { email },
-    update: { password: hashedPassword },
+    update: { password: hashedPassword, role: "admin", isActive: true },
     create: {
       email,
       password: hashedPassword,
       name: "Alfarooq Admin",
+      role: "admin",
+      permissions: "[]",
+      isActive: true,
     },
   });
 

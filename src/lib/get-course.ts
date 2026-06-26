@@ -9,7 +9,7 @@ async function fetchPublishedCourse(id: string) {
       samples: { orderBy: { order: "asc" } },
       questions: { orderBy: { order: "asc" } },
       userQuestions: {
-        where: { status: "answered" },
+        where: { status: "answered", publishForUsers: true },
         orderBy: [{ order: "asc" }, { answeredAt: "desc" }],
         // whatsappNumber jaan boojh kar exclude — woh sirf admin ke liye hai,
         // public par expose nahi hona chahiye.

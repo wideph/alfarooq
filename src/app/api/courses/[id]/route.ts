@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib/auth";
 import { deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
 import { parseOrder } from "@/lib/parse-order";
@@ -11,17 +11,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const { searchParams } = new URL(request.url);
   const adminView = searchParams.get("admin") === "true";
-  const session = await getSession();
+  const session = await getFreshAdminSession();
+  const canSeeAdminCourse =
+    adminView && hasAnyPermission(session, ["manageCourses", "manageContent", "manageBot"]);
 
   const course = await prisma.course.findUnique({
     where: { id },
     include: {
       samples: { orderBy: { order: "asc" } },
       questions: { orderBy: { order: "asc" } },
-      userQuestions: adminView && session
-        ? { orderBy: { createdAt: "desc" } }
+      userQuestions: canSeeAdminCourse
+        ? {
+            orderBy: { createdAt: "desc" },
+            include: { visitor: { select: { visitorKey: true } } },
+          }
         : {
-            where: { status: "answered" },
+            where: { status: "answered", publishForUsers: true },
             orderBy: { answeredAt: "desc" },
             // Public response se whatsappNumber exclude karein (privacy).
             select: {
@@ -42,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Course nahi mila" }, { status: 404 });
   }
 
-  if (!course.isPublished && !(adminView && session)) {
+  if (!course.isPublished && !canSeeAdminCourse) {
     return NextResponse.json({ error: "Course nahi mila" }, { status: 404 });
   }
 
@@ -50,9 +55,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageCourses");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id } = await params;
@@ -80,9 +87,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    await requirePermission("manageCourses");
+  } catch (error) {
+    const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
   }
 
   const { id } = await params;
