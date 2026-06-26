@@ -9,7 +9,19 @@ export async function GET(request: NextRequest) {
   const adminView = searchParams.get("admin") === "true";
   const session = await getFreshAdminSession();
   const canSeeAdminCourses =
-    adminView && hasAnyPermission(session, ["manageCourses", "manageContent", "manageBot"]);
+    adminView &&
+    hasAnyPermission(session, [
+      "courses:read",
+      "courses:write",
+      "samples:read",
+      "samples:write",
+      "qa:read",
+      "qa:write",
+      "userQuestions:read",
+      "userQuestions:write",
+      "botTraining:read",
+      "botTraining:write",
+    ]);
 
   const where =
     canSeeAdminCourses
@@ -33,7 +45,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requirePermission("manageCourses");
+    await requirePermission("courses:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });

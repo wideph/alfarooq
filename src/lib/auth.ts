@@ -7,15 +7,48 @@ const secret = new TextEncoder().encode(
 );
 
 export const ADMIN_PERMISSIONS = [
-  "manageSettings",
-  "manageCourses",
-  "manageContent",
-  "manageVisitors",
-  "manageBot",
-  "manageAdmins",
+  "settings:read",
+  "settings:write",
+  "courses:read",
+  "courses:write",
+  "samples:read",
+  "samples:write",
+  "qa:read",
+  "qa:write",
+  "userQuestions:read",
+  "userQuestions:write",
+  "visitors:read",
+  "visitors:write",
+  "botTraining:read",
+  "botTraining:write",
+  "botChats:read",
+  "botChats:write",
+  "admins:read",
+  "admins:write",
 ] as const;
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
+
+const LEGACY_PERMISSION_MAP: Record<string, AdminPermission[]> = {
+  manageSettings: ["settings:read", "settings:write"],
+  manageCourses: ["courses:read", "courses:write"],
+  manageContent: [
+    "samples:read",
+    "samples:write",
+    "qa:read",
+    "qa:write",
+    "userQuestions:read",
+    "userQuestions:write",
+  ],
+  manageVisitors: ["visitors:read", "visitors:write"],
+  manageBot: [
+    "botTraining:read",
+    "botTraining:write",
+    "botChats:read",
+    "botChats:write",
+  ],
+  manageAdmins: ["admins:read", "admins:write"],
+};
 
 export interface AdminSession {
   adminId: string;
@@ -31,9 +64,13 @@ export function parsePermissions(value: string | null | undefined): AdminPermiss
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is AdminPermission =>
-      ADMIN_PERMISSIONS.includes(item as AdminPermission)
-    );
+    const permissions = parsed.flatMap((item) => {
+      if (ADMIN_PERMISSIONS.includes(item as AdminPermission)) {
+        return [item as AdminPermission];
+      }
+      return LEGACY_PERMISSION_MAP[String(item)] || [];
+    });
+    return [...new Set(permissions)];
   } catch {
     return [];
   }
@@ -45,7 +82,14 @@ export function hasPermission(
 ): boolean {
   if (!session) return false;
   if (session.role === "admin") return true;
-  return Boolean(session.permissions?.includes(permission));
+  if (session.permissions?.includes(permission)) return true;
+
+  if (permission.endsWith(":read")) {
+    const writePermission = permission.replace(":read", ":write") as AdminPermission;
+    return Boolean(session.permissions?.includes(writePermission));
+  }
+
+  return false;
 }
 
 export function hasAnyPermission(

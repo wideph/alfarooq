@@ -4,15 +4,23 @@ import { useEffect, useState } from "react";
 import { Loader2, Save, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 
 const PERMISSIONS = [
-  { value: "manageSettings", label: "Website settings" },
-  { value: "manageCourses", label: "Courses create/edit/delete" },
-  { value: "manageContent", label: "Samples, Q&A, user answers" },
-  { value: "manageVisitors", label: "Visitors & ad signals" },
-  { value: "manageBot", label: "AI bot training/chats" },
-  { value: "manageAdmins", label: "Sub-admins" },
+  { key: "settings", label: "Website settings", read: "settings:read", write: "settings:write" },
+  { key: "courses", label: "Courses", read: "courses:read", write: "courses:write" },
+  { key: "samples", label: "Samples", read: "samples:read", write: "samples:write" },
+  { key: "qa", label: "Q&A", read: "qa:read", write: "qa:write" },
+  {
+    key: "userQuestions",
+    label: "User question answers",
+    read: "userQuestions:read",
+    write: "userQuestions:write",
+  },
+  { key: "visitors", label: "Visitors & ad signals", read: "visitors:read", write: "visitors:write" },
+  { key: "botTraining", label: "AI bot training", read: "botTraining:read", write: "botTraining:write" },
+  { key: "botChats", label: "AI bot chats", read: "botChats:read", write: "botChats:write" },
+  { key: "admins", label: "Sub-admins", read: "admins:read", write: "admins:write" },
 ] as const;
 
-type PermissionValue = (typeof PERMISSIONS)[number]["value"];
+type PermissionValue = (typeof PERMISSIONS)[number]["read"] | (typeof PERMISSIONS)[number]["write"];
 type AdminUser = {
   id: string;
   name: string;
@@ -32,8 +40,14 @@ const emptyForm = {
   isActive: true,
 };
 
-export default function SubAdminPanel() {
-  const [open, setOpen] = useState(false);
+export default function SubAdminPanel({
+  defaultOpen = false,
+  canWrite = true,
+}: {
+  defaultOpen?: boolean;
+  canWrite?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
@@ -61,6 +75,7 @@ export default function SubAdminPanel() {
   }
 
   async function saveAdmin() {
+    if (!canWrite) return;
     if (!form.name.trim() || !form.email.trim() || (!form.id && form.password.length < 6)) return;
     setSaving(true);
 
@@ -82,6 +97,7 @@ export default function SubAdminPanel() {
   }
 
   async function deleteAdmin(id: string) {
+    if (!canWrite) return;
     if (!confirm("Sub-admin delete karein?")) return;
     const res = await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
     if (res.ok) {
@@ -107,6 +123,7 @@ export default function SubAdminPanel() {
         <div className="p-5 sm:p-6 space-y-5">
           {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
 
+          {canWrite && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2">
               <UserPlus className="w-4 h-4 text-primary-600" />
@@ -137,18 +154,29 @@ export default function SubAdminPanel() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {PERMISSIONS.map((permission) => (
-                <label
-                  key={permission.value}
-                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.permissions.includes(permission.value)}
-                    onChange={() => togglePermission(permission.value)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary-600"
-                  />
-                  {permission.label}
-                </label>
+                <div key={permission.key} className="rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
+                  <p className="mb-2 font-semibold text-slate-800">{permission.label}</p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.permissions.includes(permission.read)}
+                        onChange={() => togglePermission(permission.read)}
+                        className="w-4 h-4 rounded border-slate-300 text-primary-600"
+                      />
+                      Read
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.permissions.includes(permission.write)}
+                        onChange={() => togglePermission(permission.write)}
+                        className="w-4 h-4 rounded border-slate-300 text-primary-600"
+                      />
+                      Write
+                    </label>
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -185,6 +213,7 @@ export default function SubAdminPanel() {
               )}
             </div>
           </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-8">
@@ -209,31 +238,35 @@ export default function SubAdminPanel() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm({
-                          id: admin.id,
-                          name: admin.name,
-                          email: admin.email,
-                          password: "",
-                          permissions: admin.permissions,
-                          isActive: admin.isActive,
-                        })
-                      }
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
-                    >
-                      Edit
-                    </button>
-                    {admin.role === "sub_admin" && (
-                      <button
-                        type="button"
-                        onClick={() => deleteAdmin(admin.id)}
-                        className="grid h-10 w-10 place-items-center rounded-xl bg-red-50 text-red-600"
-                        aria-label="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    {canWrite && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({
+                              id: admin.id,
+                              name: admin.name,
+                              email: admin.email,
+                              password: "",
+                              permissions: admin.permissions,
+                              isActive: admin.isActive,
+                            })
+                          }
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                        >
+                          Edit
+                        </button>
+                        {admin.role === "sub_admin" && (
+                          <button
+                            type="button"
+                            onClick={() => deleteAdmin(admin.id)}
+                            className="grid h-10 w-10 place-items-center rounded-xl bg-red-50 text-red-600"
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

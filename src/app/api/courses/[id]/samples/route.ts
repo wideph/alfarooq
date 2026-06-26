@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("manageContent");
+    await requirePermission("samples:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("manageContent");
+    await requirePermission("samples:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });

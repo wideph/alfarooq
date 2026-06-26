@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { getOrCreateVisitorKey } from "@/lib/visitor-client";
 
 type PublicTrackingSettings = {
   metaPixelId?: string;
@@ -18,23 +19,6 @@ type TrackingWindow = Window & {
     page?: () => void;
   };
 };
-
-const VISITOR_STORAGE_KEY = "bbte_visitor_id";
-
-function makeVisitorKey() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `vis_${crypto.randomUUID()}`;
-  }
-  return `vis_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-function getVisitorKey() {
-  const existing = localStorage.getItem(VISITOR_STORAGE_KEY);
-  if (existing) return existing;
-  const next = makeVisitorKey();
-  localStorage.setItem(VISITOR_STORAGE_KEY, next);
-  return next;
-}
 
 function inferSource(url: URL, referrer: string) {
   const utmSource = url.searchParams.get("utm_source");
@@ -61,13 +45,17 @@ function inferSource(url: URL, referrer: string) {
 
 export default function VisitorTracker() {
   const pathname = usePathname();
+  const isAdminPath = pathname.startsWith("/admin");
   const [settings, setSettings] = useState<PublicTrackingSettings | null>(null);
   const visitorKeyRef = useRef<string | null>(null);
-  const lastPingRef = useRef<number>(Date.now());
+  const lastActiveAtRef = useRef<number>(Date.now());
   const landingPageRef = useRef<string | null>(null);
   const referrerRef = useRef<string>("");
+  const sendPingRef = useRef<((includeDelta?: boolean, useBeacon?: boolean) => void) | null>(null);
 
   useEffect(() => {
+    if (isAdminPath) return;
+
     fetch("/api/settings")
       .then((res) => res.json())
       .then((data) => {
@@ -78,9 +66,11 @@ export default function VisitorTracker() {
         });
       })
       .catch(() => {});
-  }, []);
+  }, [isAdminPath]);
 
   useEffect(() => {
+    if (isAdminPath) return;
+
     const trackingWindow = window as TrackingWindow;
     if (settings?.metaPixelId && trackingWindow.fbq) {
       trackingWindow.fbq("track", "PageView");
@@ -93,74 +83,92 @@ export default function VisitorTracker() {
     if (settings?.tiktokPixelId && trackingWindow.ttq?.page) {
       trackingWindow.ttq.page();
     }
-  }, [pathname, settings]);
+  }, [isAdminPath, pathname, settings]);
 
   useEffect(() => {
-    visitorKeyRef.current = getVisitorKey();
+    if (isAdminPath) return;
+
+    visitorKeyRef.current = getOrCreateVisitorKey();
     landingPageRef.current = window.location.href;
     referrerRef.current = document.referrer;
 
-    async function sendPing(forceDelta = false) {
+    function buildPayload(includeDelta = false) {
       const visitorKey = visitorKeyRef.current;
-      if (!visitorKey) return;
+      if (!visitorKey) return null;
 
       const now = Date.now();
-      const delta = forceDelta ? Math.round((now - lastPingRef.current) / 1000) : 0;
-      lastPingRef.current = now;
+      const delta = includeDelta
+        ? Math.max(0, Math.round((now - lastActiveAtRef.current) / 1000))
+        : 0;
+      lastActiveAtRef.current = now;
 
       const url = new URL(window.location.href);
       const source = inferSource(url, referrerRef.current);
 
-      await fetch("/api/visitors/track", {
+      return {
+        visitorKey,
+        source,
+        medium: url.searchParams.get("utm_medium") || "",
+        campaign: url.searchParams.get("utm_campaign") || "",
+        referrer: referrerRef.current,
+        landingPage: landingPageRef.current,
+        currentPath: window.location.href,
+        timeDeltaSeconds: delta,
+      };
+    }
+
+    function sendPing(includeDelta = false, useBeacon = false) {
+      const payload = buildPayload(includeDelta);
+      if (!payload) return;
+
+      if (useBeacon && navigator.sendBeacon) {
+        const blob = new Blob([JSON.stringify(payload)], {
+          type: "application/json",
+        });
+        navigator.sendBeacon("/api/visitors/track", blob);
+        return;
+      }
+
+      fetch("/api/visitors/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          visitorKey,
-          source,
-          medium: url.searchParams.get("utm_medium") || "",
-          campaign: url.searchParams.get("utm_campaign") || "",
-          referrer: referrerRef.current,
-          landingPage: landingPageRef.current,
-          currentPath: window.location.href,
-          timeDeltaSeconds: Math.max(0, delta),
-        }),
+        keepalive: true,
+        body: JSON.stringify(payload),
       }).catch(() => {});
     }
 
-    void sendPing(false);
+    sendPing(false);
+    sendPingRef.current = sendPing;
 
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void sendPing(true);
-    }, 15000);
+      if (document.visibilityState === "visible") sendPing(true);
+    }, 5000);
 
     const handleVisibility = () => {
-      if (document.visibilityState === "hidden") void sendPing(true);
+      if (document.visibilityState === "hidden") sendPing(true, true);
+      if (document.visibilityState === "visible") lastActiveAtRef.current = Date.now();
     };
 
-    window.addEventListener("beforeunload", handleVisibility);
+    const handleUnload = () => sendPing(true, true);
+
+    window.addEventListener("beforeunload", handleUnload);
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("beforeunload", handleVisibility);
+      window.removeEventListener("beforeunload", handleUnload);
       document.removeEventListener("visibilitychange", handleVisibility);
-      void sendPing(true);
+      sendPing(true, true);
+      sendPingRef.current = null;
     };
-  }, []);
+  }, [isAdminPath]);
 
   useEffect(() => {
-    if (!visitorKeyRef.current) return;
-    fetch("/api/visitors/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        visitorKey: visitorKeyRef.current,
-        currentPath: window.location.href,
-        landingPage: landingPageRef.current,
-        referrer: referrerRef.current,
-      }),
-    }).catch(() => {});
-  }, [pathname]);
+    if (isAdminPath) return;
+    sendPingRef.current?.(true);
+  }, [isAdminPath, pathname]);
+
+  if (isAdminPath) return null;
 
   return (
     <>

@@ -38,8 +38,14 @@ function formatDuration(seconds: number) {
   return `${hours}h ${mins % 60}m`;
 }
 
-export default function VisitorTrackingPanel() {
-  const [open, setOpen] = useState(false);
+export default function VisitorTrackingPanel({
+  defaultOpen = false,
+  canWrite = true,
+}: {
+  defaultOpen?: boolean;
+  canWrite?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [loading, setLoading] = useState(false);
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [statuses, setStatuses] = useState<VisitorStatus[]>([]);
@@ -66,6 +72,7 @@ export default function VisitorTrackingPanel() {
   }, [open]);
 
   async function updateStatus(visitorId: string, status: string) {
+    if (!canWrite) return;
     setSavingId(visitorId);
     setMessage("");
     const res = await fetch("/api/admin/visitors", {
@@ -169,18 +176,24 @@ export default function VisitorTrackingPanel() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:min-w-56">
-                      <select
-                        value={visitor.status}
-                        onChange={(event) => updateStatus(visitor.id, event.target.value)}
-                        disabled={savingId === visitor.id}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                      >
-                        {statuses.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {status.label} ({status.eventName})
-                          </option>
-                        ))}
-                      </select>
+                      {canWrite ? (
+                        <select
+                          value={visitor.status}
+                          onChange={(event) => updateStatus(visitor.id, event.target.value)}
+                          disabled={savingId === visitor.id}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                        >
+                          {statuses.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                          Status: {visitor.status}
+                        </span>
+                      )}
                       {visitor.events[0] && (
                         <p className="text-xs text-slate-500">
                           Last signal: {visitor.events[0].eventName} · Meta{" "}

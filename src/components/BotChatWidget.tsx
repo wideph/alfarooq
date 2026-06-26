@@ -3,27 +3,12 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Bot, Loader2, MessageCircle, Send, X } from "lucide-react";
+import { getOrCreateVisitorKey } from "@/lib/visitor-client";
 
 type CourseOption = { id: string; title: string };
 type ChatMessage = { role: "user" | "assistant"; content: string; whatsappUrl?: string | null };
 
-const VISITOR_STORAGE_KEY = "bbte_visitor_id";
 const BOT_CONVERSATION_KEY = "bbte_bot_conversation_id";
-
-function makeVisitorKey() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `vis_${crypto.randomUUID()}`;
-  }
-  return `vis_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-function getVisitorKey() {
-  const existing = localStorage.getItem(VISITOR_STORAGE_KEY);
-  if (existing) return existing;
-  const next = makeVisitorKey();
-  localStorage.setItem(VISITOR_STORAGE_KEY, next);
-  return next;
-}
 
 function renderLinkedText(text: string) {
   const nodes: ReactNode[] = [];
@@ -90,7 +75,7 @@ export default function BotChatWidget() {
 
   useEffect(() => {
     if (!open) return;
-    visitorKeyRef.current = getVisitorKey();
+    visitorKeyRef.current = getOrCreateVisitorKey();
   }, [open]);
 
   useEffect(() => {
@@ -115,7 +100,7 @@ export default function BotChatWidget() {
           message,
           courseId: selectedCourseId || pathCourseId || null,
           conversationId: localStorage.getItem(BOT_CONVERSATION_KEY) || "",
-          visitorKey: visitorKeyRef.current || getVisitorKey(),
+          visitorKey: visitorKeyRef.current || getOrCreateVisitorKey(),
         }),
       });
 

@@ -7,7 +7,7 @@ export const VISITOR_STATUS_OPTIONS = [
   { value: "new_order", label: "New Order", eventName: "Lead" },
   { value: "payment_pending", label: "Payment Pending", eventName: "InitiateCheckout" },
   { value: "order_complete", label: "Order Complete", eventName: "Purchase" },
-  { value: "repeat_order", label: "Repeat Ordered", eventName: "Subscribe" },
+  { value: "repeat_order", label: "Repeat Ordered", eventName: "RepeatOrdered" },
 ] as const;
 
 export function eventNameForVisitorStatus(status: string) {

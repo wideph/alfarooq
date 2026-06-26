@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { eventNameForVisitorStatus, sendVisitorSignal, VISITOR_STATUS_OPTIONS } from "@/lib/ad-signals";
 import { requirePermission } from "@/lib/auth";
 
-async function ensureVisitorPermission() {
+async function ensureVisitorPermission(permission: "visitors:read" | "visitors:write") {
   try {
-    await requirePermission("manageVisitors");
+    await requirePermission(permission);
     return null;
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
@@ -14,7 +14,7 @@ async function ensureVisitorPermission() {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await ensureVisitorPermission();
+  const denied = await ensureVisitorPermission("visitors:read");
   if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const denied = await ensureVisitorPermission();
+  const denied = await ensureVisitorPermission("visitors:write");
   if (denied) return denied;
 
   try {

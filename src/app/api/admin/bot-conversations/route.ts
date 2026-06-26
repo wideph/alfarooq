@@ -3,9 +3,9 @@ import { cleanupExpiredBotConversations, remainingSeconds } from "@/lib/bot";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-async function ensureBotPermission() {
+async function ensureBotPermission(permission: "botChats:read" | "botChats:write") {
   try {
-    await requirePermission("manageBot");
+    await requirePermission(permission);
     return null;
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
@@ -14,7 +14,7 @@ async function ensureBotPermission() {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await ensureBotPermission();
+  const denied = await ensureBotPermission("botChats:read");
   if (denied) return denied;
 
   await cleanupExpiredBotConversations();
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const denied = await ensureBotPermission();
+  const denied = await ensureBotPermission("botChats:write");
   if (denied) return denied;
 
   try {
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const denied = await ensureBotPermission();
+  const denied = await ensureBotPermission("botChats:write");
   if (denied) return denied;
 
   const { searchParams } = new URL(request.url);

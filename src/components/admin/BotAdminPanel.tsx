@@ -28,8 +28,22 @@ function formatRemaining(seconds: number | null) {
   return `${hours}h ${mins}m`;
 }
 
-export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) {
-  const [open, setOpen] = useState(false);
+export default function BotAdminPanel({
+  courses,
+  defaultOpen = false,
+  canTrainingRead = true,
+  canTrainingWrite = true,
+  canChatsRead = true,
+  canChatsWrite = true,
+}: {
+  courses: CourseOption[];
+  defaultOpen?: boolean;
+  canTrainingRead?: boolean;
+  canTrainingWrite?: boolean;
+  canChatsRead?: boolean;
+  canChatsWrite?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [training, setTraining] = useState<TrainingEntry[]>([]);
   const [conversations, setConversations] = useState<BotConversation[]>([]);
@@ -45,7 +59,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }, [courses, selectedCourseId]);
 
   async function loadTraining(courseId = selectedCourseId) {
-    if (!courseId) return;
+    if (!courseId || !canTrainingRead) return;
     setLoadingTraining(true);
     const res = await fetch(`/api/admin/bot-training?courseId=${courseId}`);
     if (res.ok) setTraining(await res.json());
@@ -53,6 +67,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }
 
   async function loadConversations(search = chatQuery) {
+    if (!canChatsRead) return;
     setLoadingChats(true);
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
@@ -69,6 +84,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }, [open, selectedCourseId]);
 
   async function saveTraining() {
+    if (!canTrainingWrite) return;
     if (!selectedCourseId || !form.question.trim() || !form.answer.trim()) return;
 
     const res = await fetch("/api/admin/bot-training", {
@@ -93,6 +109,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }
 
   async function deleteTraining(id: string) {
+    if (!canTrainingWrite) return;
     if (!confirm("Training entry delete karein?")) return;
     const res = await fetch(`/api/admin/bot-training?id=${id}`, { method: "DELETE" });
     if (res.ok) {
@@ -102,6 +119,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }
 
   async function togglePin(conversation: BotConversation) {
+    if (!canChatsWrite) return;
     const res = await fetch("/api/admin/bot-conversations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -111,6 +129,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
   }
 
   async function deleteConversation(id: string) {
+    if (!canChatsWrite) return;
     if (!confirm("Chat delete karein?")) return;
     const res = await fetch(`/api/admin/bot-conversations?id=${id}`, { method: "DELETE" });
     if (res.ok) await loadConversations();
@@ -133,6 +152,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
         <div className="p-5 sm:p-6 space-y-6">
           {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
 
+          {canTrainingRead && (
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
               <h3 className="font-bold text-slate-900">Private Bot Training</h3>
@@ -149,6 +169,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
               </select>
             </div>
 
+            {canTrainingWrite && (
             <div className="grid grid-cols-1 gap-3">
               <textarea
                 value={form.question}
@@ -188,6 +209,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
                 )}
               </div>
             </div>
+            )}
 
             {loadingTraining ? (
               <Loader2 className="w-5 h-5 animate-spin text-primary-500" />
@@ -201,31 +223,35 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
                     <p className="mt-1 text-xs text-slate-500 urdu-text leading-loose">
                       A: {entry.answer}
                     </p>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingId(entry.id);
-                          setForm({ question: entry.question, answer: entry.answer });
-                        }}
-                        className="text-xs font-semibold text-primary-700"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteTraining(entry.id)}
-                        className="text-xs font-semibold text-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    {canTrainingWrite && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(entry.id);
+                            setForm({ question: entry.question, answer: entry.answer });
+                          }}
+                          className="text-xs font-semibold text-primary-700"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteTraining(entry.id)}
+                          className="text-xs font-semibold text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </section>
+          )}
 
+          {canChatsRead && (
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
               <h3 className="font-bold text-slate-900">Bot Conversations</h3>
@@ -279,24 +305,26 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
                           {formatRemaining(conversation.remainingSeconds)}
                         </p>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => togglePin(conversation)}
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-white text-slate-600 hover:text-primary-700"
-                          aria-label={conversation.isPinned ? "Unpin" : "Pin"}
-                        >
-                          {conversation.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteConversation(conversation.id)}
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-white text-red-600"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {canChatsWrite && (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => togglePin(conversation)}
+                            className="grid h-8 w-8 place-items-center rounded-lg bg-white text-slate-600 hover:text-primary-700"
+                            aria-label={conversation.isPinned ? "Unpin" : "Pin"}
+                          >
+                            {conversation.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteConversation(conversation.id)}
+                            className="grid h-8 w-8 place-items-center rounded-lg bg-white text-red-600"
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-3 max-h-56 overflow-y-auto space-y-2">
                       {conversation.messages.map((item) => (
@@ -321,6 +349,7 @@ export default function BotAdminPanel({ courses }: { courses: CourseOption[] }) 
               </div>
             )}
           </section>
+          )}
         </div>
       )}
     </div>

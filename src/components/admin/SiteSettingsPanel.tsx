@@ -29,10 +29,16 @@ interface SiteSettingsForm {
 
 interface SiteSettingsPanelProps {
   onMessage: (msg: string) => void;
+  defaultOpen?: boolean;
+  canWrite?: boolean;
 }
 
-export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps) {
-  const [open, setOpen] = useState(false);
+export default function SiteSettingsPanel({
+  onMessage,
+  defaultOpen = false,
+  canWrite = true,
+}: SiteSettingsPanelProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,6 +98,7 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
   }, [open, loaded]);
 
   async function handleSave() {
+    if (!canWrite) return;
     setSaving(true);
 
     const formData = new FormData();
@@ -431,14 +438,16 @@ export default function SiteSettingsPanel({ onMessage }: SiteSettingsPanelProps)
             </div>
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving || !form.siteName.trim()}
-            className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Settings
-          </button>
+          {canWrite && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !form.siteName.trim()}
+              className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Settings
+            </button>
+          )}
         </div>
       )}
     </div>

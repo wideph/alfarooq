@@ -13,7 +13,7 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requirePermission("manageSettings");
+    await requirePermission("settings:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });

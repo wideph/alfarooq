@@ -2,36 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Plus,
   BookOpen,
   FileText,
   HelpCircle,
-  LogOut,
   Eye,
   EyeOff,
   Trash2,
   Edit,
   Loader2,
-  Home,
   Upload,
   X,
   Save,
   MessageCircle,
 } from "lucide-react";
-import SiteSettingsPanel from "@/components/admin/SiteSettingsPanel";
-import VisitorTrackingPanel from "@/components/admin/VisitorTrackingPanel";
-import BotAdminPanel from "@/components/admin/BotAdminPanel";
-import SubAdminPanel from "@/components/admin/SubAdminPanel";
-
-type AdminPermission =
-  | "manageSettings"
-  | "manageCourses"
-  | "manageContent"
-  | "manageVisitors"
-  | "manageBot"
-  | "manageAdmins";
+import AdminNav, { type AdminPermission } from "@/components/admin/AdminNav";
 
 interface Course {
   id: string;
@@ -129,6 +115,10 @@ export default function AdminDashboard() {
 
   function can(permission: AdminPermission) {
     return admin?.role === "admin" || Boolean(admin?.permissions?.includes(permission));
+  }
+
+  function hasAny(permissions: AdminPermission[]) {
+    return permissions.some((permission) => can(permission));
   }
 
   async function loadCourses() {
@@ -458,42 +448,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Admin Header */}
-      <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div>
-              <h1 className="text-lg font-bold text-slate-900">Admin Dashboard</h1>
-              {admin && <p className="text-xs text-slate-500">Welcome, {admin.name}</p>}
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                <Home className="w-4 h-4" />
-                <span className="hidden sm:inline">Website</span>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AdminNav admin={admin} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {can("manageSettings") && <SiteSettingsPanel onMessage={setMessage} />}
-        {can("manageVisitors") && <VisitorTrackingPanel />}
-        {can("manageBot") && (
-          <BotAdminPanel courses={courses.map((course) => ({ id: course.id, title: course.title }))} />
-        )}
-        {can("manageAdmins") && <SubAdminPanel />}
-
         {message && (
           <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center justify-between">
             {message}
@@ -503,7 +460,16 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {(can("manageCourses") || can("manageContent")) && (
+        {hasAny([
+          "courses:read",
+          "courses:write",
+          "samples:read",
+          "samples:write",
+          "qa:read",
+          "qa:write",
+          "userQuestions:read",
+          "userQuestions:write",
+        ]) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Courses List */}
           <div className="lg:col-span-4">
@@ -513,7 +479,7 @@ export default function AdminDashboard() {
                   <BookOpen className="w-5 h-5 text-primary-500" />
                   Courses ({courses.length})
                 </h2>
-                {can("manageCourses") && (
+                {can("courses:write") && (
                   <button
                     onClick={() => {
                       setEditingCourse(null);
@@ -568,7 +534,7 @@ export default function AdminDashboard() {
                             {course.isPublished ? "Published" : "Draft"}
                           </span>
                         </div>
-                        {can("manageCourses") && (
+                        {can("courses:write") && (
                           <div className="flex gap-1">
                             <button
                               onClick={(e) => {
@@ -605,7 +571,14 @@ export default function AdminDashboard() {
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-200" />
                 <p className="text-slate-500">Manage karne ke liye ek course select karein</p>
               </div>
-            ) : !can("manageContent") ? (
+            ) : !hasAny([
+              "samples:read",
+              "samples:write",
+              "qa:read",
+              "qa:write",
+              "userQuestions:read",
+              "userQuestions:write",
+            ]) ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-200" />
                 <p className="text-slate-500">Is course ke content ke liye permission zaroori hai</p>
@@ -613,40 +586,43 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-6">
                 {/* Upload Sample */}
+                {hasAny(["samples:read", "samples:write"]) && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
                   <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
                     <Upload className="w-5 h-5 text-primary-500" />
-                    Sample Upload (PDF / Image)
+                    Samples (PDF / Image)
                   </h3>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Sample title (optional)"
-                      value={uploadTitle}
-                      onChange={(e) => setUploadTitle(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm"
-                    />
-                    <div className="flex flex-col sm:flex-row gap-3">
+                  {can("samples:write") && (
+                    <div className="space-y-3">
                       <input
-                        type="file"
-                        accept="application/pdf,.pdf,image/*"
-                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                        className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-medium hover:file:bg-primary-100"
+                        type="text"
+                        placeholder="Sample title (optional)"
+                        value={uploadTitle}
+                        onChange={(e) => setUploadTitle(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none text-sm"
                       />
-                      <button
-                        onClick={uploadSample}
-                        disabled={!uploadFile || uploading}
-                        className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                      >
-                        {uploading ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Upload className="w-4 h-4" />
-                        )}
-                        Upload
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf,image/*"
+                          onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                          className="flex-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-medium hover:file:bg-primary-100"
+                        />
+                        <button
+                          onClick={uploadSample}
+                          disabled={!uploadFile || uploading}
+                          className="px-6 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {uploading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Upload className="w-4 h-4" />
+                          )}
+                          Upload
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Samples List */}
                   {courseDetail && courseDetail.samples.length > 0 && (
@@ -661,20 +637,25 @@ export default function AdminDashboard() {
                             <span className="text-sm truncate">{sample.title}</span>
                             <span className="text-xs text-slate-400 uppercase">{sample.type}</span>
                           </div>
-                          <button
-                            onClick={() => deleteSample(sample.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {can("samples:write") && (
+                            <button
+                              onClick={() => deleteSample(sample.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* User Submitted Questions */}
-                {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "pending").length > 0 && (
+                {hasAny(["userQuestions:read", "userQuestions:write"]) &&
+                  courseDetail &&
+                  courseDetail.userQuestions.filter((q) => q.status === "pending").length > 0 && (
                   <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5 sm:p-6 shadow-sm">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
                       <MessageCircle className="w-5 h-5 text-amber-600" />
@@ -715,77 +696,81 @@ export default function AdminDashboard() {
                                 WhatsApp: {q.whatsappNumber}
                               </a>
                             )}
-                            <label className="block text-xs text-slate-500 mb-1">
-                              Preference # (e.g. 1, 1.5, 2)
-                            </label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={
-                                userAnswerOrderForm[q.id] ??
-                                String(
-                                  nextPreference([
-                                    ...(courseDetail?.questions || []),
-                                    ...(courseDetail?.userQuestions || []).filter(
-                                      (uq) => uq.status === "answered"
-                                    ),
-                                  ])
-                                )
-                              }
-                              onChange={(e) =>
-                                setUserAnswerOrderForm({
-                                  ...userAnswerOrderForm,
-                                  [q.id]: e.target.value,
-                                })
-                              }
-                              className="w-full max-w-[8rem] mb-2 px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                            />
-                            <textarea
-                              value={userAnswerForm[q.id] || ""}
-                              onChange={(e) =>
-                                setUserAnswerForm({ ...userAnswerForm, [q.id]: e.target.value })
-                              }
-                              rows={3}
-                              placeholder="Answer likhein..."
-                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 outline-none text-sm resize-y scroll-field urdu-text"
-                            />
-                            <input
-                              type="file"
-                              accept="application/pdf,.pdf,image/*"
-                              onChange={(e) => setUserAnswerMediaFile(e.target.files?.[0] || null)}
-                              className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
-                            />
-                            <select
-                              value={userAnswerModeForm[q.id] || "publish"}
-                              onChange={(e) =>
-                                setUserAnswerModeForm({
-                                  ...userAnswerModeForm,
-                                  [q.id]: e.target.value as "publish" | "training",
-                                })
-                              }
-                              className="mt-2 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                            >
-                              <option value="publish">Publish for user + train bot</option>
-                              <option value="training">Only bot training</option>
-                            </select>
-                            <p className="text-xs text-slate-400">Optional: Answer mein PDF ya image attach karein</p>
-                            <div className="flex gap-2 mt-2">
-                              <button
-                                onClick={() => answerUserQuestion(q.id)}
-                                disabled={
-                                  (!userAnswerForm[q.id]?.trim() && !userAnswerMediaFile) || saving
-                                }
-                                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Save className="w-3.5 h-3.5" /> Publish Answer
-                              </button>
-                              <button
-                                onClick={() => deleteUserQuestion(q.id)}
-                                className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
+                            {can("userQuestions:write") && (
+                              <>
+                                <label className="block text-xs text-slate-500 mb-1">
+                                  Preference # (e.g. 1, 1.5, 2)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={
+                                    userAnswerOrderForm[q.id] ??
+                                    String(
+                                      nextPreference([
+                                        ...(courseDetail?.questions || []),
+                                        ...(courseDetail?.userQuestions || []).filter(
+                                          (uq) => uq.status === "answered"
+                                        ),
+                                      ])
+                                    )
+                                  }
+                                  onChange={(e) =>
+                                    setUserAnswerOrderForm({
+                                      ...userAnswerOrderForm,
+                                      [q.id]: e.target.value,
+                                    })
+                                  }
+                                  className="w-full max-w-[8rem] mb-2 px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                                />
+                                <textarea
+                                  value={userAnswerForm[q.id] || ""}
+                                  onChange={(e) =>
+                                    setUserAnswerForm({ ...userAnswerForm, [q.id]: e.target.value })
+                                  }
+                                  rows={3}
+                                  placeholder="Answer likhein..."
+                                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary-400 outline-none text-sm resize-y scroll-field urdu-text"
+                                />
+                                <input
+                                  type="file"
+                                  accept="application/pdf,.pdf,image/*"
+                                  onChange={(e) => setUserAnswerMediaFile(e.target.files?.[0] || null)}
+                                  className="w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700"
+                                />
+                                <select
+                                  value={userAnswerModeForm[q.id] || "publish"}
+                                  onChange={(e) =>
+                                    setUserAnswerModeForm({
+                                      ...userAnswerModeForm,
+                                      [q.id]: e.target.value as "publish" | "training",
+                                    })
+                                  }
+                                  className="mt-2 w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                >
+                                  <option value="publish">Publish for user + train bot</option>
+                                  <option value="training">Only bot training</option>
+                                </select>
+                                <p className="text-xs text-slate-400">Optional: Answer mein PDF ya image attach karein</p>
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => answerUserQuestion(q.id)}
+                                    disabled={
+                                      (!userAnswerForm[q.id]?.trim() && !userAnswerMediaFile) || saving
+                                    }
+                                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                  >
+                                    <Save className="w-3.5 h-3.5" /> Publish Answer
+                                  </button>
+                                  <button
+                                    onClick={() => deleteUserQuestion(q.id)}
+                                    className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         ))}
                     </div>
@@ -793,7 +778,9 @@ export default function AdminDashboard() {
                 )}
 
                 {/* Answered User Questions - CRUD */}
-                {courseDetail && courseDetail.userQuestions.filter((q) => q.status === "answered" || q.status === "training").length > 0 && (
+                {hasAny(["userQuestions:read", "userQuestions:write"]) &&
+                  courseDetail &&
+                  courseDetail.userQuestions.filter((q) => q.status === "answered" || q.status === "training").length > 0 && (
                   <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-5 sm:p-6 shadow-sm">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
                       <MessageCircle className="w-5 h-5 text-emerald-600" />
@@ -808,7 +795,7 @@ export default function AdminDashboard() {
                             key={q.id}
                             className="p-4 rounded-xl bg-white border border-emerald-100"
                           >
-                            {editingAnsweredUser?.id === q.id ? (
+                            {can("userQuestions:write") && editingAnsweredUser?.id === q.id ? (
                               <div className="space-y-2">
                                 <input
                                   type="number"
@@ -934,20 +921,22 @@ export default function AdminDashboard() {
                                     </p>
                                   )}
                                 </div>
-                                <div className="flex gap-1 flex-shrink-0">
-                                  <button
-                                    onClick={() => startEditAnsweredUser(q)}
-                                    className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
-                                  >
-                                    <Edit className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => deleteUserQuestion(q.id)}
-                                    className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                                {can("userQuestions:write") && (
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={() => startEditAnsweredUser(q)}
+                                      className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteUserQuestion(q.id)}
+                                      className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -957,6 +946,7 @@ export default function AdminDashboard() {
                 )}
 
                 {/* Q&A Management */}
+                {hasAny(["qa:read", "qa:write"]) && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm">
                   <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-4">
                     <HelpCircle className="w-5 h-5 text-accent-500" />
@@ -965,6 +955,7 @@ export default function AdminDashboard() {
                       <span className="text-xs font-normal text-amber-600 ml-2">(Editing)</span>
                     )}
                   </h3>
+                  {can("qa:write") && (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">
@@ -1055,6 +1046,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   </div>
+                  )}
 
                   {/* Questions List */}
                   {courseDetail && courseDetail.questions.length > 0 && (
@@ -1076,26 +1068,29 @@ export default function AdminDashboard() {
                                 A: {q.answer}
                               </p>
                             </div>
-                            <div className="flex gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => startEditQuestion(q)}
-                                className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => deleteQuestion(q.id)}
-                                className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {can("qa:write") && (
+                              <div className="flex gap-1 flex-shrink-0">
+                                <button
+                                  onClick={() => startEditQuestion(q)}
+                                  className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => deleteQuestion(q.id)}
+                                  className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -1104,7 +1099,7 @@ export default function AdminDashboard() {
       </main>
 
       {/* Course Form Modal */}
-      {showCourseForm && (
+      {showCourseForm && can("courses:write") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">

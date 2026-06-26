@@ -76,7 +76,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const adminView = searchParams.get("admin") === "true";
   const session = await getFreshAdminSession();
   const canSeeAdminQuestions =
-    adminView && hasAnyPermission(session, ["manageContent", "manageBot"]);
+    adminView &&
+    hasAnyPermission(session, [
+      "userQuestions:read",
+      "userQuestions:write",
+      "botTraining:read",
+      "botTraining:write",
+    ]);
 
   const course = await prisma.course.findUnique({ where: { id: courseId } });
   if (!course || (!course.isPublished && !canSeeAdminQuestions)) {
@@ -160,7 +166,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("manageContent");
+    await requirePermission("userQuestions:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });
@@ -239,7 +245,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("manageContent");
+    await requirePermission("userQuestions:write");
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return NextResponse.json({ error: "Unauthorized" }, { status });

@@ -2,20 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, MessageCircle, Send } from "lucide-react";
-
-const VISITOR_STORAGE_KEY = "bbte_visitor_id";
-
-function getVisitorKey() {
-  if (typeof window === "undefined") return "";
-  const existing = window.localStorage.getItem(VISITOR_STORAGE_KEY);
-  if (existing) return existing;
-  const next =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? `vis_${crypto.randomUUID()}`
-      : `vis_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  window.localStorage.setItem(VISITOR_STORAGE_KEY, next);
-  return next;
-}
+import { getOrCreateVisitorKey } from "@/lib/visitor-client";
 
 interface AskQuestionFormProps {
   courseId: string;
@@ -48,7 +35,7 @@ export default function AskQuestionForm({
         body: JSON.stringify({
           question: question.trim(),
           whatsappNumber: whatsappNumber.trim(),
-          visitorKey: getVisitorKey(),
+          visitorKey: getOrCreateVisitorKey(),
         }),
       });
 

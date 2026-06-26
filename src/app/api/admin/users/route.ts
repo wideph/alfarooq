@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { ADMIN_PERMISSIONS, requirePermission, type AdminPermission } from "@/lib/auth";
+import {
+  ADMIN_PERMISSIONS,
+  parsePermissions,
+  requirePermission,
+  type AdminPermission,
+} from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function sanitizePermissions(value: unknown) {
@@ -20,22 +25,15 @@ function serializeAdmin(admin: {
   createdAt: Date;
   lastLoginAt: Date | null;
 }) {
-  let parsedPermissions: unknown = [];
-  try {
-    parsedPermissions = JSON.parse(admin.permissions || "[]");
-  } catch {
-    parsedPermissions = [];
-  }
-
   return {
     ...admin,
-    permissions: sanitizePermissions(parsedPermissions),
+    permissions: parsePermissions(admin.permissions),
   };
 }
 
-async function ensureAdminPermission() {
+async function ensureAdminPermission(permission: "admins:read" | "admins:write") {
   try {
-    return { session: await requirePermission("manageAdmins"), denied: null };
+    return { session: await requirePermission(permission), denied: null };
   } catch (error) {
     const status = error instanceof Error && error.message === "Forbidden" ? 403 : 401;
     return {
@@ -46,7 +44,7 @@ async function ensureAdminPermission() {
 }
 
 export async function GET() {
-  const { denied } = await ensureAdminPermission();
+  const { denied } = await ensureAdminPermission("admins:read");
   if (denied) return denied;
 
   const admins = await prisma.admin.findMany({
@@ -67,7 +65,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { session, denied } = await ensureAdminPermission();
+  const { session, denied } = await ensureAdminPermission("admins:write");
   if (denied) return denied;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -115,7 +113,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const { session, denied } = await ensureAdminPermission();
+  const { session, denied } = await ensureAdminPermission("admins:write");
   if (denied) return denied;
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -175,7 +173,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { denied } = await ensureAdminPermission();
+  const { denied } = await ensureAdminPermission("admins:write");
   if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
