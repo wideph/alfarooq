@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
 export const BOT_FALLBACK_ANSWER =
-  "men aap k swal ka jawab fori nahi dy sakta, 24 hourse tak apk swal ka jawab isi course k swal jawab k section men mojod hoga aur ager wahan per iska jawab na hua to aap 24 hours tak yahi swal muj sy dubara ker sakty hen.";
+  "aap k is swal ka jawab is waqt mery pass nahi hai, Senior assistant ap k swal ka jawab 24 hours men isi course k swal jawab k section men post ker den gy, ya 24 hours baad aap is swal ka jawab muj sy isi jaga per pochh sakty hen.";
+
+export const BOT_WHATSAPP_CONTACT_GUIDE =
+  "Aap ko sari zaroori malomat yahin par mil jayegi. Malomat lene ke baad apne documents share karne ke liye neeche diye gaye WhatsApp link par click karke hamare number par bhej dein.";
 
 export const BOT_BLOCKED_ANSWER =
   "Aap ke alfaaz munasib nahi hain. Is IP ko block kiya ja raha hai.";
@@ -52,11 +55,27 @@ const GENERAL_CHAT_PATTERNS = [
   /\bthanks?\b/i,
   /\bthank you\b/i,
   /\bshukriya\b/i,
-  /\bname\b/i,
-  /\bnaam\b/i,
-  /\bwho are you\b/i,
-  /\btum kon\b/i,
-  /\btum kaun\b/i,
+];
+
+// "Are you AI / a robot / human?" and "what is your name?" — identity questions.
+// Only match when the question is clearly about the bot ("you/tum/aap"), so a
+// course-name question like "course ka naam kya hai" is NOT hijacked.
+const IDENTITY_PATTERNS =
+  /\bwho are you\b|\btum (kon|kaun)\b|\b(your|tumhara|tmhara|tumhare|tera|aap ?ka|aapka|apka)\s*(naam|name)\b|\bwhat'?s your name\b|\b(are|r)\s*(you|u)\b[^.?!]*\b(a\.?i\.?|ai|robot|bot|human|insaan|insan|machine)\b|\bkya\b[^.?!]*\btum\b[^.?!]*\b(a\.?i\.?|ai|robot|insaan|insan|human|machine)\b|\btum\s*(a\.?i\.?|ai|robot|insaan|insan|human|machine)\s*ho\b/i;
+
+// "How do you answer SO fast?" — requires the "so/itna/kitna fast" notion so it
+// does not fire on requests like "jaldi jawab chahiye".
+const SPEED_PATTERNS =
+  /\b(itn[aeiy]|kitn[aeiy]|so|this)\b[^.?!]*\b(jaldi|jald|fast|quick(?:ly)?|speed)\b/i;
+
+// "What is your WhatsApp number / how do I contact you?"
+const WHATSAPP_CONTACT_PATTERNS = [
+  /whats?\s?app/i,
+  /\bwhatsap\b/i,
+  /contact\s*(number|no|details)/i,
+  /\b(aap ?ka|aapka|apka|tumhara|tmhara|tera|your)\s*number\b/i,
+  /\bnumber\s*(kya|kia|btao|batao|do|den|den?gy|share)\b/i,
+  /\brabta\s*(number|no|kaise|kese)\b/i,
 ];
 
 const ABUSIVE_PATTERNS = [
@@ -77,6 +96,10 @@ const ABUSIVE_PATTERNS = [
 export function isRequirementQuestion(message: string) {
   const normalized = message.toLowerCase();
   return REQUIREMENT_WORDS.some((word) => normalized.includes(word));
+}
+
+export function isWhatsappContactQuestion(message: string) {
+  return WHATSAPP_CONTACT_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 export function isAbusiveMessage(message: string) {
@@ -101,16 +124,23 @@ export function getGeneralChatAnswer(message: string, botName = "Asad") {
   if (!normalized) return "";
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-  const isGeneral = GENERAL_CHAT_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (wordCount > 14) return "";
 
-  if (!isGeneral || wordCount > 12) return "";
+  // Identity ("are you AI / a robot / your name?"). One consistent name per chat.
+  if (IDENTITY_PATTERNS.test(normalized)) {
+    return `Mera naam ${botName} hai. Main is course ke baare mein aapki madad kar sakta hoon.`;
+  }
+
+  // "How do you answer so fast?"
+  if (SPEED_PATTERNS.test(normalized)) {
+    return "aap k swalon k jawabat mery pass pehly sy mojod hen is liye men aap k sawal ka jawab jald az jald dy pata hu.";
+  }
+
+  const isGeneral = GENERAL_CHAT_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (!isGeneral) return "";
 
   const diplomaPrompt =
     "Aap ka diploma/certificate ke related koi question ho to aap pooch sakty hen.";
-
-  if (/\b(name|naam)\b|who are you|\btum (kon|kaun)\b/i.test(normalized)) {
-    return `Mera name ${botName} hai. Men aap ki rahnumaee k liye hun aur ager aap ka mazeed koi question ho diploma/certificate k mutaliq to aap muj sy pooch sakty hen.`;
-  }
 
   if (/\bthanks?\b|\bthank you\b|\bshukriya\b/i.test(normalized)) {
     return `Aap ka shukriya. ${diplomaPrompt}`;
@@ -284,14 +314,22 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "SAMPLES, IMAGES & LINKS:",
     "- If the visitor asks about a sample, picture, image, PDF, photo, attachment, or any attached material, include the EXACT supplied link for that item so clicking it scrolls them to it.",
     "- If a Q&A answer has an attached image/PDF, share that Q&A's supplied link too.",
-    "- Bare domains such as bbte.edu.pk are valid links; preserve domains and URLs exactly as supplied.",
-    "- If the visitor asks about a different course, do not answer from the current course; give only that other course's link.",
+    "- ALWAYS present a link as a short, suitable label using markdown link format, e.g. [Sample dekhein](LINK) or [Yahan dekhein](LINK). Never paste a raw long URL as the visible text.",
+    "- Bare domains such as bbte.edu.pk are valid links; preserve the domain/URL exactly inside the markdown link target.",
+    "- If the visitor asks about a different course, do not answer from the current course; give only that other course's link (as a short labelled markdown link).",
     "",
     "REQUIREMENTS / DOCUMENTS / PROCEEDING:",
-    "- When the visitor asks what documents/requirements are needed or how to proceed/apply, first give the documents and requirements found in the supplied data.",
+    "- When the visitor asks what documents/requirements are needed, how to apply, how to proceed, where to send documents, how to send documents, or what they have to provide, find the saved documents/requirements answer in the supplied data and give that answer to the visitor (rephrased only to fit their language; keep its meaning).",
     "- Then read your own answer and continue the conversation: ask the visitor for any further details needed to proceed that the data does not already cover, and request anything still missing.",
     "- If the visitor already mentioned their course, session, program or similar details earlier in this chat, confirm those back to them (e.g. ask whether those details are correct for their case) instead of asking again.",
     "- Set canAnswer=true for these questions whenever the data lists any documents/requirements. Do not invent documents that are not in the data.",
+    "",
+    "GENUINENESS / AUTHENTICITY:",
+    "- If the visitor asks whether something is genuine, real, original, asli, authentic, verified, valid, ya jaali/fake, reply with the saved answer's wording from the data WORD FOR WORD. Do NOT add, remove, rephrase, translate, soften, or pad it with any wording of your own.",
+    "- If no saved answer covers genuineness, use the fallback sentence as-is.",
+    "",
+    "CONTACT / WHATSAPP NUMBER:",
+    "- If the visitor asks for your phone/WhatsApp number or how to contact you, do not paste a raw number. Tell them they will get all the information here in the chat, and that after getting the information they can click the WhatsApp link to share their documents on our number.",
     "",
     "SMALL TALK:",
     "- For greetings, your name, thanks, or casual chat, reply naturally and briefly. Never use the fallback sentence for casual chat.",

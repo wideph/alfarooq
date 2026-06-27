@@ -152,7 +152,14 @@ export default function BotChatWidget() {
               </button>
             </div>
 
-            <div className="max-h-[55vh] overflow-y-auto bg-slate-50 px-3 py-4 space-y-3">
+            <div
+              className="max-h-[55vh] overflow-y-auto bg-slate-50 px-3 py-4 space-y-3"
+              onClick={(event) => {
+                // Clicking any link (sample/Q&A scroll link or WhatsApp button)
+                // closes the chat so the visitor can see where it took them.
+                if ((event.target as HTMLElement).closest("a")) setOpen(false);
+              }}
+            >
               {!pathCourseId && (
                 <select
                   value={selectedCourseId}
@@ -198,7 +205,7 @@ export default function BotChatWidget() {
                         className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
                       >
                         <MessageCircle className="w-4 h-4" />
-                        WhatsApp par proceed karein
+                        WhatsApp par bhejein
                       </a>
                     )}
                   </div>

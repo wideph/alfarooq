@@ -3,6 +3,7 @@ import { callBotModel, type BotChatMessage } from "@/lib/bot-ai";
 import {
   BOT_FALLBACK_ANSWER,
   BOT_BLOCKED_ANSWER,
+  BOT_WHATSAPP_CONTACT_GUIDE,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
@@ -11,6 +12,7 @@ import {
   getGeneralChatAnswer,
   isAbusiveMessage,
   isRequirementQuestion,
+  isWhatsappContactQuestion,
   normalizeBotName,
   pickBotName,
   parseBotJson,
@@ -206,6 +208,46 @@ export async function POST(request: NextRequest) {
         answer: generalAnswer,
         canAnswer: true,
         whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+        botName,
+      });
+    }
+
+    // "What is your WhatsApp number?" — never expose a raw number. Guide the
+    // visitor and hand them the WhatsApp link to share documents. (Requirement
+    // questions skip this and flow through the model so they still get the saved
+    // documents answer alongside the link.)
+    if (isWhatsappContactQuestion(message) && !isRequirementQuestion(message)) {
+      const contactCourse = courseId
+        ? await prisma.course.findUnique({
+            where: { id: courseId },
+            select: { id: true, title: true },
+          })
+        : null;
+
+      const whatsappUrl = buildWhatsappUrl(settings.whatsappNumber, [
+        "Assalam o Alaikum, main apne documents share karna chahta/chahti hoon.",
+        `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
+        contactCourse ? `Course: ${contactCourse.title}` : null,
+        contactCourse ? `Course ID: ${contactCourse.id}` : null,
+        `Chat ID: ${conversation.id}`,
+      ]);
+
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: BOT_WHATSAPP_CONTACT_GUIDE,
+          metadata: { canAnswer: true, whatsappContact: true, whatsappUrl, botName },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer: BOT_WHATSAPP_CONTACT_GUIDE,
+        canAnswer: true,
+        whatsappUrl,
         expiresAt: conversation.expiresAt,
         visitorKey: visitor?.visitorKey || visitorKey,
         botName,
