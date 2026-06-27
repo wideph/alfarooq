@@ -202,6 +202,16 @@ function clip(value: string | null | undefined, max = 2200) {
   return `${text.slice(0, max)}...`;
 }
 
+// Marks a Q&A entry whose answer has a sample (image/PDF) attached, so the model
+// knows it must share that entry's Link when it answers from this entry.
+function sampleAttachmentNote(
+  mediaFilename: string | null | undefined,
+  mediaType: string | null | undefined
+) {
+  if (!mediaFilename) return "  Sample attached to this answer: no";
+  return `  Sample attached to this answer: yes (${mediaType || "file"}). If you answer using this entry, you MUST also give the Link above as a sample link.`;
+}
+
 export async function buildCourseBotContext(courseId: string | null) {
   const otherCourses = await prisma.course.findMany({
     where: { isPublished: true },
@@ -268,15 +278,28 @@ export async function buildCourseBotContext(courseId: string | null) {
     ),
     "",
     "PUBLISHED COURSE Q&A:",
-    ...course.questions.map(
-      (item) =>
-        `- Q: ${clip(item.question, 900)}\n  A: ${clip(item.answer, 2600)}\n  Link: ${currentCourseUrl}#qa-${item.id}`
+    ...course.questions.map((item) =>
+      [
+        `- Q: ${clip(item.question, 900)}`,
+        `  A: ${clip(item.answer, 2600)}`,
+        `  Link: ${currentCourseUrl}#qa-${item.id}`,
+        sampleAttachmentNote(item.answerMediaFilename, item.answerMediaType),
+      ]
+        .filter(Boolean)
+        .join("\n")
     ),
     "",
     "ANSWERED USER Q&A AND TRAINING-ONLY ANSWERS:",
-    ...course.userQuestions.map(
-      (item) =>
-        `- Q: ${clip(item.question, 900)}\n  A: ${clip(item.answer, 2600)}\n  Link: ${currentCourseUrl}#qa-user-${item.id}\n  Training only: ${item.trainingOnly || item.status === "training"}`
+    ...course.userQuestions.map((item) =>
+      [
+        `- Q: ${clip(item.question, 900)}`,
+        `  A: ${clip(item.answer, 2600)}`,
+        `  Link: ${currentCourseUrl}#qa-user-${item.id}`,
+        `  Training only: ${item.trainingOnly || item.status === "training"}`,
+        sampleAttachmentNote(item.answerMediaFilename, item.answerMediaType),
+      ]
+        .filter(Boolean)
+        .join("\n")
     ),
     "",
     "HIDDEN BOT TRAINING:",
@@ -313,6 +336,7 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "SAMPLES, IMAGES & LINKS:",
     "- If the visitor asks about a sample, picture, image, PDF, photo, attachment, or any attached material, include the EXACT supplied link for that item so clicking it scrolls them to it.",
     "- If a Q&A answer has an attached image/PDF, share that Q&A's supplied link too.",
+    "- IMPORTANT: whenever the Q&A entry you used to build your answer is marked 'Sample attached to this answer: yes', you MUST include that entry's Link in your reply (as a short labelled markdown link) so the visitor can open the attached sample — even if they did not explicitly ask for a sample.",
     "- KEEP your normal helpful message/explanation about the item. Do NOT shrink the answer down to only a link. Write the useful sentences first, then include the link.",
     "- Render the link itself with a short, suitable label using markdown link format, e.g. [Sample dekhein](LINK) or [Yahan dekhein](LINK). Only the link's visible text becomes the short label; never paste a raw long URL as the visible text, and never drop your message.",
     "- Bare domains such as bbte.edu.pk are valid links; preserve the domain/URL exactly inside the markdown link target.",
