@@ -4,6 +4,7 @@ import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
 import { parseOrder } from "@/lib/parse-order";
+import { findOrCreateMergedVisitor } from "@/lib/visitor-server";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { question, whatsappNumber, visitorKey } = body;
+    const { question, whatsappNumber, visitorKey, previousVisitorKey } = body;
 
     if (!question?.trim()) {
       return NextResponse.json(
@@ -137,10 +138,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const visitor =
       typeof visitorKey === "string" && visitorKey.trim()
-        ? await prisma.visitor.upsert({
-            where: { visitorKey: visitorKey.trim() },
+        ? await findOrCreateMergedVisitor({
+            visitorKey: visitorKey.trim(),
+            previousVisitorKey:
+              typeof previousVisitorKey === "string" ? previousVisitorKey.trim() : "",
             update: { lastSeenAt: new Date() },
-            create: { visitorKey: visitorKey.trim(), source: "question_form" },
+            create: { source: "question_form", lastSeenAt: new Date() },
           })
         : null;
 

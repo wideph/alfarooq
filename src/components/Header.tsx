@@ -17,7 +17,7 @@ export default function Header() {
             {settings.logoFilename ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`/api/media/${encodeURIComponent(settings.logoFilename)}`}
+                src={`/api/media/${encodeURIComponent(settings.logoFilename)}?direct=1`}
                 alt={settings.siteName}
                 width={40}
                 height={40}

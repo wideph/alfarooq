@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, Search, Signal, Timer } from "lucide-react";
+import { canonicalizeVisitorUrl } from "@/lib/visitor-client";
 
 type VisitorStatus = { value: string; label: string; eventName: string };
 type Visitor = {
@@ -36,6 +37,17 @@ function formatDuration(seconds: number) {
   if (mins < 60) return `${mins}m ${secs}s`;
   const hours = Math.floor(mins / 60);
   return `${hours}h ${mins % 60}m`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
 }
 
 export default function VisitorTrackingPanel({
@@ -157,12 +169,19 @@ export default function VisitorTrackingPanel({
                         {visitor.campaign ? ` / ${visitor.campaign}` : ""}
                       </p>
                       <p className="break-all text-xs text-slate-500">
-                        Page: {visitor.currentPath || visitor.landingPage || "-"}
+                        Page:{" "}
+                        {canonicalizeVisitorUrl(visitor.currentPath || visitor.landingPage) || "-"}
                       </p>
                       <p className="break-all text-xs text-slate-400">
-                        Referrer: {visitor.referrer || "direct"}
+                        Referrer: {canonicalizeVisitorUrl(visitor.referrer) || "direct"}
                       </p>
                       <div className="flex flex-wrap gap-2 pt-1 text-xs">
+                        <span className="rounded-full bg-white px-2 py-1 text-slate-600">
+                          Started: {formatDateTime(visitor.firstSeenAt)}
+                        </span>
+                        <span className="rounded-full bg-white px-2 py-1 text-slate-600">
+                          Last: {formatDateTime(visitor.lastSeenAt)}
+                        </span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-slate-600">
                           <Timer className="w-3.5 h-3.5" />
                           {formatDuration(visitor.timeSpentSeconds)}

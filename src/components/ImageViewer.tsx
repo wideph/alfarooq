@@ -56,7 +56,7 @@ export default function ImageViewer({ filename, title, compact = false }: ImageV
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/media/${encodeURIComponent(filename)}`}
+          src={`/api/media/${encodeURIComponent(filename)}?direct=1`}
           alt={title}
           draggable={false}
           onContextMenu={handleContextMenu}

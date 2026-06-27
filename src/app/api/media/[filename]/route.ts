@@ -1,15 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readUploadedFile, getMimeType } from "@/lib/storage";
+import {
+  getMimeType,
+  getSignedUploadedFileUrl,
+  readUploadedFile,
+} from "@/lib/storage";
 import { isMediaFileAllowed } from "@/lib/media-access";
 type RouteParams = { params: Promise<{ filename: string }> };
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const { filename } = await params;
 
   try {
     const allowed = await isMediaFileAllowed(filename);
     if (!allowed) {
       return NextResponse.json({ error: "File nahi mili" }, { status: 404 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get("direct") === "1") {
+      const signedUrl = await getSignedUploadedFileUrl(filename);
+      return NextResponse.redirect(signedUrl, {
+        status: 307,
+        headers: {
+          "Cache-Control": "private, max-age=300",
+        },
+      });
     }
 
     const buffer = await readUploadedFile(filename);

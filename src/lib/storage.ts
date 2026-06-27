@@ -69,6 +69,23 @@ export async function readUploadedFile(filename: string): Promise<Buffer> {
   return Buffer.from(await data.arrayBuffer());
 }
 
+export async function getSignedUploadedFileUrl(filename: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const bucket = getStorageBucket();
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(filename, 60 * 60, {
+      download: false,
+    });
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || "Signed URL create fail");
+  }
+
+  return data.signedUrl;
+}
+
 export function getMimeType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
   const mimeMap: Record<string, string> = {

@@ -19,9 +19,44 @@ const REQUIREMENT_WORDS = [
   "پروسیڈ",
 ];
 
+const GENERAL_CHAT_PATTERNS = [
+  /\bass?alam\b/i,
+  /\bsalam\b/i,
+  /\bhello\b/i,
+  /\bhi\b/i,
+  /\bhey\b/i,
+  /\bkya hal\b/i,
+  /\bkaise ho\b/i,
+  /\bkesy ho\b/i,
+  /\bkaisay ho\b/i,
+  /\bthanks?\b/i,
+  /\bthank you\b/i,
+  /\bshukriya\b/i,
+];
+
 export function isRequirementQuestion(message: string) {
   const normalized = message.toLowerCase();
   return REQUIREMENT_WORDS.some((word) => normalized.includes(word));
+}
+
+export function getGeneralChatAnswer(message: string) {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return "";
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const isGeneral = GENERAL_CHAT_PATTERNS.some((pattern) => pattern.test(normalized));
+
+  if (!isGeneral || wordCount > 8) return "";
+
+  if (/\bthanks?\b|\bthank you\b|\bshukriya\b/i.test(normalized)) {
+    return "Aap ka shukriya. Course se related sawal likhein, main available data ke mutabiq jawab doon ga.";
+  }
+
+  return "Wa alaikum assalam. Main theek hoon. Aap course se related sawal likhein, main available data ke mutabiq jawab doon ga.";
+}
+
+export function shouldQueueUnansweredQuestion(message: string) {
+  return !getGeneralChatAnswer(message);
 }
 
 export function botExpiresAt() {
@@ -153,10 +188,15 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "Use only the supplied course context, published Q&A, samples, answered user Q&A, and hidden bot training.",
     "Never add outside facts. Never invent documents, fees, dates, promises, or requirements.",
     "Keep the meaning of admin-provided answers unchanged. Small wording changes for the user's language are allowed.",
-    "If the answer is not present in the supplied data, set canAnswer=false and answer exactly with the fallback sentence provided below.",
+    "Search BOTH questions and answers. The user's wording may match answer text even when it does not match a saved question.",
+    "Handle Roman Urdu, Urdu, English, spelling mistakes, missing spaces, and close synonyms by matching the intended meaning against the supplied data.",
+    "If one user question has multiple parts and answers are present across 2 or 3 saved Q&A/training entries, combine only the relevant pieces into one answer.",
+    "If part of the answer is present, answer that part and then add the fallback sentence only for the missing part. In that case set canAnswer=true.",
+    "Set canAnswer=false only when no useful course-related answer is present at all in the supplied data.",
     "If the visitor asks about another course, do not answer from the current course. Give the other course link only.",
     "If the visitor asks about samples, pictures, PDFs, or attached material, include the exact supplied link.",
     "If the visitor asks about requirements/documents/proceeding, answer only from course data, then ask them to confirm any course/session/details already mentioned in the chat. Do not invent missing documents.",
+    "For greetings or casual small talk, answer briefly and do not use the fallback sentence.",
     `Fallback sentence: ${BOT_FALLBACK_ANSWER}`,
     extraInstruction ? `Extra admin instruction: ${extraInstruction}` : "",
     "",

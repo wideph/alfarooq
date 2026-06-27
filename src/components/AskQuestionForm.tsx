@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, MessageCircle, Send } from "lucide-react";
-import { getOrCreateVisitorKey } from "@/lib/visitor-client";
+import { getOrCreateVisitorKey, peekPreviousVisitorKey } from "@/lib/visitor-client";
 
 interface AskQuestionFormProps {
   courseId: string;
@@ -36,6 +36,7 @@ export default function AskQuestionForm({
           question: question.trim(),
           whatsappNumber: whatsappNumber.trim(),
           visitorKey: getOrCreateVisitorKey(),
+          previousVisitorKey: peekPreviousVisitorKey(),
         }),
       });
 

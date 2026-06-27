@@ -18,6 +18,11 @@ import {
   MessageCircle,
 } from "lucide-react";
 import AdminNav, { type AdminPermission } from "@/components/admin/AdminNav";
+import {
+  clearCachedAdminSession,
+  getCachedAdminSession,
+  loadAdminSession,
+} from "@/lib/admin-session-client";
 
 interface Course {
   id: string;
@@ -65,6 +70,17 @@ function nextPreference(items: { order: number }[]) {
   return Math.max(...items.map((i) => i.order)) + 1;
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [admin, setAdmin] = useState<{
@@ -72,9 +88,9 @@ export default function AdminDashboard() {
     email: string;
     role?: string;
     permissions?: AdminPermission[];
-  } | null>(null);
+  } | null>(() => getCachedAdminSession());
   const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getCachedAdminSession());
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
   const [courseDetail, setCourseDetail] = useState<{
     samples: Sample[];
@@ -130,13 +146,12 @@ export default function AdminDashboard() {
 
   const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me");
-      if (!res.ok) {
+      const nextAdmin = await loadAdminSession();
+      if (!nextAdmin) {
         router.push("/admin/login");
         return;
       }
-      const data = await res.json();
-      setAdmin(data.admin);
+      setAdmin(nextAdmin);
       await loadCourses();
     } catch {
       router.push("/admin/login");
@@ -277,6 +292,7 @@ export default function AdminDashboard() {
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearCachedAdminSession();
     router.push("/admin/login");
   }
 
@@ -684,6 +700,9 @@ export default function AdminDashboard() {
                             <p className="text-sm font-medium text-slate-800 urdu-text leading-loose mb-2">
                               {q.question}
                             </p>
+                            <p className="mb-2 text-xs text-slate-500">
+                              Asked: {formatDateTime(q.createdAt)}
+                            </p>
                             {q.whatsappNumber && (
                               <a
                                 href={`https://wa.me/${q.whatsappNumber.replace(/\D/g, "")}`}
@@ -899,6 +918,9 @@ export default function AdminDashboard() {
                                   <p className="text-sm font-medium text-slate-800 urdu-text leading-loose">
                                     <span className="text-slate-400 mr-1">#{q.order}</span>
                                     Q: {q.question}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    Asked: {formatDateTime(q.createdAt)}
                                   </p>
                                   <p className="text-xs text-slate-500 mt-1 urdu-text leading-loose">
                                     A: {q.answer}

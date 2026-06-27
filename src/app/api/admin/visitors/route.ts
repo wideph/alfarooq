@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
           }
         : {}),
     },
-    orderBy: { lastSeenAt: "desc" },
+    orderBy: [{ firstSeenAt: "desc" }, { lastSeenAt: "desc" }],
     take: 100,
     include: {
       events: { orderBy: { createdAt: "desc" }, take: 5 },

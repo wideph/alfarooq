@@ -8,6 +8,11 @@ import AdminNav, {
   type AdminNavUser,
   type AdminPermission,
 } from "@/components/admin/AdminNav";
+import {
+  clearCachedAdminSession,
+  getCachedAdminSession,
+  loadAdminSession,
+} from "@/lib/admin-session-client";
 
 export default function AdminPageFrame({
   children,
@@ -17,18 +22,17 @@ export default function AdminPageFrame({
   requiredAny?: AdminPermission[];
 }) {
   const router = useRouter();
-  const [admin, setAdmin] = useState<AdminNavUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [admin, setAdmin] = useState<AdminNavUser | null>(() => getCachedAdminSession());
+  const [loading, setLoading] = useState(() => !getCachedAdminSession());
 
   const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me");
-      if (!res.ok) {
+      const nextAdmin = await loadAdminSession();
+      if (!nextAdmin) {
         router.push("/admin/login");
         return;
       }
-      const data = await res.json();
-      setAdmin(data.admin);
+      setAdmin(nextAdmin);
     } catch {
       router.push("/admin/login");
     } finally {
@@ -42,13 +46,26 @@ export default function AdminPageFrame({
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearCachedAdminSession();
     router.push("/admin/login");
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      <div className="min-h-screen bg-slate-50">
+        <div className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="h-6 w-44 rounded bg-slate-200 animate-pulse" />
+            <div className="mt-3 flex gap-2">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="h-9 w-24 rounded-xl bg-slate-100 animate-pulse" />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        </div>
       </div>
     );
   }

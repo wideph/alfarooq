@@ -62,7 +62,7 @@ export default async function RootLayout({
 }) {
   const settings = await getSiteSettings();
   const logoUrl = settings.logoFilename
-    ? `/api/media/${encodeURIComponent(settings.logoFilename)}`
+    ? `/api/media/${encodeURIComponent(settings.logoFilename)}?direct=1`
     : null;
 
   return (

@@ -7,24 +7,26 @@ import {
   buildCourseBotContext,
   buildWhatsappUrl,
   cleanupExpiredBotConversations,
+  getGeneralChatAnswer,
   isRequirementQuestion,
   parseBotJson,
 } from "@/lib/bot";
 import { fetchPrivateSiteSettingsFromDb } from "@/lib/get-site-settings";
 import { prisma } from "@/lib/prisma";
+import { findOrCreateMergedVisitor } from "@/lib/visitor-server";
 
 function clean(value: unknown, max = 1000) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "";
 }
 
-async function findOrCreateVisitor(visitorKey: string) {
+async function findOrCreateVisitor(visitorKey: string, previousVisitorKey: string) {
   if (!visitorKey) return null;
 
-  return prisma.visitor.upsert({
-    where: { visitorKey },
+  return findOrCreateMergedVisitor({
+    visitorKey,
+    previousVisitorKey,
     update: { lastSeenAt: new Date() },
     create: {
-      visitorKey,
       source: "bot",
       lastSeenAt: new Date(),
     },
@@ -45,30 +47,30 @@ export async function POST(request: NextRequest) {
     const courseId = clean(body.courseId, 100) || null;
     const conversationId = clean(body.conversationId, 100);
     const visitorKey = clean(body.visitorKey, 160);
+    const previousVisitorKey = clean(body.previousVisitorKey, 160);
 
     if (!message) {
       return NextResponse.json({ error: "Message zaroori hai" }, { status: 400 });
     }
 
-    const visitor = await findOrCreateVisitor(visitorKey);
-    const { course, context } = await buildCourseBotContext(courseId);
+    const visitor = await findOrCreateVisitor(visitorKey, previousVisitorKey);
 
     const existingConversation = conversationId
       ? await prisma.botConversation.findUnique({ where: { id: conversationId } })
       : null;
 
     const conversation = existingConversation
-      ? await prisma.botConversation.update({
+        ? await prisma.botConversation.update({
           where: { id: existingConversation.id },
           data: {
-            courseId: course?.id || courseId,
+            courseId,
             visitorId: visitor?.id,
             expiresAt: botExpiresAt(),
           },
         })
       : await prisma.botConversation.create({
           data: {
-            courseId: course?.id || courseId,
+            courseId,
             visitorId: visitor?.id,
             expiresAt: botExpiresAt(),
           },
@@ -81,6 +83,29 @@ export async function POST(request: NextRequest) {
         content: message,
       },
     });
+
+    const generalAnswer = getGeneralChatAnswer(message);
+    if (generalAnswer) {
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: generalAnswer,
+          metadata: { canAnswer: true, generalChat: true },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer: generalAnswer,
+        canAnswer: true,
+        whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+      });
+    }
+
+    const { course, context } = await buildCourseBotContext(courseId);
 
     const recentMessages = await prisma.botMessage.findMany({
       where: { conversationId: conversation.id },
@@ -110,9 +135,14 @@ export async function POST(request: NextRequest) {
       providerError = error instanceof Error ? error.message : "Bot provider failed";
     }
 
+    const shouldQueueForAdmin =
+      !parsed.canAnswer || parsed.answer.includes(BOT_FALLBACK_ANSWER);
+
     if (!parsed.canAnswer) {
       parsed.answer = BOT_FALLBACK_ANSWER;
+    }
 
+    if (shouldQueueForAdmin) {
       if (course?.id) {
         await prisma.userQuestion.create({
           data: {

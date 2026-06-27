@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, Loader2, Pin, PinOff, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { Bot, Loader2, RefreshCw, Save, Search, Trash2 } from "lucide-react";
 
 type CourseOption = { id: string; title: string };
 type TrainingEntry = {
@@ -310,10 +310,9 @@ export default function BotAdminPanel({
                           <button
                             type="button"
                             onClick={() => togglePin(conversation)}
-                            className="grid h-8 w-8 place-items-center rounded-lg bg-white text-slate-600 hover:text-primary-700"
-                            aria-label={conversation.isPinned ? "Unpin" : "Pin"}
+                            className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-primary-700"
                           >
-                            {conversation.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                            {conversation.isPinned ? "Unsave" : "Save"}
                           </button>
                           <button
                             type="button"

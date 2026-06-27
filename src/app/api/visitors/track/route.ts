@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendVisitorSignal } from "@/lib/ad-signals";
+import {
+  canonicalizeTrackedUrl,
+  findOrCreateMergedVisitor,
+} from "@/lib/visitor-server";
 
 function clean(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 500) : null;
@@ -10,48 +14,53 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const visitorKey = clean(body.visitorKey);
+    const previousVisitorKey = clean(body.previousVisitorKey);
 
     if (!visitorKey) {
       return NextResponse.json({ error: "visitorKey zaroori hai" }, { status: 400 });
     }
 
-    const existing = await prisma.visitor.findUnique({ where: { visitorKey } });
     const timeDelta = Math.max(0, Math.min(Number(body.timeDeltaSeconds) || 0, 60));
     const now = new Date();
-    const currentPath = clean(body.currentPath);
+    const currentPath = canonicalizeTrackedUrl(clean(body.currentPath));
+    const landingPage = canonicalizeTrackedUrl(clean(body.landingPage));
+    const referrer = canonicalizeTrackedUrl(clean(body.referrer));
+    const [existingBeforeMerge, previousBeforeMerge] = await Promise.all([
+      prisma.visitor.findUnique({ where: { visitorKey } }),
+      previousVisitorKey && previousVisitorKey !== visitorKey
+        ? prisma.visitor.findUnique({ where: { visitorKey: previousVisitorKey } })
+        : Promise.resolve(null),
+    ]);
 
-    const visitor = existing
-      ? await prisma.visitor.update({
-          where: { visitorKey },
-          data: {
-            source: existing.source || clean(body.source),
-            medium: existing.medium || clean(body.medium),
-            campaign: existing.campaign || clean(body.campaign),
-            referrer: existing.referrer || clean(body.referrer),
-            landingPage: existing.landingPage || clean(body.landingPage),
-            currentPath: currentPath || existing.currentPath,
-            userAgent: existing.userAgent || request.headers.get("user-agent"),
-            timeSpentSeconds: { increment: timeDelta },
-            lastSeenAt: now,
-          },
-        })
-      : await prisma.visitor.create({
-          data: {
-            visitorKey,
-            source: clean(body.source),
-            medium: clean(body.medium),
-            campaign: clean(body.campaign),
-            referrer: clean(body.referrer),
-            landingPage: clean(body.landingPage),
-            currentPath,
-            userAgent: request.headers.get("user-agent"),
-            timeSpentSeconds: timeDelta,
-            firstSeenAt: now,
-            lastSeenAt: now,
-          },
-        });
+    const visitor = await findOrCreateMergedVisitor({
+      visitorKey,
+      previousVisitorKey,
+      create: {
+        source: clean(body.source),
+        medium: clean(body.medium),
+        campaign: clean(body.campaign),
+        referrer,
+        landingPage,
+        currentPath,
+        userAgent: request.headers.get("user-agent"),
+        timeSpentSeconds: timeDelta,
+        firstSeenAt: now,
+        lastSeenAt: now,
+      },
+      update: {
+        source: existingBeforeMerge?.source || clean(body.source),
+        medium: existingBeforeMerge?.medium || clean(body.medium),
+        campaign: existingBeforeMerge?.campaign || clean(body.campaign),
+        referrer: existingBeforeMerge?.referrer || referrer,
+        landingPage: existingBeforeMerge?.landingPage || landingPage,
+        currentPath: currentPath || existingBeforeMerge?.currentPath,
+        userAgent: existingBeforeMerge?.userAgent || request.headers.get("user-agent"),
+        timeSpentSeconds: { increment: timeDelta },
+        lastSeenAt: now,
+      },
+    });
 
-    if (!existing) {
+    if (!existingBeforeMerge && !previousBeforeMerge) {
       const signal = await sendVisitorSignal(visitor, "PageView", {
         landing_page: visitor.landingPage,
       });

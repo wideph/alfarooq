@@ -3,7 +3,12 @@
 import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { getOrCreateVisitorKey } from "@/lib/visitor-client";
+import {
+  canonicalizeVisitorUrl,
+  consumePreviousVisitorKey,
+  getOrCreateVisitorKey,
+  peekPreviousVisitorKey,
+} from "@/lib/visitor-client";
 
 type PublicTrackingSettings = {
   metaPixelId?: string;
@@ -48,6 +53,7 @@ export default function VisitorTracker() {
   const isAdminPath = pathname.startsWith("/admin");
   const [settings, setSettings] = useState<PublicTrackingSettings | null>(null);
   const visitorKeyRef = useRef<string | null>(null);
+  const previousVisitorKeyRef = useRef<string>("");
   const lastActiveAtRef = useRef<number>(Date.now());
   const landingPageRef = useRef<string | null>(null);
   const referrerRef = useRef<string>("");
@@ -89,8 +95,9 @@ export default function VisitorTracker() {
     if (isAdminPath) return;
 
     visitorKeyRef.current = getOrCreateVisitorKey();
-    landingPageRef.current = window.location.href;
-    referrerRef.current = document.referrer;
+    previousVisitorKeyRef.current = consumePreviousVisitorKey();
+    landingPageRef.current = canonicalizeVisitorUrl(window.location.href);
+    referrerRef.current = canonicalizeVisitorUrl(document.referrer);
 
     function buildPayload(includeDelta = false) {
       const visitorKey = visitorKeyRef.current;
@@ -104,15 +111,18 @@ export default function VisitorTracker() {
 
       const url = new URL(window.location.href);
       const source = inferSource(url, referrerRef.current);
+      const previousVisitorKey =
+        previousVisitorKeyRef.current || peekPreviousVisitorKey();
 
       return {
         visitorKey,
+        previousVisitorKey,
         source,
         medium: url.searchParams.get("utm_medium") || "",
         campaign: url.searchParams.get("utm_campaign") || "",
         referrer: referrerRef.current,
         landingPage: landingPageRef.current,
-        currentPath: window.location.href,
+        currentPath: canonicalizeVisitorUrl(window.location.href),
         timeDeltaSeconds: delta,
       };
     }
@@ -126,6 +136,7 @@ export default function VisitorTracker() {
           type: "application/json",
         });
         navigator.sendBeacon("/api/visitors/track", blob);
+        previousVisitorKeyRef.current = "";
         return;
       }
 
@@ -135,6 +146,8 @@ export default function VisitorTracker() {
         keepalive: true,
         body: JSON.stringify(payload),
       }).catch(() => {});
+
+      previousVisitorKeyRef.current = "";
     }
 
     sendPing(false);

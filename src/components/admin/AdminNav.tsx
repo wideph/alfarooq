@@ -68,19 +68,19 @@ const navItems: Array<{
   },
   {
     href: "/admin/settings",
-    label: "Website Settings",
+    label: "Settings",
     icon: Settings,
     permissions: ["settings:read", "settings:write"],
   },
   {
     href: "/admin/visitors",
-    label: "Visitors & Ad Signals",
+    label: "Visitors",
     icon: Signal,
     permissions: ["visitors:read", "visitors:write"],
   },
   {
     href: "/admin/bot",
-    label: "AI Bot Training & Chats",
+    label: "Bot",
     icon: Bot,
     permissions: [
       "botTraining:read",
@@ -91,7 +91,7 @@ const navItems: Array<{
   },
   {
     href: "/admin/sub-admins",
-    label: "Sub Admins & Permissions",
+    label: "Admins",
     icon: ShieldCheck,
     permissions: ["admins:read", "admins:write"],
   },
@@ -134,7 +134,7 @@ export default function AdminNav({
             </div>
           </div>
 
-          <nav className="flex gap-2 overflow-x-auto pb-1">
+          <nav className="flex flex-wrap gap-1.5 pb-1">
             {visibleItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -142,7 +142,8 @@ export default function AdminNav({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                  prefetch
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
                     active
                       ? "bg-primary-600 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"

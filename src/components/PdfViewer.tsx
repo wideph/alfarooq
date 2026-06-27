@@ -140,11 +140,20 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
         setNumPages(0);
 
         const pdfjs = await getPdfJs();
-        const response = await fetch(`/api/media/${encodeURIComponent(filename)}`);
-        if (!response.ok) throw new Error("PDF load nahi ho saki");
-
-        const buffer = await response.arrayBuffer();
-        const pdf = (await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise) as unknown as PdfDocument;
+        let pdf: PdfDocument;
+        try {
+          pdf = (await pdfjs.getDocument({
+            url: `/api/media/${encodeURIComponent(filename)}?direct=1`,
+            disableAutoFetch: false,
+            disableStream: false,
+            disableRange: false,
+          }).promise) as unknown as PdfDocument;
+        } catch {
+          const response = await fetch(`/api/media/${encodeURIComponent(filename)}`);
+          if (!response.ok) throw new Error("PDF load nahi ho saki");
+          const buffer = await response.arrayBuffer();
+          pdf = (await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise) as unknown as PdfDocument;
+        }
 
         if (cancelled) return;
 

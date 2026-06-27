@@ -3,7 +3,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Bot, Loader2, MessageCircle, Send, X } from "lucide-react";
-import { getOrCreateVisitorKey } from "@/lib/visitor-client";
+import { getOrCreateVisitorKey, peekPreviousVisitorKey } from "@/lib/visitor-client";
 
 type CourseOption = { id: string; title: string };
 type ChatMessage = { role: "user" | "assistant"; content: string; whatsappUrl?: string | null };
@@ -48,7 +48,7 @@ export default function BotChatWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const bottomClass = pathname !== "/" && !pathname.startsWith("/admin") ? "bottom-24" : "bottom-5";
+  const bottomClass = pathname !== "/" && !pathname.startsWith("/admin") ? "bottom-28 sm:bottom-32" : "bottom-5";
   const visitorKeyRef = useRef<string | null>(null);
   const panelEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -101,6 +101,7 @@ export default function BotChatWidget() {
           courseId: selectedCourseId || pathCourseId || null,
           conversationId: localStorage.getItem(BOT_CONVERSATION_KEY) || "",
           visitorKey: visitorKeyRef.current || getOrCreateVisitorKey(),
+          previousVisitorKey: peekPreviousVisitorKey(),
         }),
       });
 
