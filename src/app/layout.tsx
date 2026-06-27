@@ -4,6 +4,7 @@ import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
 import PreloadAssets from "@/components/PreloadAssets";
 import FloatingHomeButton from "@/components/FloatingHomeButton";
 import VisitorTracker from "@/components/VisitorTracker";
+import VisitorBlockGate from "@/components/VisitorBlockGate";
 import BotChatWidget from "@/components/BotChatWidget";
 import { getSiteSettings } from "@/lib/get-site-settings";
 import "./globals.css";
@@ -21,7 +22,7 @@ const urduNastaliq = Noto_Nastaliq_Urdu({
   weight: ["400"],
   variable: "--font-urdu-nastaliq",
   display: "swap",
-  preload: true,
+  preload: false,
 });
 
 const urduSans = Noto_Sans_Arabic({
@@ -29,7 +30,7 @@ const urduSans = Noto_Sans_Arabic({
   weight: ["400", "600"],
   variable: "--font-urdu-sans",
   display: "swap",
-  preload: true,
+  preload: false,
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -73,13 +74,13 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <link rel="preload" href="/pdf.worker.min.mjs" as="script" />
         {logoUrl ? <link rel="preload" href={logoUrl} as="image" /> : null}
       </head>
       <body className="antialiased text-slate-800">
         <PreloadAssets logoUrl={logoUrl} />
         <SiteSettingsProvider initialSettings={settings}>{children}</SiteSettingsProvider>
         <VisitorTracker />
+        <VisitorBlockGate />
         <BotChatWidget />
         <FloatingHomeButton />
       </body>

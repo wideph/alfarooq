@@ -4,7 +4,11 @@ import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib
 import { saveUploadedFile, deleteUploadedFile } from "@/lib/storage";
 import { revalidateCourseCache } from "@/lib/revalidate-course";
 import { parseOrder } from "@/lib/parse-order";
-import { findOrCreateMergedVisitor } from "@/lib/visitor-server";
+import {
+  findBlockedVisitorByIp,
+  findOrCreateMergedVisitor,
+  getClientIpFromHeaders,
+} from "@/lib/visitor-server";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -136,16 +140,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const ipAddress = getClientIpFromHeaders(request.headers);
     const visitor =
       typeof visitorKey === "string" && visitorKey.trim()
         ? await findOrCreateMergedVisitor({
             visitorKey: visitorKey.trim(),
             previousVisitorKey:
               typeof previousVisitorKey === "string" ? previousVisitorKey.trim() : "",
-            update: { lastSeenAt: new Date() },
-            create: { source: "question_form", lastSeenAt: new Date() },
+            update: { lastSeenAt: new Date(), ...(ipAddress ? { ipAddress } : {}) },
+            create: { source: "question_form", lastSeenAt: new Date(), ipAddress },
           })
         : null;
+
+    const blockedByIp = await findBlockedVisitorByIp(ipAddress);
+    if (visitor?.status === "blocked" || blockedByIp) {
+      if (visitor && visitor.status !== "blocked") {
+        await prisma.visitor.update({
+          where: { id: visitor.id },
+          data: { status: "blocked", lastSeenAt: new Date() },
+        });
+      }
+      return NextResponse.json(
+        { error: "Aap ka IP blocked hai. Admin unblock kare to sawal submit ho sakta hai." },
+        { status: 403 }
+      );
+    }
 
     const userQuestion = await prisma.userQuestion.create({
       data: {

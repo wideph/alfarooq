@@ -25,12 +25,28 @@ type TrackingWindow = Window & {
   };
 };
 
-function inferSource(url: URL, referrer: string) {
-  const utmSource = url.searchParams.get("utm_source");
-  if (utmSource) return utmSource;
+function inferSource(url: URL, referrer: string, userAgent: string) {
+  const explicitSource =
+    url.searchParams.get("utm_source") ||
+    url.searchParams.get("source") ||
+    url.searchParams.get("ref") ||
+    url.searchParams.get("from") ||
+    url.searchParams.get("via");
+  if (explicitSource) return explicitSource.toLowerCase();
+
   if (url.searchParams.has("fbclid")) return "facebook";
   if (url.searchParams.has("gclid")) return "google";
+  if (url.searchParams.has("gbraid") || url.searchParams.has("wbraid")) return "google";
+  if (url.searchParams.has("msclkid")) return "microsoft";
   if (url.searchParams.has("ttclid")) return "tiktok";
+  if (url.searchParams.has("igshid")) return "instagram";
+
+  const ua = userAgent.toLowerCase();
+  if (ua.includes("whatsapp")) return "whatsapp";
+  if (ua.includes("fbav") || ua.includes("fban") || ua.includes("facebook")) return "facebook";
+  if (ua.includes("instagram")) return "instagram";
+  if (ua.includes("tiktok")) return "tiktok";
+  if (ua.includes("youtube")) return "youtube";
 
   if (!referrer) return "direct";
 
@@ -110,7 +126,7 @@ export default function VisitorTracker() {
       lastActiveAtRef.current = now;
 
       const url = new URL(window.location.href);
-      const source = inferSource(url, referrerRef.current);
+      const source = inferSource(url, referrerRef.current, navigator.userAgent);
       const previousVisitorKey =
         previousVisitorKeyRef.current || peekPreviousVisitorKey();
 
@@ -145,7 +161,18 @@ export default function VisitorTracker() {
         headers: { "Content-Type": "application/json" },
         keepalive: true,
         body: JSON.stringify(payload),
-      }).catch(() => {});
+      })
+        .then((response) => response.json().catch(() => null))
+        .then((data) => {
+          if (data?.status === "blocked") {
+            localStorage.setItem("bbte_visitor_blocked", "true");
+            window.dispatchEvent(new Event("bbte-visitor-blocked"));
+          } else if (data?.status) {
+            localStorage.removeItem("bbte_visitor_blocked");
+            window.dispatchEvent(new Event("bbte-visitor-unblocked"));
+          }
+        })
+        .catch(() => {});
 
       previousVisitorKeyRef.current = "";
     }

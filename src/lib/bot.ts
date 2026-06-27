@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 export const BOT_FALLBACK_ANSWER =
   "men aap k swal ka jawab fori nahi dy sakta, 24 hourse tak apk swal ka jawab isi course k swal jawab k section men mojod hoga aur ager wahan per iska jawab na hua to aap 24 hours tak yahi swal muj sy dubara ker sakty hen.";
 
+export const BOT_BLOCKED_ANSWER =
+  "Aap ke alfaaz munasib nahi hain. Is IP ko block kiya ja raha hai.";
+
+export const BOT_NAMES = ["Asad", "Hammad", "Ramiz", "Ahmed", "Haroon"] as const;
+
 const REQUIREMENT_WORDS = [
   "requirement",
   "requirements",
@@ -32,6 +37,26 @@ const GENERAL_CHAT_PATTERNS = [
   /\bthanks?\b/i,
   /\bthank you\b/i,
   /\bshukriya\b/i,
+  /\bname\b/i,
+  /\bnaam\b/i,
+  /\bwho are you\b/i,
+  /\btum kon\b/i,
+  /\btum kaun\b/i,
+];
+
+const ABUSIVE_PATTERNS = [
+  /\bfuck(?:ing)?\b/i,
+  /\bshit\b/i,
+  /\bbitch\b/i,
+  /\basshole\b/i,
+  /\bbastard\b/i,
+  /\bchutiya\b/i,
+  /\bchutia\b/i,
+  /\bchutya\b/i,
+  /\bmadar\s*chod\w*\b/i,
+  /\bmother\s*fucker\b/i,
+  /\bbhen\s*chod\w*\b/i,
+  /\bbehen\s*chod\w*\b/i,
 ];
 
 export function isRequirementQuestion(message: string) {
@@ -39,20 +64,61 @@ export function isRequirementQuestion(message: string) {
   return REQUIREMENT_WORDS.some((word) => normalized.includes(word));
 }
 
-export function getGeneralChatAnswer(message: string) {
+export function isAbusiveMessage(message: string) {
+  return ABUSIVE_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+export function normalizeBotName(name: string | null | undefined) {
+  const cleanName = (name || "").trim();
+  return BOT_NAMES.includes(cleanName as (typeof BOT_NAMES)[number]) ? cleanName : "";
+}
+
+export function pickBotName(seed: string) {
+  let hash = 0;
+  for (const char of seed || `${Date.now()}`) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return BOT_NAMES[hash % BOT_NAMES.length];
+}
+
+export function getGeneralChatAnswer(message: string, botName = "Asad") {
   const normalized = message.trim().toLowerCase();
   if (!normalized) return "";
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const isGeneral = GENERAL_CHAT_PATTERNS.some((pattern) => pattern.test(normalized));
 
-  if (!isGeneral || wordCount > 8) return "";
+  if (!isGeneral || wordCount > 12) return "";
 
-  if (/\bthanks?\b|\bthank you\b|\bshukriya\b/i.test(normalized)) {
-    return "Aap ka shukriya. Course se related sawal likhein, main available data ke mutabiq jawab doon ga.";
+  const diplomaPrompt =
+    "Aap ka diploma/certificate ke related koi question ho to aap pooch sakty hen.";
+
+  if (/\b(name|naam)\b|who are you|\btum (kon|kaun)\b/i.test(normalized)) {
+    return `Mera name ${botName} hai. Men aap ki rahnumaee k liye hun aur ager aap ka mazeed koi question ho diploma/certificate k mutaliq to aap muj sy pooch sakty hen.`;
   }
 
-  return "Wa alaikum assalam. Main theek hoon. Aap course se related sawal likhein, main available data ke mutabiq jawab doon ga.";
+  if (/\bthanks?\b|\bthank you\b|\bshukriya\b/i.test(normalized)) {
+    return `Aap ka shukriya. ${diplomaPrompt}`;
+  }
+
+  const askedWellbeing = /\bkya hal\b|\bkaise ho\b|\bkesy ho\b|\bkaisay ho\b/i.test(
+    normalized
+  );
+  const greeted = /\bass?alam\b|\bsalam\b|\bhello\b|\bhi\b|\bhey\b/i.test(normalized);
+
+  if (greeted && askedWellbeing) {
+    return `Wa alaikum assalam. Main theek hun, shukriya. ${diplomaPrompt}`;
+  }
+
+  if (greeted) {
+    return `Wa alaikum assalam. ${diplomaPrompt}`;
+  }
+
+  if (askedWellbeing) {
+    return `Main theek hun, shukriya. ${diplomaPrompt}`;
+  }
+
+  return diplomaPrompt;
 }
 
 export function shouldQueueUnansweredQuestion(message: string) {
@@ -196,7 +262,7 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "If the visitor asks about another course, do not answer from the current course. Give the other course link only.",
     "If the visitor asks about samples, pictures, PDFs, or attached material, include the exact supplied link.",
     "If the visitor asks about requirements/documents/proceeding, answer only from course data, then ask them to confirm any course/session/details already mentioned in the chat. Do not invent missing documents.",
-    "For greetings or casual small talk, answer briefly and do not use the fallback sentence.",
+    "For greetings, name questions, or casual small talk, answer naturally and briefly. Do not use the fallback sentence for casual chat.",
     `Fallback sentence: ${BOT_FALLBACK_ANSWER}`,
     extraInstruction ? `Extra admin instruction: ${extraInstruction}` : "",
     "",

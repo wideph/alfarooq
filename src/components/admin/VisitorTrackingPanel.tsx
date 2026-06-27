@@ -14,6 +14,7 @@ type Visitor = {
   referrer: string | null;
   landingPage: string | null;
   currentPath: string | null;
+  ipAddress: string | null;
   status: string;
   timeSpentSeconds: number;
   firstSeenAt: string;
@@ -129,7 +130,7 @@ export default function VisitorTrackingPanel({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Visitor ID, source, page search..."
+                placeholder="Visitor ID, IP, source, page search..."
                 className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
               />
             </div>
@@ -159,14 +160,29 @@ export default function VisitorTrackingPanel({
           ) : (
             <div className="space-y-3">
               {visitors.map((visitor) => (
-                <div key={visitor.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div
+                  key={visitor.id}
+                  className={`rounded-xl border p-4 ${
+                    visitor.status === "blocked"
+                      ? "border-red-200 bg-red-50"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 space-y-1">
                       <p className="break-all text-sm font-bold text-slate-900">{visitor.visitorKey}</p>
+                      {visitor.status === "blocked" && (
+                        <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">
+                          IP blocked
+                        </span>
+                      )}
                       <p className="text-xs text-slate-500">
                         Source: {visitor.source || "unknown"}
                         {visitor.medium ? ` / ${visitor.medium}` : ""}
                         {visitor.campaign ? ` / ${visitor.campaign}` : ""}
+                      </p>
+                      <p className="break-all text-xs text-slate-500">
+                        IP: {visitor.ipAddress || "-"}
                       </p>
                       <p className="break-all text-xs text-slate-500">
                         Page:{" "}

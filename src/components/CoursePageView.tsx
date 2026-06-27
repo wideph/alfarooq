@@ -52,10 +52,11 @@ export default function CoursePageView({
 }) {
   const [course, setCourse] = useState(initialCourse);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const hasPdfSample = course.samples.some((sample) => sample.type === "pdf");
 
   useEffect(() => {
-    void getPdfJs();
-  }, []);
+    if (hasPdfSample) void getPdfJs();
+  }, [hasPdfSample]);
 
   const reloadCourse = useCallback(() => {
     fetch(`/api/courses/${course.id}`)

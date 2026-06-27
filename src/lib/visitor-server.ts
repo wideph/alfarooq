@@ -28,6 +28,30 @@ export function canonicalizeTrackedUrl(value: string | null | undefined) {
   }
 }
 
+function cleanIp(value: string | null | undefined) {
+  const ip = (value || "").split(",")[0]?.trim();
+  if (!ip || ip.length > 80) return null;
+  return ip;
+}
+
+export function getClientIpFromHeaders(headers: Headers) {
+  return (
+    cleanIp(headers.get("x-forwarded-for")) ||
+    cleanIp(headers.get("x-real-ip")) ||
+    cleanIp(headers.get("cf-connecting-ip")) ||
+    cleanIp(headers.get("true-client-ip"))
+  );
+}
+
+export async function findBlockedVisitorByIp(ipAddress: string | null | undefined) {
+  if (!ipAddress) return null;
+
+  return prisma.visitor.findFirst({
+    where: { ipAddress, status: "blocked" },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
 async function mergeVisitorRecords(primary: Visitor, duplicate: Visitor) {
   if (primary.id === duplicate.id) return primary;
 
@@ -53,6 +77,11 @@ async function mergeVisitorRecords(primary: Visitor, duplicate: Visitor) {
         referrer: primary.referrer || duplicate.referrer,
         landingPage: primary.landingPage || duplicate.landingPage,
         currentPath: primary.currentPath || duplicate.currentPath,
+        ipAddress: primary.ipAddress || duplicate.ipAddress,
+        status:
+          primary.status === "blocked" || duplicate.status === "blocked"
+            ? "blocked"
+            : primary.status,
         timeSpentSeconds: { increment: duplicate.timeSpentSeconds },
         firstSeenAt:
           duplicate.firstSeenAt < primary.firstSeenAt

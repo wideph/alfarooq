@@ -176,7 +176,7 @@ export default function QASection({
                             : "bg-primary-500"
                       }`}
                     />
-                    {q.fromUser ? "آپ کے سوال کا جواب:" : "جواب:"}
+                    جواب:
                   </p>
                   <AnswerContent
                     answer={q.answer}

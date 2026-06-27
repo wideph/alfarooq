@@ -9,6 +9,16 @@ type CourseOption = { id: string; title: string };
 type ChatMessage = { role: "user" | "assistant"; content: string; whatsappUrl?: string | null };
 
 const BOT_CONVERSATION_KEY = "bbte_bot_conversation_id";
+const BOT_NAME_KEY = "bbte_bot_name";
+const BOT_NAMES = ["Asad", "Hammad", "Ramiz", "Ahmed", "Haroon"];
+
+function getStoredBotName() {
+  const stored = localStorage.getItem(BOT_NAME_KEY);
+  if (stored && BOT_NAMES.includes(stored)) return stored;
+  const next = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
+  localStorage.setItem(BOT_NAME_KEY, next);
+  return next;
+}
 
 function renderLinkedText(text: string) {
   const nodes: ReactNode[] = [];
@@ -48,6 +58,7 @@ export default function BotChatWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [botName, setBotName] = useState("Asad");
   const bottomClass = pathname !== "/" && !pathname.startsWith("/admin") ? "bottom-28 sm:bottom-32" : "bottom-5";
   const visitorKeyRef = useRef<string | null>(null);
   const panelEndRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +87,7 @@ export default function BotChatWidget() {
   useEffect(() => {
     if (!open) return;
     visitorKeyRef.current = getOrCreateVisitorKey();
+    setBotName(getStoredBotName());
   }, [open]);
 
   useEffect(() => {
@@ -102,6 +114,7 @@ export default function BotChatWidget() {
           conversationId: localStorage.getItem(BOT_CONVERSATION_KEY) || "",
           visitorKey: visitorKeyRef.current || getOrCreateVisitorKey(),
           previousVisitorKey: peekPreviousVisitorKey(),
+          botName,
         }),
       });
 
@@ -109,6 +122,16 @@ export default function BotChatWidget() {
       if (!res.ok) throw new Error(data.error || "Bot jawab nahi de saka");
 
       localStorage.setItem(BOT_CONVERSATION_KEY, data.conversationId);
+      if (data.botName && BOT_NAMES.includes(data.botName)) {
+        localStorage.setItem(BOT_NAME_KEY, data.botName);
+        setBotName(data.botName);
+      }
+      if (data.blocked) {
+        localStorage.setItem("bbte_visitor_blocked", "true");
+        window.setTimeout(() => {
+          window.dispatchEvent(new Event("bbte-visitor-blocked"));
+        }, 2500);
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -209,8 +232,12 @@ export default function BotChatWidget() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="inline-flex items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5 text-sm text-slate-500 border border-slate-200">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Jawab aa raha hai...
+                    <span className="flex items-center gap-1" aria-hidden="true">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:120ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:240ms]" />
+                    </span>
+                    {botName} typing
                   </div>
                 </div>
               )}

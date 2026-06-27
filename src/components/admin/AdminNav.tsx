@@ -110,31 +110,13 @@ export default function AdminNav({
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-bold text-slate-900">Admin Dashboard</h1>
-              {admin && <p className="text-xs text-slate-500">Welcome, {admin.name}</p>}
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                <Home className="w-4 h-4" />
-                <span className="hidden sm:inline">Website</span>
-              </Link>
-              <button
-                onClick={onLogout}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
+        <div className="flex h-16 items-center gap-2 overflow-x-auto whitespace-nowrap">
+          <div className="mr-1 hidden min-w-0 shrink-0 sm:block">
+            <h1 className="text-base font-bold text-slate-900">Admin</h1>
+            {admin && <p className="max-w-28 truncate text-xs text-slate-500">{admin.name}</p>}
           </div>
 
-          <nav className="flex flex-wrap gap-1.5 pb-1">
+          <nav className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
             {visibleItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -143,18 +125,36 @@ export default function AdminNav({
                   key={item.href}
                   href={item.href}
                   prefetch
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
+                  title={item.label}
+                  className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
                     active
                       ? "bg-primary-600 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  {item.label}
+                  <Icon className="h-4 w-4" />
+                  <span className="hidden md:inline">{item.label}</span>
                 </Link>
               );
             })}
           </nav>
+
+          <div className="ml-1 flex shrink-0 items-center gap-1">
+            <Link
+              href="/"
+              title="Website"
+              className="grid h-10 w-10 place-items-center rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <Home className="w-4 h-4" />
+            </Link>
+            <button
+              onClick={onLogout}
+              title="Logout"
+              className="grid h-10 w-10 place-items-center rounded-xl text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </header>

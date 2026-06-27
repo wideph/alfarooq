@@ -2,33 +2,47 @@ import { NextRequest, NextResponse } from "next/server";
 import { callBotModel, type BotChatMessage } from "@/lib/bot-ai";
 import {
   BOT_FALLBACK_ANSWER,
+  BOT_BLOCKED_ANSWER,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
   buildWhatsappUrl,
   cleanupExpiredBotConversations,
   getGeneralChatAnswer,
+  isAbusiveMessage,
   isRequirementQuestion,
+  normalizeBotName,
+  pickBotName,
   parseBotJson,
 } from "@/lib/bot";
 import { fetchPrivateSiteSettingsFromDb } from "@/lib/get-site-settings";
 import { prisma } from "@/lib/prisma";
-import { findOrCreateMergedVisitor } from "@/lib/visitor-server";
+import {
+  findBlockedVisitorByIp,
+  findOrCreateMergedVisitor,
+  getClientIpFromHeaders,
+} from "@/lib/visitor-server";
+import { sendVisitorSignal } from "@/lib/ad-signals";
 
 function clean(value: unknown, max = 1000) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "";
 }
 
-async function findOrCreateVisitor(visitorKey: string, previousVisitorKey: string) {
+async function findOrCreateVisitor(
+  visitorKey: string,
+  previousVisitorKey: string,
+  ipAddress: string | null
+) {
   if (!visitorKey) return null;
 
   return findOrCreateMergedVisitor({
     visitorKey,
     previousVisitorKey,
-    update: { lastSeenAt: new Date() },
+    update: { lastSeenAt: new Date(), ...(ipAddress ? { ipAddress } : {}) },
     create: {
       source: "bot",
       lastSeenAt: new Date(),
+      ipAddress,
     },
   });
 }
@@ -48,19 +62,23 @@ export async function POST(request: NextRequest) {
     const conversationId = clean(body.conversationId, 100);
     const visitorKey = clean(body.visitorKey, 160);
     const previousVisitorKey = clean(body.previousVisitorKey, 160);
+    const ipAddress = getClientIpFromHeaders(request.headers);
+    const botName =
+      normalizeBotName(clean(body.botName, 40)) ||
+      pickBotName(conversationId || visitorKey || message);
 
     if (!message) {
       return NextResponse.json({ error: "Message zaroori hai" }, { status: 400 });
     }
 
-    const visitor = await findOrCreateVisitor(visitorKey, previousVisitorKey);
+    const visitor = await findOrCreateVisitor(visitorKey, previousVisitorKey, ipAddress);
 
     const existingConversation = conversationId
       ? await prisma.botConversation.findUnique({ where: { id: conversationId } })
       : null;
 
     const conversation = existingConversation
-        ? await prisma.botConversation.update({
+      ? await prisma.botConversation.update({
           where: { id: existingConversation.id },
           data: {
             courseId,
@@ -84,14 +102,102 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const generalAnswer = getGeneralChatAnswer(message);
+    const blockedByIp = await findBlockedVisitorByIp(ipAddress);
+    if (visitor?.status === "blocked" || blockedByIp) {
+      if (visitor && visitor.status !== "blocked") {
+        await prisma.visitor.update({
+          where: { id: visitor.id },
+          data: { status: "blocked", lastSeenAt: new Date() },
+        });
+      }
+
+      const answer = "Aap ka IP blocked hai. Admin unblock kare to aap chat dobara use kar sakty hen.";
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: answer,
+          metadata: { blocked: true, botName },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer,
+        canAnswer: false,
+        whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+        blocked: true,
+        botName,
+      });
+    }
+
+    if (isAbusiveMessage(message)) {
+      let blockedVisitor = visitor;
+      if (visitor) {
+        if (ipAddress) {
+          await prisma.visitor.updateMany({
+            where: { ipAddress },
+            data: { status: "blocked", lastSeenAt: new Date() },
+          });
+        } else {
+          await prisma.visitor.update({
+            where: { id: visitor.id },
+            data: { status: "blocked", lastSeenAt: new Date() },
+          });
+        }
+
+        blockedVisitor = await prisma.visitor.findUnique({ where: { id: visitor.id } });
+        if (blockedVisitor) {
+          const signal = await sendVisitorSignal(blockedVisitor, "Blocked", {
+            auto_block: true,
+            reason: "abusive_bot_message",
+          });
+          await prisma.visitorEvent.create({
+            data: {
+              visitorId: blockedVisitor.id,
+              eventName: "Blocked",
+              status: "blocked",
+              payload: { auto_block: true, reason: "abusive_bot_message" },
+              sentToMeta: signal.sentToMeta,
+              sentToGoogle: signal.sentToGoogle,
+              sentToTikTok: signal.sentToTikTok,
+              error: signal.error,
+            },
+          });
+        }
+      }
+
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: BOT_BLOCKED_ANSWER,
+          metadata: { blocked: true, botName },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer: BOT_BLOCKED_ANSWER,
+        canAnswer: false,
+        whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: blockedVisitor?.visitorKey || visitor?.visitorKey || visitorKey,
+        blocked: true,
+        botName,
+      });
+    }
+
+    const generalAnswer = getGeneralChatAnswer(message, botName);
     if (generalAnswer) {
       await prisma.botMessage.create({
         data: {
           conversationId: conversation.id,
           role: "assistant",
           content: generalAnswer,
-          metadata: { canAnswer: true, generalChat: true },
+          metadata: { canAnswer: true, generalChat: true, botName },
         },
       });
 
@@ -102,6 +208,7 @@ export async function POST(request: NextRequest) {
         whatsappUrl: null,
         expiresAt: conversation.expiresAt,
         visitorKey: visitor?.visitorKey || visitorKey,
+        botName,
       });
     }
 
@@ -113,7 +220,10 @@ export async function POST(request: NextRequest) {
       take: 10,
     });
 
-    const systemPrompt = buildBotSystemPrompt(context, settings.botSystemNote);
+    const systemPrompt = [
+      buildBotSystemPrompt(context, settings.botSystemNote),
+      `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
+    ].join("\n");
     const providerMessages: BotChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...recentMessages
@@ -185,6 +295,7 @@ export async function POST(request: NextRequest) {
           model: settings.botModel,
           whatsappUrl,
           providerError,
+          botName,
         },
       },
     });
@@ -196,6 +307,7 @@ export async function POST(request: NextRequest) {
       whatsappUrl,
       expiresAt: conversation.expiresAt,
       visitorKey: visitor?.visitorKey || visitorKey,
+      botName,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Bot chat fail";

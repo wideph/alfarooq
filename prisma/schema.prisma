@@ -109,6 +109,7 @@ model Visitor {
   landingPage      String?
   currentPath      String?
   userAgent        String?
+  ipAddress        String?
   status           String            @default("visitor")
   timeSpentSeconds Int               @default(0)
   firstSeenAt      DateTime          @default(now())
@@ -118,6 +119,9 @@ model Visitor {
   events           VisitorEvent[]
   botChats         BotConversation[]
   userQuestions    UserQuestion[]
+
+  @@index([ipAddress])
+  @@index([status, ipAddress])
 }
 
 model VisitorEvent {

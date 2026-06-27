@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 export default function Header() {
   const { settings } = useSiteSettings();
+  const pathname = usePathname();
+  const showHomeLink = pathname !== "/";
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-white/50 shadow-[0_2px_16px_-10px_rgba(37,99,235,0.4)]">
@@ -36,15 +39,17 @@ export default function Header() {
             </h1>
           </Link>
 
-          <nav className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="group flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-slate-700 bg-white/60 ring-1 ring-slate-200/70 hover:text-white hover:bg-gradient-to-r hover:from-primary-600 hover:to-accent-600 hover:ring-transparent hover:shadow-lg hover:shadow-primary-500/30 transition-all"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Home</span>
-            </Link>
-          </nav>
+          {showHomeLink && (
+            <nav className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="group flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-slate-700 bg-white/60 ring-1 ring-slate-200/70 hover:text-white hover:bg-gradient-to-r hover:from-primary-600 hover:to-accent-600 hover:ring-transparent hover:shadow-lg hover:shadow-primary-500/30 transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">Home</span>
+              </Link>
+            </nav>
+          )}
         </div>
       </div>
     </header>

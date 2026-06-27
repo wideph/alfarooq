@@ -11,6 +11,7 @@ import {
   X,
   Image as ImageIcon,
 } from "lucide-react";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 interface SiteSettingsForm {
   siteName: string;
@@ -38,24 +39,25 @@ export default function SiteSettingsPanel({
   defaultOpen = false,
   canWrite = true,
 }: SiteSettingsPanelProps) {
+  const { settings: initialSettings } = useSiteSettings();
   const [open, setOpen] = useState(defaultOpen);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<SiteSettingsForm>({
-    siteName: "Alfarooq Services",
-    heroText: "",
-    whatsappNumber: "",
-    logoFilename: null,
-    metaPixelId: "",
-    googleAdsTagId: "",
-    tiktokPixelId: "",
-    botEnabled: false,
-    botProvider: "openai",
-    botModel: "",
-    botSystemNote: "",
-    botApiKeySet: false,
-  });
+  const [form, setForm] = useState<SiteSettingsForm>(() => ({
+    siteName: initialSettings.siteName,
+    heroText: initialSettings.heroText,
+    whatsappNumber: initialSettings.whatsappNumber,
+    logoFilename: initialSettings.logoFilename,
+    metaPixelId: initialSettings.metaPixelId,
+    googleAdsTagId: initialSettings.googleAdsTagId,
+    tiktokPixelId: initialSettings.tiktokPixelId,
+    botEnabled: initialSettings.botEnabled,
+    botProvider: initialSettings.botProvider,
+    botModel: initialSettings.botModel,
+    botSystemNote: initialSettings.botSystemNote,
+    botApiKeySet: initialSettings.botApiKeySet,
+  }));
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [metaAccessToken, setMetaAccessToken] = useState("");
@@ -153,14 +155,6 @@ export default function SiteSettingsPanel({
     setSaving(false);
   }
 
-  if (open && loading && !loaded) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 flex justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
-      </div>
-    );
-  }
-
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
       <button
@@ -170,6 +164,9 @@ export default function SiteSettingsPanel({
         <span className="font-bold text-slate-900 flex items-center gap-2">
           <Settings className="w-5 h-5 text-primary-500" />
           Website Settings (Logo, Hero Text)
+          {loading && (
+            <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
+          )}
         </span>
         <span className="text-sm text-slate-400">{open ? "Hide" : "Show"}</span>
       </button>
@@ -236,7 +233,7 @@ export default function SiteSettingsPanel({
                   ) : form.logoFilename ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`/api/media/${encodeURIComponent(form.logoFilename)}`}
+                      src={`/api/media/${encodeURIComponent(form.logoFilename)}?direct=1`}
                       alt="Logo"
                       className="w-full h-full object-cover"
                     />

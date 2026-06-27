@@ -38,6 +38,7 @@ interface Sample {
   title: string;
   type: string;
   filename: string;
+  order: number;
 }
 
 interface Question {
@@ -68,6 +69,10 @@ interface UserQuestion {
 function nextPreference(items: { order: number }[]) {
   if (items.length === 0) return 1;
   return Math.max(...items.map((i) => i.order)) + 1;
+}
+
+function orderItems<T extends { order: number }>(items: T[]) {
+  return [...items].sort((a, b) => a.order - b.order);
 }
 
 function formatDateTime(value: string) {
@@ -180,8 +185,35 @@ export default function AdminDashboard() {
     setQaForm((prev) => ({ ...prev, order: nextPreference(qaItems) }));
   }
 
-  function refreshCourseViews(courseId: string) {
-    return Promise.all([loadCourseDetail(courseId), loadCourses()]);
+  function refreshQaOrder(detail: {
+    questions: Question[];
+    userQuestions: UserQuestion[];
+  }) {
+    const qaItems = [
+      ...detail.questions,
+      ...detail.userQuestions.filter((q) => q.status === "answered"),
+    ];
+    setQaForm((prev) => ({ ...prev, order: nextPreference(qaItems) }));
+  }
+
+  function patchCourseCount(
+    courseId: string,
+    field: "samples" | "questions",
+    delta: number
+  ) {
+    setCourses((prev) =>
+      prev.map((course) =>
+        course.id === courseId
+          ? {
+              ...course,
+              _count: {
+                ...course._count,
+                [field]: Math.max(0, course._count[field] + delta),
+              },
+            }
+          : course
+      )
+    );
   }
 
   async function answerUserQuestion(questionId: string) {
@@ -207,6 +239,7 @@ export default function AdminDashboard() {
     });
 
     if (res.ok) {
+      const updated = (await res.json()) as UserQuestion;
       setMessage("User ka sawal answer ho gaya aur frontend par show hoga!");
       setUserAnswerForm((prev) => {
         const next = { ...prev };
@@ -219,7 +252,16 @@ export default function AdminDashboard() {
         return next;
       });
       setUserAnswerMediaFile(null);
-      loadCourseDetail(selectedCourse);
+      const nextUserQuestions = (courseDetail?.userQuestions || []).map((item) =>
+        item.id === questionId ? { ...item, ...updated } : item
+      );
+      setCourseDetail((prev) =>
+        prev ? { ...prev, userQuestions: nextUserQuestions } : prev
+      );
+      refreshQaOrder({
+        questions: courseDetail?.questions || [],
+        userQuestions: nextUserQuestions,
+      });
     }
     setSaving(false);
   }
@@ -238,7 +280,16 @@ export default function AdminDashboard() {
         setEditingAnsweredUser(null);
         setAnsweredUserEditForm({ question: "", answer: "", order: "1" });
       }
-      loadCourseDetail(selectedCourse);
+      const nextUserQuestions = (courseDetail?.userQuestions || []).filter(
+        (item) => item.id !== questionId
+      );
+      setCourseDetail((prev) =>
+        prev ? { ...prev, userQuestions: nextUserQuestions } : prev
+      );
+      refreshQaOrder({
+        questions: courseDetail?.questions || [],
+        userQuestions: nextUserQuestions,
+      });
     }
   }
 
@@ -280,12 +331,22 @@ export default function AdminDashboard() {
     });
 
     if (res.ok) {
+      const updated = (await res.json()) as UserQuestion;
       setMessage("User sawal/jawab update ho gaya!");
       setEditingAnsweredUser(null);
       setAnsweredUserEditForm({ question: "", answer: "", order: "1" });
       setAnsweredUserMediaFile(null);
       setRemoveAnsweredUserMedia(false);
-      loadCourseDetail(selectedCourse);
+      const nextUserQuestions = (courseDetail?.userQuestions || []).map((item) =>
+        item.id === updated.id ? { ...item, ...updated } : item
+      );
+      setCourseDetail((prev) =>
+        prev ? { ...prev, userQuestions: nextUserQuestions } : prev
+      );
+      refreshQaOrder({
+        questions: courseDetail?.questions || [],
+        userQuestions: nextUserQuestions,
+      });
     }
     setSaving(false);
   }
@@ -350,10 +411,19 @@ export default function AdminDashboard() {
     });
 
     if (res.ok) {
+      const sample = (await res.json()) as Sample;
       setMessage("Sample upload ho gaya!");
       setUploadFile(null);
       setUploadTitle("");
-      await refreshCourseViews(selectedCourse);
+      setCourseDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              samples: orderItems([...prev.samples, sample]),
+            }
+          : prev
+      );
+      patchCourseCount(selectedCourse, "samples", 1);
     } else {
       const data = await res.json();
       setMessage(`Error: ${data.error}`);
@@ -371,7 +441,15 @@ export default function AdminDashboard() {
 
     if (res.ok) {
       setMessage("Sample delete ho gaya");
-      await refreshCourseViews(selectedCourse);
+      setCourseDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              samples: prev.samples.filter((sample) => sample.id !== sampleId),
+            }
+          : prev
+      );
+      patchCourseCount(selectedCourse, "samples", -1);
     }
   }
 
@@ -400,12 +478,27 @@ export default function AdminDashboard() {
         body: formData,
       });
       if (res.ok) {
+        const updated = (await res.json()) as Question;
         setMessage("Question update ho gaya!");
         setEditingQuestion(null);
-        setQaForm({ question: "", answer: "", order: nextPreference(courseDetail?.questions || []) });
         setQaMediaFile(null);
         setRemoveQaMedia(false);
-        await refreshCourseViews(selectedCourse);
+        const nextQuestions = orderItems(
+          (courseDetail?.questions || []).map((item) =>
+            item.id === updated.id ? updated : item
+          )
+        );
+        const answeredUsers = (courseDetail?.userQuestions || []).filter(
+          (item) => item.status === "answered"
+        );
+        setCourseDetail((prev) =>
+          prev ? { ...prev, questions: nextQuestions } : prev
+        );
+        setQaForm({
+          question: "",
+          answer: "",
+          order: nextPreference([...nextQuestions, ...answeredUsers]),
+        });
       }
     } else {
       const res = await fetch(`/api/courses/${selectedCourse}/questions`, {
@@ -413,10 +506,22 @@ export default function AdminDashboard() {
         body: formData,
       });
       if (res.ok) {
+        const created = (await res.json()) as Question;
         setMessage("Question add ho gaya!");
-        setQaForm({ question: "", answer: "", order: nextPreference(courseDetail?.questions || []) });
         setQaMediaFile(null);
-        await refreshCourseViews(selectedCourse);
+        const nextQuestions = orderItems([...(courseDetail?.questions || []), created]);
+        const answeredUsers = (courseDetail?.userQuestions || []).filter(
+          (item) => item.status === "answered"
+        );
+        setCourseDetail((prev) =>
+          prev ? { ...prev, questions: nextQuestions } : prev
+        );
+        setQaForm({
+          question: "",
+          answer: "",
+          order: nextPreference([...nextQuestions, ...answeredUsers]),
+        });
+        patchCourseCount(selectedCourse, "questions", 1);
       }
     }
     setSaving(false);
@@ -432,7 +537,20 @@ export default function AdminDashboard() {
 
     if (res.ok) {
       setMessage("Question delete ho gaya");
-      await refreshCourseViews(selectedCourse);
+      const nextQuestions = (courseDetail?.questions || []).filter(
+        (item) => item.id !== questionId
+      );
+      const answeredUsers = (courseDetail?.userQuestions || []).filter(
+        (item) => item.status === "answered"
+      );
+      setCourseDetail((prev) =>
+        prev ? { ...prev, questions: nextQuestions } : prev
+      );
+      setQaForm((prev) => ({
+        ...prev,
+        order: nextPreference([...nextQuestions, ...answeredUsers]),
+      }));
+      patchCourseCount(selectedCourse, "questions", -1);
     }
   }
 
