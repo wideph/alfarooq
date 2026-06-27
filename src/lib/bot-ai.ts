@@ -34,8 +34,8 @@ async function callOpenAiLike(
     body: JSON.stringify({
       model: settings.botModel,
       messages,
-      temperature: 0.1,
-      max_tokens: 900,
+      temperature: 0.2,
+      max_tokens: 1500,
       response_format: { type: "json_object" },
     }),
   });
@@ -60,6 +60,11 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
       content: message.content,
     }));
 
+  // Prefill the response with "{" so Claude is forced to continue as JSON
+  // (Claude has no json_object response_format). We re-add the "{" below.
+  const jsonPrefill = '{"canAnswer"';
+  conversation.push({ role: "assistant", content: jsonPrefill });
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -71,8 +76,9 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
       model: settings.botModel,
       system,
       messages: conversation,
-      temperature: 0.1,
-      max_tokens: 900,
+      temperature: 0.2,
+      max_tokens: 1500,
+      stop_sequences: ["```"],
     }),
   });
 
@@ -84,7 +90,8 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
   const providerError = data.error?.message;
   if (providerError) throw new Error(providerError);
 
-  return data.content?.find((item) => item.type === "text")?.text || "";
+  const text = data.content?.find((item) => item.type === "text")?.text || "";
+  return text ? `${jsonPrefill}${text}` : "";
 }
 
 export async function callBotModel(settings: SiteSettings, messages: BotChatMessage[]) {

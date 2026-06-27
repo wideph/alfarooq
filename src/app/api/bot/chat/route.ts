@@ -234,42 +234,47 @@ export async function POST(request: NextRequest) {
         }) satisfies BotChatMessage),
     ];
 
-    let parsed = { canAnswer: false, answer: BOT_FALLBACK_ANSWER };
+    let parsed = { canAnswer: false, answer: "", parsed: false };
     let providerError: string | null = null;
 
     try {
       const raw = await callBotModel(settings, providerMessages);
       parsed = parseBotJson(raw);
-      if (!parsed.answer) parsed.answer = BOT_FALLBACK_ANSWER;
     } catch (error) {
       providerError = error instanceof Error ? error.message : "Bot provider failed";
     }
 
+    // A usable answer is any non-empty text that is not itself the fallback line.
+    const trimmedAnswer = parsed.answer.trim();
+    const hasUsableAnswer =
+      trimmedAnswer.length > 0 && trimmedAnswer !== BOT_FALLBACK_ANSWER;
+
+    // Trust a real answer even if the model conservatively flagged canAnswer=false.
+    const canAnswer = parsed.canAnswer || hasUsableAnswer;
+    const answerBody = hasUsableAnswer ? trimmedAnswer : BOT_FALLBACK_ANSWER;
+
+    // Queue for admin whenever we could not fully answer (fallback used or partial).
     const shouldQueueForAdmin =
-      !parsed.canAnswer || parsed.answer.includes(BOT_FALLBACK_ANSWER);
+      !hasUsableAnswer || answerBody.includes(BOT_FALLBACK_ANSWER);
 
-    if (!parsed.canAnswer) {
-      parsed.answer = BOT_FALLBACK_ANSWER;
+    if (shouldQueueForAdmin && course?.id) {
+      await prisma.userQuestion.create({
+        data: {
+          courseId: course.id,
+          question: message,
+          status: "pending",
+          source: "bot",
+          visitorId: visitor?.id,
+          botConversationId: conversation.id,
+          publishForUsers: true,
+        },
+      });
     }
 
-    if (shouldQueueForAdmin) {
-      if (course?.id) {
-        await prisma.userQuestion.create({
-          data: {
-            courseId: course.id,
-            question: message,
-            status: "pending",
-            source: "bot",
-            visitorId: visitor?.id,
-            botConversationId: conversation.id,
-            publishForUsers: true,
-          },
-        });
-      }
-    }
-
+    // For requirement / proceed questions always offer the WhatsApp hand-off so
+    // the visitor can share their documents — even when we fell back.
     const whatsappUrl =
-      parsed.canAnswer && isRequirementQuestion(message) && course
+      isRequirementQuestion(message) && course
         ? buildWhatsappUrl(settings.whatsappNumber, [
             "Assalam o Alaikum, main course proceed karna chahta/chahti hoon.",
             `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
@@ -281,8 +286,8 @@ export async function POST(request: NextRequest) {
         : null;
 
     const answer = whatsappUrl
-      ? `${parsed.answer}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne baqi documents isi number par share karein.`
-      : parsed.answer;
+      ? `${answerBody}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne baqi documents isi number par share karein.`
+      : answerBody;
 
     await prisma.botMessage.create({
       data: {
@@ -290,7 +295,7 @@ export async function POST(request: NextRequest) {
         role: "assistant",
         content: answer,
         metadata: {
-          canAnswer: parsed.canAnswer,
+          canAnswer,
           provider: settings.botProvider,
           model: settings.botModel,
           whatsappUrl,
@@ -303,7 +308,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       conversationId: conversation.id,
       answer,
-      canAnswer: parsed.canAnswer,
+      canAnswer,
       whatsappUrl,
       expiresAt: conversation.expiresAt,
       visitorKey: visitor?.visitorKey || visitorKey,

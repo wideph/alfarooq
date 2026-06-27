@@ -189,9 +189,35 @@ textarea {
   background-repeat: no-repeat;
 }
 
+/* Temporary highlight when a bot link scrolls the visitor to a Q&A or sample */
+.bbte-hash-highlight {
+  animation: bbteHashHighlight 2.4s ease-out;
+  scroll-margin-top: 96px;
+}
+
+@keyframes bbteHashHighlight {
+  0%,
+  15% {
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.55), 0 0 0 8px rgba(124, 58, 237, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+  }
+}
+
+/* Anchored elements should not hide under any sticky chrome when scrolled to */
+[id^="qa-"],
+[id^="sample-"] {
+  scroll-margin-top: 96px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up {
     animation: none !important;
     opacity: 1;
+  }
+
+  .bbte-hash-highlight {
+    animation: none !important;
   }
 }

@@ -17,11 +17,26 @@ const REQUIREMENT_WORDS = [
   "chahye",
   "chahiye",
   "kya kya",
+  "kya chahiye",
+  "darkar",
+  "kaghzat",
+  "kaghazat",
+  "papers",
+  "process",
+  "apply",
+  "admission",
+  "daakhla",
+  "dakhla",
+  "register",
+  "registration",
+  "enroll",
+  "enrollment",
   "درکار",
   "کاغذات",
   "دستاویز",
   "چاہیے",
   "پروسیڈ",
+  "داخلہ",
 ];
 
 const GENERAL_CHAT_PATTERNS = [
@@ -249,27 +264,40 @@ export async function buildCourseBotContext(courseId: string | null) {
 
 export function buildBotSystemPrompt(context: string, extraInstruction: string) {
   return [
-    "You are the website course Q&A bot.",
-    "Return JSON only with this shape: {\"canAnswer\": boolean, \"answer\": string}.",
-    "Use only the supplied course context, published Q&A, samples, answered user Q&A, and hidden bot training.",
-    "Never add outside facts. Never invent documents, fees, dates, promises, or requirements.",
-    "Keep the meaning of admin-provided answers unchanged. Small wording changes for the user's language are allowed.",
-    "Search BOTH questions and answers. Treat every Q&A answer as a knowledge paragraph, not only as an answer to its exact saved question.",
-    "Do not require exact question wording. If the user's words are changed, reordered, shortened, translated, misspelled, or written in Roman Urdu/Urdu/English mix, infer the intended meaning and then search the supplied answers for matching facts.",
-    "Compare both: (1) literal keywords from the user's question and (2) semantic meaning/synonyms. Use AI reasoning to map words like documents/requirements/papers/kaghazat/chahye/proceed to the same concept when the supplied data supports it.",
-    "If a saved answer contains the information even though its saved question looks different, use that answer.",
-    "Handle spelling mistakes, missing spaces, plural/singular forms, and close synonyms by matching the intended meaning against the supplied data.",
-    "Before deciding canAnswer=false, internally check course description, every published Q&A answer, answered user Q&A, and hidden bot training for any partial or full answer.",
-    "If one user question has multiple parts and answers are present across 2 or 3 saved Q&A/training entries, combine only the relevant pieces into one answer.",
-    "If part of the answer is present, answer that part and then add the fallback sentence only for the missing part. In that case set canAnswer=true.",
-    "Set canAnswer=false only when no useful course-related answer is present at all in the supplied data.",
-    "If the visitor asks about another course, do not answer from the current course. Give the other course link only.",
-    "If the visitor asks about samples, pictures, PDFs, or attached material, include the exact supplied link.",
-    "Bare domains such as bbte.edu.pk are valid links. Preserve domains and URLs exactly when they appear in the supplied data.",
-    "If the visitor asks about requirements/documents/proceeding, answer only from course data, then ask them to confirm any course/session/details already mentioned in the chat. Do not invent missing documents.",
-    "For greetings, name questions, or casual small talk, answer naturally and briefly. Do not use the fallback sentence for casual chat.",
-    `Fallback sentence: ${BOT_FALLBACK_ANSWER}`,
-    extraInstruction ? `Extra admin instruction: ${extraInstruction}` : "",
+    "You are the website course Q&A assistant. Your default behaviour is to HELP and ANSWER.",
+    'Output format: return ONLY a single-line JSON object: {"canAnswer": boolean, "answer": string}.',
+    'JSON rules: no markdown, no code fences, no text before or after the JSON. Inside the "answer" string escape newlines as \\n and quotes as \\". Keep the whole reply valid JSON.',
+    "",
+    "ANSWERING POLICY (read carefully):",
+    "- Answer the question whenever the supplied data contains anything relevant, even partially. Lean strongly towards canAnswer=true.",
+    "- Set canAnswer=false ONLY when the supplied data is completely silent about the topic. This must be the rare exception, not the default.",
+    "- The fallback sentence is a last resort. Do NOT use it just because the wording differs, the question is informal, or you are slightly unsure.",
+    "- Treat EVERY published Q&A answer, answered user Q&A, hidden bot training entry, and the course description as a knowledge base. Search across all of them, in both the questions and the answers.",
+    "- Match by meaning, not exact words. The user may write in Roman Urdu, Urdu, English, or a mix, with typos, missing spaces, slang, plural/singular changes, reordered or shortened words. Infer the intent, then find the matching facts. Small wording changes to fit the user's language are allowed, but keep the meaning of admin answers unchanged.",
+    "- Map synonyms to the same concept (e.g. documents = papers = kaghazat = darkar = requirements; proceed = aage barhna = apply = daakhla).",
+    "- If the answer spans 2-3 entries, combine only the relevant pieces into one clear answer.",
+    "- If you can answer part of it, answer that part (canAnswer=true) and append the fallback sentence only for the missing part.",
+    "",
+    "GROUNDING:",
+    "- Use only the supplied data. Never invent documents, fees, dates, prices, promises, or requirements that are not in the data.",
+    "",
+    "SAMPLES, IMAGES & LINKS:",
+    "- If the visitor asks about a sample, picture, image, PDF, photo, attachment, or any attached material, include the EXACT supplied link for that item so clicking it scrolls them to it.",
+    "- If a Q&A answer has an attached image/PDF, share that Q&A's supplied link too.",
+    "- Bare domains such as bbte.edu.pk are valid links; preserve domains and URLs exactly as supplied.",
+    "- If the visitor asks about a different course, do not answer from the current course; give only that other course's link.",
+    "",
+    "REQUIREMENTS / DOCUMENTS / PROCEEDING:",
+    "- When the visitor asks what documents/requirements are needed or how to proceed/apply, first give the documents and requirements found in the supplied data.",
+    "- Then read your own answer and continue the conversation: ask the visitor for any further details needed to proceed that the data does not already cover, and request anything still missing.",
+    "- If the visitor already mentioned their course, session, program or similar details earlier in this chat, confirm those back to them (e.g. ask whether those details are correct for their case) instead of asking again.",
+    "- Set canAnswer=true for these questions whenever the data lists any documents/requirements. Do not invent documents that are not in the data.",
+    "",
+    "SMALL TALK:",
+    "- For greetings, your name, thanks, or casual chat, reply naturally and briefly. Never use the fallback sentence for casual chat.",
+    "",
+    `Fallback sentence (use sparingly, exact text): ${BOT_FALLBACK_ANSWER}`,
+    extraInstruction ? `Extra admin instruction (follow this): ${extraInstruction}` : "",
     "",
     "COURSE CONTEXT START",
     context,
@@ -279,23 +307,139 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     .join("\n");
 }
 
-export function parseBotJson(raw: string) {
-  const trimmed = raw.trim();
-  const jsonText =
-    trimmed.startsWith("{") && trimmed.endsWith("}")
-      ? trimmed
-      : trimmed.match(/\{[\s\S]*\}/)?.[0] || "";
+export type ParsedBotReply = {
+  canAnswer: boolean;
+  answer: string;
+  parsed: boolean;
+};
 
-  try {
-    const parsed = JSON.parse(jsonText) as { canAnswer?: unknown; answer?: unknown };
-    return {
-      canAnswer: parsed.canAnswer === true,
-      answer: typeof parsed.answer === "string" ? parsed.answer.trim() : "",
-    };
-  } catch {
-    return {
-      canAnswer: false,
-      answer: BOT_FALLBACK_ANSWER,
-    };
+// Pull the first balanced {...} object out of a larger string. If the JSON was
+// truncated (model hit the token limit) we still return from the first "{" so
+// the recovery/sanitize steps can salvage a partial answer.
+function extractJsonObject(text: string) {
+  const start = text.indexOf("{");
+  if (start === -1) return "";
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (char === "\\") {
+      escape = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
   }
+
+  return text.slice(start);
+}
+
+// Models frequently emit raw newlines / tabs / control characters inside JSON
+// string values, which is invalid JSON. Escape them so JSON.parse succeeds.
+// Also closes an unterminated string and balances braces when the reply was cut
+// off mid-stream.
+function sanitizeJsonText(text: string) {
+  let out = "";
+  let inString = false;
+  let escape = false;
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (escape) {
+      out += char;
+      escape = false;
+      continue;
+    }
+    if (char === "\\") {
+      out += char;
+      escape = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      out += char;
+      continue;
+    }
+    if (inString) {
+      if (char === "\n") out += "\\n";
+      else if (char === "\r") out += "\\r";
+      else if (char === "\t") out += "\\t";
+      else if (char.charCodeAt(0) < 0x20)
+        out += `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
+      else out += char;
+      continue;
+    }
+    if (char === "{") depth++;
+    else if (char === "}") depth--;
+    out += char;
+  }
+
+  if (inString) out += '"';
+  while (depth-- > 0) out += "}";
+  return out;
+}
+
+// Last-resort extraction of just the "answer" field from broken JSON.
+function recoverAnswerField(text: string) {
+  const match = text.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (!match) return "";
+  try {
+    return (JSON.parse(`"${match[1]}"`) as string).trim();
+  } catch {
+    return match[1]
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"')
+      .trim();
+  }
+}
+
+export function parseBotJson(raw: string): ParsedBotReply {
+  const trimmed = (raw || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  if (!trimmed) return { canAnswer: false, answer: "", parsed: false };
+
+  const jsonText = extractJsonObject(trimmed);
+
+  for (const candidate of [jsonText, sanitizeJsonText(jsonText)]) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate) as { canAnswer?: unknown; answer?: unknown };
+      const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
+      if (answer || typeof parsed.canAnswer === "boolean") {
+        return { canAnswer: parsed.canAnswer === true, answer, parsed: true };
+      }
+    } catch {
+      // fall through to the next candidate / recovery
+    }
+  }
+
+  const recovered = recoverAnswerField(jsonText);
+  if (recovered) return { canAnswer: true, answer: recovered, parsed: true };
+
+  // The model ignored the JSON contract and replied in plain prose. Use it
+  // rather than burning the turn on a fallback.
+  if (!trimmed.includes("{") && !trimmed.includes("}")) {
+    return { canAnswer: true, answer: trimmed, parsed: true };
+  }
+
+  return { canAnswer: false, answer: "", parsed: false };
 }

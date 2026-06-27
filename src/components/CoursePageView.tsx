@@ -59,6 +59,38 @@ export default function CoursePageView({
     if (hasPdfSample) void getPdfJs();
   }, [hasPdfSample]);
 
+  // Scroll to (and briefly highlight) the Q&A / sample a bot link points at.
+  // Content renders/relayouts async (images, PDFs), so retry until the id exists.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function scrollToHash() {
+      const hash = window.location.hash;
+      if (hash.length < 2) return;
+      const id = decodeURIComponent(hash.slice(1));
+
+      let attempts = 0;
+      const tryScroll = () => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.remove("bbte-hash-highlight");
+          // reflow so the animation can restart on repeat clicks
+          void el.offsetWidth;
+          el.classList.add("bbte-hash-highlight");
+          window.setTimeout(() => el.classList.remove("bbte-hash-highlight"), 2600);
+          return;
+        }
+        if (attempts++ < 10) window.setTimeout(tryScroll, 250);
+      };
+      tryScroll();
+    }
+
+    scrollToHash();
+    window.addEventListener("hashchange", scrollToHash);
+    return () => window.removeEventListener("hashchange", scrollToHash);
+  }, [course.id]);
+
   const reloadCourse = useCallback(() => {
     fetch(`/api/courses/${course.id}`)
       .then((r) => {
