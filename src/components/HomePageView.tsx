@@ -54,10 +54,10 @@ export default function HomePageView({
                       <h4 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 group-hover:text-primary-600 transition-colors urdu-text leading-[1.85]">
                         {course.title}
                       </h4>
-                      <p className="text-slate-600 text-sm sm:text-base leading-loose mb-8 flex-1 line-clamp-5 urdu-text whitespace-pre-line">
+                      <p className="text-slate-600 text-sm sm:text-base leading-loose mb-8 flex-[1_1_calc(0%+1mm)] line-clamp-5 urdu-text whitespace-pre-line">
                         <LinkifiedText text={course.description} />
                       </p>
-                      <div className="flex items-center gap-3 text-sm mb-5 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-3 text-sm mb-[calc(1.25rem-1mm)] pt-4 border-t border-slate-100">
                         <span className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-primary-700 font-medium">
                           <FileText className="w-4 h-4" />
                           {course._count.samples} samples
