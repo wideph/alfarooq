@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Bot, Loader2, MessageCircle, Send, X } from "lucide-react";
+import LinkifiedText from "@/components/LinkifiedText";
 import { getOrCreateVisitorKey, peekPreviousVisitorKey } from "@/lib/visitor-client";
 
 type CourseOption = { id: string; title: string };
@@ -18,34 +19,6 @@ function getStoredBotName() {
   const next = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
   localStorage.setItem(BOT_NAME_KEY, next);
   return next;
-}
-
-function renderLinkedText(text: string) {
-  const nodes: ReactNode[] = [];
-  const markdownLink = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s]+|\/courses\/[^\s]+)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = markdownLink.exec(text))) {
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    const label = match[1] || match[3];
-    const href = match[2] || match[3];
-    nodes.push(
-      <a
-        key={`${href}-${match.index}`}
-        href={href}
-        className="font-semibold text-primary-700 underline underline-offset-2"
-        target={href.startsWith("http") ? "_blank" : undefined}
-        rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
-      >
-        {label}
-      </a>
-    );
-    lastIndex = markdownLink.lastIndex;
-  }
-
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes;
 }
 
 export default function BotChatWidget() {
@@ -213,7 +186,10 @@ export default function BotChatWidget() {
                         : "bg-white text-slate-700 border border-slate-200"
                     }`}
                   >
-                    {renderLinkedText(message.content)}
+                    <LinkifiedText
+                      text={message.content}
+                      className="font-semibold text-primary-700 underline underline-offset-2"
+                    />
                     {message.whatsappUrl && (
                       <a
                         href={message.whatsappUrl}

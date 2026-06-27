@@ -152,7 +152,7 @@ export function buildWhatsappUrl(
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
-function clip(value: string | null | undefined, max = 1400) {
+function clip(value: string | null | undefined, max = 2200) {
   const text = (value || "").trim();
   if (text.length <= max) return text;
   return `${text.slice(0, max)}...`;
@@ -215,7 +215,7 @@ export async function buildCourseBotContext(courseId: string | null) {
   const context = [
     `CURRENT COURSE TITLE: ${course.title}`,
     `CURRENT COURSE URL: ${currentCourseUrl}`,
-    `CURRENT COURSE DESCRIPTION:\n${clip(course.description, 2500)}`,
+    `CURRENT COURSE DESCRIPTION:\n${clip(course.description, 3500)}`,
     "",
     "SAMPLES / ATTACHED MATERIAL LINKS:",
     ...course.samples.map(
@@ -226,18 +226,18 @@ export async function buildCourseBotContext(courseId: string | null) {
     "PUBLISHED COURSE Q&A:",
     ...course.questions.map(
       (item) =>
-        `- Q: ${clip(item.question, 600)}\n  A: ${clip(item.answer)}\n  Link: ${currentCourseUrl}#qa-${item.id}`
+        `- Q: ${clip(item.question, 900)}\n  A: ${clip(item.answer, 2600)}\n  Link: ${currentCourseUrl}#qa-${item.id}`
     ),
     "",
     "ANSWERED USER Q&A AND TRAINING-ONLY ANSWERS:",
     ...course.userQuestions.map(
       (item) =>
-        `- Q: ${clip(item.question, 600)}\n  A: ${clip(item.answer)}\n  Link: ${currentCourseUrl}#qa-user-${item.id}\n  Training only: ${item.trainingOnly || item.status === "training"}`
+        `- Q: ${clip(item.question, 900)}\n  A: ${clip(item.answer, 2600)}\n  Link: ${currentCourseUrl}#qa-user-${item.id}\n  Training only: ${item.trainingOnly || item.status === "training"}`
     ),
     "",
     "HIDDEN BOT TRAINING:",
     ...course.botTraining.map(
-      (item) => `- Q: ${clip(item.question, 600)}\n  A: ${clip(item.answer)}`
+      (item) => `- Q: ${clip(item.question, 900)}\n  A: ${clip(item.answer, 2600)}`
     ),
     "",
     "OTHER COURSE LINKS:",
@@ -254,13 +254,18 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "Use only the supplied course context, published Q&A, samples, answered user Q&A, and hidden bot training.",
     "Never add outside facts. Never invent documents, fees, dates, promises, or requirements.",
     "Keep the meaning of admin-provided answers unchanged. Small wording changes for the user's language are allowed.",
-    "Search BOTH questions and answers. The user's wording may match answer text even when it does not match a saved question.",
-    "Handle Roman Urdu, Urdu, English, spelling mistakes, missing spaces, and close synonyms by matching the intended meaning against the supplied data.",
+    "Search BOTH questions and answers. Treat every Q&A answer as a knowledge paragraph, not only as an answer to its exact saved question.",
+    "Do not require exact question wording. If the user's words are changed, reordered, shortened, translated, misspelled, or written in Roman Urdu/Urdu/English mix, infer the intended meaning and then search the supplied answers for matching facts.",
+    "Compare both: (1) literal keywords from the user's question and (2) semantic meaning/synonyms. Use AI reasoning to map words like documents/requirements/papers/kaghazat/chahye/proceed to the same concept when the supplied data supports it.",
+    "If a saved answer contains the information even though its saved question looks different, use that answer.",
+    "Handle spelling mistakes, missing spaces, plural/singular forms, and close synonyms by matching the intended meaning against the supplied data.",
+    "Before deciding canAnswer=false, internally check course description, every published Q&A answer, answered user Q&A, and hidden bot training for any partial or full answer.",
     "If one user question has multiple parts and answers are present across 2 or 3 saved Q&A/training entries, combine only the relevant pieces into one answer.",
     "If part of the answer is present, answer that part and then add the fallback sentence only for the missing part. In that case set canAnswer=true.",
     "Set canAnswer=false only when no useful course-related answer is present at all in the supplied data.",
     "If the visitor asks about another course, do not answer from the current course. Give the other course link only.",
     "If the visitor asks about samples, pictures, PDFs, or attached material, include the exact supplied link.",
+    "Bare domains such as bbte.edu.pk are valid links. Preserve domains and URLs exactly when they appear in the supplied data.",
     "If the visitor asks about requirements/documents/proceeding, answer only from course data, then ask them to confirm any course/session/details already mentioned in the chat. Do not invent missing documents.",
     "For greetings, name questions, or casual small talk, answer naturally and briefly. Do not use the fallback sentence for casual chat.",
     `Fallback sentence: ${BOT_FALLBACK_ANSWER}`,

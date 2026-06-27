@@ -10,6 +10,7 @@ import ImageViewer from "@/components/ImageViewer";
 import QASection, { type QAItem } from "@/components/QASection";
 import AskQuestionForm from "@/components/AskQuestionForm";
 import SubmitQuestionModal from "@/components/SubmitQuestionModal";
+import LinkifiedText from "@/components/LinkifiedText";
 import type { PublishedCourseDetail } from "@/lib/get-course";
 import {
   ArrowLeft,
@@ -93,7 +94,7 @@ export default function CoursePageView({
               {course.title}
             </h1>
             <p className="relative text-slate-600 leading-loose text-base sm:text-lg urdu-text whitespace-pre-line pl-3">
-              {course.description}
+              <LinkifiedText text={course.description} />
             </p>
           </div>
 

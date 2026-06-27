@@ -2,6 +2,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import HeroSection from "@/components/HeroSection";
+import LinkifiedText from "@/components/LinkifiedText";
 import type { SiteSettingsData } from "@/lib/site-settings";
 import type { PublishedCourse } from "@/lib/get-published-courses";
 import {
@@ -54,7 +55,7 @@ export default function HomePageView({
                         {course.title}
                       </h4>
                       <p className="text-slate-600 text-sm sm:text-base leading-loose mb-8 flex-1 line-clamp-5 urdu-text whitespace-pre-line">
-                        {course.description}
+                        <LinkifiedText text={course.description} />
                       </p>
                       <div className="flex items-center gap-3 text-sm mb-5 pt-4 border-t border-slate-100">
                         <span className="flex items-center gap-1.5 rounded-full bg-primary-50 px-3 py-1 text-primary-700 font-medium">
