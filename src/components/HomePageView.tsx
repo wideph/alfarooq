@@ -46,7 +46,7 @@ export default function HomePageView({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {courses.map((course, index) => (
                 <Link key={course.id} href={`/courses/${course.id}`} className="group animate-fade-in-up" style={{ animationDelay: `${index * 90}ms` }}>
-                  <article className="relative min-h-[22rem] h-full rounded-3xl bg-white/85 backdrop-blur-md border border-white/70 shadow-lg shadow-sky-100/50 ring-1 ring-sky-100/40 hover:shadow-2xl hover:shadow-primary-200/50 hover:ring-primary-200/60 hover:-translate-y-1.5 transition-all duration-300 overflow-hidden flex flex-col">
+                  <article className="relative min-h-[calc(22rem+1mm)] h-full rounded-3xl bg-white/85 backdrop-blur-md border border-white/70 shadow-lg shadow-sky-100/50 ring-1 ring-sky-100/40 hover:shadow-2xl hover:shadow-primary-200/50 hover:ring-primary-200/60 hover:-translate-y-1.5 transition-all duration-300 overflow-hidden flex flex-col">
                     {/* gradient glow border on hover */}
                     <div className="pointer-events-none absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-sky-400/10 via-violet-400/10 to-emerald-400/10" />
                     <div className="h-3 bg-gradient-to-r from-sky-500 via-primary-500 to-emerald-400 bg-[length:200%_100%] group-hover:bg-[position:100%] transition-all duration-500" />
