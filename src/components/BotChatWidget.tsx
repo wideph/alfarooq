@@ -35,6 +35,8 @@ export default function BotChatWidget() {
   const bottomClass = pathname !== "/" && !pathname.startsWith("/admin") ? "bottom-28 sm:bottom-32" : "bottom-5";
   const visitorKeyRef = useRef<string | null>(null);
   const panelEndRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
 
   const pathCourseId = useMemo(() => {
     const match = pathname.match(/^\/courses\/([^/?#]+)/);
@@ -66,6 +68,19 @@ export default function BotChatWidget() {
   useEffect(() => {
     panelEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
+
+  // Clicking anywhere outside the chat (anywhere else on the page) closes it.
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (toggleRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -125,6 +140,7 @@ export default function BotChatWidget() {
   return (
     <>
       <button
+        ref={toggleRef}
         type="button"
         onClick={() => setOpen(true)}
         className={`fixed ${bottomClass} right-5 sm:right-6 z-[95] flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-600 to-primary-600 px-5 py-3 text-white font-bold shadow-[0_12px_32px_-8px_rgba(37,99,235,0.55)] ring-2 ring-white/70 hover:scale-105 active:scale-95 transition-all`}
@@ -135,7 +151,15 @@ export default function BotChatWidget() {
       </button>
 
       {open && (
-        <div className="fixed inset-x-3 bottom-4 z-[110] sm:left-auto sm:right-6 sm:w-[24rem]">
+        <div
+          ref={panelRef}
+          className="fixed inset-x-3 bottom-4 z-[110] sm:left-auto sm:right-6 sm:w-[24rem]"
+          onClickCapture={(event) => {
+            // Clicking any link inside the chat (sample/Q&A scroll link or the
+            // WhatsApp button) closes the chat so the visitor sees where it led.
+            if ((event.target as HTMLElement).closest("a")) setOpen(false);
+          }}
+        >
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
@@ -152,14 +176,7 @@ export default function BotChatWidget() {
               </button>
             </div>
 
-            <div
-              className="max-h-[55vh] overflow-y-auto bg-slate-50 px-3 py-4 space-y-3"
-              onClick={(event) => {
-                // Clicking any link (sample/Q&A scroll link or WhatsApp button)
-                // closes the chat so the visitor can see where it took them.
-                if ((event.target as HTMLElement).closest("a")) setOpen(false);
-              }}
-            >
+            <div className="max-h-[55vh] overflow-y-auto bg-slate-50 px-3 py-4 space-y-3">
               {!pathCourseId && (
                 <select
                   value={selectedCourseId}
