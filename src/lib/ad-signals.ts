@@ -86,6 +86,9 @@ async function sendMetaEvent(
     ],
   };
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
   const response = await fetch(
     `https://graph.facebook.com/v20.0/${settings.metaPixelId}/events?access_token=${encodeURIComponent(
       settings.metaAccessToken
@@ -94,8 +97,9 @@ async function sendMetaEvent(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     }
-  );
+  ).finally(() => clearTimeout(timeout));
 
   return response.ok;
 }

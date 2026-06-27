@@ -129,6 +129,9 @@ export default function VisitorTracker() {
       const source = inferSource(url, referrerRef.current, navigator.userAgent);
       const previousVisitorKey =
         previousVisitorKeyRef.current || peekPreviousVisitorKey();
+      const derivedReferrer =
+        referrerRef.current ||
+        (source && source !== "direct" && source !== "unknown" ? source : "");
 
       return {
         visitorKey,
@@ -136,7 +139,7 @@ export default function VisitorTracker() {
         source,
         medium: url.searchParams.get("utm_medium") || "",
         campaign: url.searchParams.get("utm_campaign") || "",
-        referrer: referrerRef.current,
+        referrer: derivedReferrer,
         landingPage: landingPageRef.current,
         currentPath: canonicalizeVisitorUrl(window.location.href),
         timeDeltaSeconds: delta,

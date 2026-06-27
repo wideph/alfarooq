@@ -23,6 +23,17 @@ function chooseSource(current: string | null | undefined, incoming: string | nul
   return sourceRank(incoming) > sourceRank(current) ? incoming : current || incoming;
 }
 
+function referrerRank(referrer: string | null | undefined) {
+  if (!referrer) return 0;
+  const normalized = referrer.toLowerCase();
+  if (normalized === "direct" || normalized === "unknown") return 1;
+  return 2;
+}
+
+function chooseReferrer(current: string | null | undefined, incoming: string | null) {
+  return referrerRank(incoming) > referrerRank(current) ? incoming : current || incoming;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -49,6 +60,8 @@ export async function POST(request: NextRequest) {
     ]);
     const shouldBlock = Boolean(blockedByIp);
     const currentSource = existingBeforeMerge?.source || previousBeforeMerge?.source;
+    const currentReferrer =
+      existingBeforeMerge?.referrer || previousBeforeMerge?.referrer;
 
     const visitor = await findOrCreateMergedVisitor({
       visitorKey,
@@ -71,7 +84,7 @@ export async function POST(request: NextRequest) {
         source: chooseSource(currentSource, incomingSource),
         medium: existingBeforeMerge?.medium || clean(body.medium),
         campaign: existingBeforeMerge?.campaign || clean(body.campaign),
-        referrer: existingBeforeMerge?.referrer || referrer,
+        referrer: chooseReferrer(currentReferrer, referrer),
         landingPage: existingBeforeMerge?.landingPage || landingPage,
         currentPath: currentPath || existingBeforeMerge?.currentPath,
         userAgent: existingBeforeMerge?.userAgent || request.headers.get("user-agent"),
