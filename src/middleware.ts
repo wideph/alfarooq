@@ -19,7 +19,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  // Data and admin surfaces must never be indexed or cached off-site, so the
+  // course / Q&A payloads cannot be picked up by search or Meta crawlers.
+  const path = request.nextUrl.pathname;
+  if (path.startsWith("/api") || path.startsWith("/admin")) {
+    response.headers.set("X-Robots-Tag", "noindex, noarchive, nosnippet");
+  }
+
+  return response;
 }
 
 export const config = {

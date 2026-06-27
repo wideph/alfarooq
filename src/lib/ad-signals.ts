@@ -22,8 +22,34 @@ function sha256(value: string) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+// Send Meta only the origin + path of the page — never the query string or
+// fragment, which can carry utm/user parameters or content anchors (#qa-...).
 function eventSourceUrl(visitor: Visitor) {
-  return visitor.currentPath || visitor.landingPage || undefined;
+  const raw = visitor.currentPath || visitor.landingPage;
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
+// Whitelist what may go into custom_data. Only short scalars survive, so no
+// caller can ever push course text, Q&A answers, or other content to Meta.
+const CUSTOM_DATA_MAX = 180;
+function sanitizeCustomData(payload: Record<string, unknown>) {
+  const safe: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "number" || typeof value === "boolean") {
+      safe[key] = value;
+    } else if (typeof value === "string") {
+      safe[key] = value.slice(0, CUSTOM_DATA_MAX);
+    }
+    // objects / arrays / free-form content are intentionally dropped
+  }
+  return safe;
 }
 
 async function sendMetaEvent(
@@ -44,18 +70,18 @@ async function sendMetaEvent(
         action_source: "website",
         event_source_url: eventSourceUrl(visitor),
         user_data: {
+          // Identity only as a salted-by-Meta hash; never raw.
           external_id: sha256(visitor.visitorKey),
           client_user_agent: visitor.userAgent || undefined,
         },
-        custom_data: {
-          visitor_id: visitor.visitorKey,
+        custom_data: sanitizeCustomData({
           visitor_status: visitor.status,
           source: visitor.source,
           medium: visitor.medium,
           campaign: visitor.campaign,
           time_spent_seconds: visitor.timeSpentSeconds,
           ...payload,
-        },
+        }),
       },
     ],
   };

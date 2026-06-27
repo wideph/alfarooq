@@ -223,6 +223,12 @@ export default function VisitorTracker() {
             t.src=v;s=b.getElementsByTagName(e)[0];
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
+            // Privacy hardening: turn OFF automatic configuration BEFORE init.
+            // This stops fbevents.js from auto-collecting page "microdata"
+            // (course/Q&A text, headings, prices), automatic button/link click
+            // text, and Automatic Advanced Matching (scraping form fields).
+            // Only the explicit events we fire below are ever sent to Meta.
+            fbq('set', 'autoConfig', false, '${settings.metaPixelId}');
             fbq('init', '${settings.metaPixelId}');
             fbq('track', 'PageView');
           `}
