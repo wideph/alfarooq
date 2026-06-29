@@ -6,6 +6,9 @@ export const BOT_FALLBACK_ANSWER =
 export const BOT_WHATSAPP_CONTACT_GUIDE =
   "Aap ko sari zaroori malomat yahin par mil jayegi. Malomat lene ke baad apne documents share karne ke liye neeche diye gaye WhatsApp link par click karke hamare number par bhej dein.";
 
+export const BOT_SAMPLE_INTRO =
+  "har technology aur har year ka sample save kerna possible nahi hota hai, lakin format samajany k liye sample k nechy diye huye link per click karen";
+
 export const BOT_BLOCKED_ANSWER =
   "Aap ke alfaaz munasib nahi hain. Is IP ko block kiya ja raha hai.";
 
@@ -67,6 +70,15 @@ const IDENTITY_PATTERNS =
 const SPEED_PATTERNS =
   /\b(itn[aeiy]|kitn[aeiy]|so|this)\b[^.?!]*\b(jaldi|jald|fast|quick(?:ly)?|speed)\b/i;
 
+// "Show me a sample / send the sample / can you show a sample?"
+const SAMPLE_REQUEST_PATTERNS = [
+  /\bsample\b[^.?!]*\b(dikh\w*|dekh\w*|show|send|bhej\w*|chahiy?e|de\s*do|de\s*sakt\w*)\b/i,
+  /\b(dikh\w*|dekh\w*|show|send|bhej\w*)\b[^.?!]*\bsample\b/i,
+  /\b(namoona|namuna|nmoona)\b/i,
+  /نمونہ/,
+  /سیمپل/,
+];
+
 // "What is your WhatsApp number / how do I contact you?"
 const WHATSAPP_CONTACT_PATTERNS = [
   /whats?\s?app/i,
@@ -99,6 +111,22 @@ export function isRequirementQuestion(message: string) {
 
 export function isWhatsappContactQuestion(message: string) {
   return WHATSAPP_CONTACT_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+export function isSampleRequest(message: string) {
+  return SAMPLE_REQUEST_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+export function buildSampleLinks(
+  courseId: string,
+  samples: Array<{ id: string; title: string | null }>
+) {
+  return samples
+    .map((sample) => {
+      const label = (sample.title || "").trim() || "Sample";
+      return `[${label} dekhein](/courses/${courseId}#sample-${sample.id})`;
+    })
+    .join("\n");
 }
 
 export function isAbusiveMessage(message: string) {

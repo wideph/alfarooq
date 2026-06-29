@@ -4,14 +4,17 @@ import {
   BOT_FALLBACK_ANSWER,
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
+  BOT_SAMPLE_INTRO,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
+  buildSampleLinks,
   buildWhatsappUrl,
   cleanupExpiredBotConversations,
   getGeneralChatAnswer,
   isAbusiveMessage,
   isRequirementQuestion,
+  isSampleRequest,
   isWhatsappContactQuestion,
   normalizeBotName,
   pickBotName,
@@ -252,6 +255,49 @@ export async function POST(request: NextRequest) {
         visitorKey: visitor?.visitorKey || visitorKey,
         botName,
       });
+    }
+
+    // "Show me a sample / send the sample" — fixed reply + the course sample
+    // link(s). Only short-circuits when the course actually has samples;
+    // otherwise it falls through to the normal flow.
+    if (isSampleRequest(message) && courseId) {
+      const sampleCourse = await prisma.course.findUnique({
+        where: { id: courseId },
+        select: {
+          id: true,
+          isPublished: true,
+          samples: {
+            orderBy: { order: "asc" },
+            select: { id: true, title: true },
+          },
+        },
+      });
+
+      if (sampleCourse?.isPublished && sampleCourse.samples.length > 0) {
+        const answer = `${BOT_SAMPLE_INTRO}\n\n${buildSampleLinks(
+          sampleCourse.id,
+          sampleCourse.samples
+        )}`;
+
+        await prisma.botMessage.create({
+          data: {
+            conversationId: conversation.id,
+            role: "assistant",
+            content: answer,
+            metadata: { canAnswer: true, sampleRequest: true, botName },
+          },
+        });
+
+        return NextResponse.json({
+          conversationId: conversation.id,
+          answer,
+          canAnswer: true,
+          whatsappUrl: null,
+          expiresAt: conversation.expiresAt,
+          visitorKey: visitor?.visitorKey || visitorKey,
+          botName,
+        });
+      }
     }
 
     const { course, context } = await buildCourseBotContext(courseId);
