@@ -22,7 +22,14 @@ export async function GET(request: NextRequest) {
   const entries = await prisma.botTrainingEntry.findMany({
     where: courseId ? { courseId } : {},
     orderBy: { updatedAt: "desc" },
-    include: { course: { select: { id: true, title: true } } },
+    select: {
+      id: true,
+      courseId: true,
+      question: true,
+      answer: true,
+      source: true,
+      course: { select: { id: true, title: true } },
+    },
     take: 200,
   });
 
@@ -48,7 +55,14 @@ export async function POST(request: NextRequest) {
 
     const entry = await prisma.botTrainingEntry.create({
       data: { courseId, question, answer },
-      include: { course: { select: { id: true, title: true } } },
+      select: {
+        id: true,
+        courseId: true,
+        question: true,
+        answer: true,
+        source: true,
+        course: { select: { id: true, title: true } },
+      },
     });
 
     return NextResponse.json(entry, { status: 201 });
@@ -78,7 +92,14 @@ export async function PUT(request: NextRequest) {
     const entry = await prisma.botTrainingEntry.update({
       where: { id },
       data: { question, answer },
-      include: { course: { select: { id: true, title: true } } },
+      select: {
+        id: true,
+        courseId: true,
+        question: true,
+        answer: true,
+        source: true,
+        course: { select: { id: true, title: true } },
+      },
     });
 
     return NextResponse.json(entry);
