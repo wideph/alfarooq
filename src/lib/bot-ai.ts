@@ -105,3 +105,69 @@ export async function callBotModel(settings: SiteSettings, messages: BotChatMess
 
   return callOpenAiLike(settings, messages, "https://api.openai.com/v1");
 }
+
+// Generic JSON-object generation call, used by the offline bot self-learning
+// pass. `prefillKey` (e.g. '{"pairs"') forces Claude to start a JSON object.
+export async function callBotJson(
+  settings: SiteSettings,
+  system: string,
+  user: string,
+  prefillKey: string,
+  maxTokens = 2500
+) {
+  if (settings.botProvider === "claude") {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": settings.botApiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: settings.botModel,
+        system,
+        messages: [
+          { role: "user", content: user },
+          { role: "assistant", content: prefillKey },
+        ],
+        temperature: 0.2,
+        max_tokens: maxTokens,
+        stop_sequences: ["```"],
+      }),
+    });
+
+    if (!response.ok) throw new Error(await readError(response));
+    const data = (await response.json()) as ClaudeResponse;
+    if (data.error?.message) throw new Error(data.error.message);
+    const text = data.content?.find((item) => item.type === "text")?.text || "";
+    return text ? `${prefillKey}${text}` : "";
+  }
+
+  const baseUrl =
+    settings.botProvider === "deepseek"
+      ? "https://api.deepseek.com"
+      : "https://api.openai.com/v1";
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${settings.botApiKey}`,
+    },
+    body: JSON.stringify({
+      model: settings.botModel,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!response.ok) throw new Error(await readError(response));
+  const data = (await response.json()) as OpenAiLikeResponse;
+  if (data.error?.message) throw new Error(data.error.message);
+  return data.choices?.[0]?.message?.content || "";
+}

@@ -274,7 +274,11 @@ export async function buildCourseBotContext(courseId: string | null) {
         },
         orderBy: [{ order: "asc" }, { answeredAt: "desc" }],
       },
-      botTraining: { orderBy: { updatedAt: "desc" }, take: 80 },
+      botTraining: {
+        orderBy: { updatedAt: "desc" },
+        take: 80,
+        select: { question: true, answer: true },
+      },
     },
   });
 

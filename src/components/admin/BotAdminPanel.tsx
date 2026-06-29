@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, Loader2, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { Bot, Loader2, RefreshCw, Save, Search, Sparkles, Trash2 } from "lucide-react";
 
 type CourseOption = { id: string; title: string };
 type TrainingEntry = {
@@ -9,6 +9,7 @@ type TrainingEntry = {
   courseId: string;
   question: string;
   answer: string;
+  source?: string;
   course?: { id: string; title: string };
 };
 type BotConversation = {
@@ -52,6 +53,7 @@ export default function BotAdminPanel({
   const [editingId, setEditingId] = useState("");
   const [loadingTraining, setLoadingTraining] = useState(false);
   const [loadingChats, setLoadingChats] = useState(false);
+  const [learning, setLearning] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -118,6 +120,41 @@ export default function BotAdminPanel({
     }
   }
 
+  async function runLearning(rebuild = false) {
+    if (!canTrainingWrite || !selectedCourseId || learning) return;
+    if (
+      rebuild &&
+      !confirm("Saari self-learning dobara banayein? Purani self-learning hat jayegi.")
+    ) {
+      return;
+    }
+
+    setLearning(true);
+    setMessage(rebuild ? "Bot dobara seekh raha hai..." : "Bot seekh raha hai...");
+    try {
+      const res = await fetch("/api/admin/bot-training/learn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: selectedCourseId, rebuild }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bot learning fail");
+
+      const remainingNote =
+        data.remainingUnits > 0
+          ? ` ${data.remainingUnits} item baqi hain — dobara "Bot ko Train karein" dabayein.`
+          : "";
+      setMessage(
+        `Bot ne ${data.created} self-learning add ki (${data.processedUnits} items).${remainingNote}`
+      );
+      await loadTraining();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bot learning fail");
+    } finally {
+      setLearning(false);
+    }
+  }
+
   async function togglePin(conversation: BotConversation) {
     if (!canChatsWrite) return;
     const res = await fetch("/api/admin/bot-conversations", {
@@ -170,6 +207,41 @@ export default function BotAdminPanel({
             </div>
 
             {canTrainingWrite && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Bot khud course ke Q&amp;A se anticipated sawal-jawab bana kar
+                  yahan add karta hai (badge: Self-learning). Naya question add
+                  karne ke baad &quot;Bot ko Train karein&quot; dabayein — sirf
+                  naye content par learn hoga.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => runLearning(false)}
+                    disabled={!selectedCourseId || learning}
+                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {learning ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    Bot ko Train karein
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runLearning(true)}
+                    disabled={!selectedCourseId || learning}
+                    className="inline-flex items-center gap-2 rounded-xl border border-violet-300 px-4 py-2 text-sm font-semibold text-violet-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Dobara seekhayein
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {canTrainingWrite && (
             <div className="grid grid-cols-1 gap-3">
               <textarea
                 value={form.question}
@@ -217,6 +289,12 @@ export default function BotAdminPanel({
               <div className="space-y-2">
                 {training.map((entry) => (
                   <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {entry.source === "self" && (
+                      <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                        <Sparkles className="w-3 h-3" />
+                        BOT self-learning
+                      </span>
+                    )}
                     <p className="text-sm font-semibold text-slate-800 urdu-text leading-loose">
                       Q: {entry.question}
                     </p>
