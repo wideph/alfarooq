@@ -3,6 +3,7 @@
 import PdfViewer from "@/components/PdfViewer";
 import ImageViewer from "@/components/ImageViewer";
 import LinkifiedText from "@/components/LinkifiedText";
+import { stripBotInstructions } from "@/lib/strip-instructions";
 
 interface AnswerContentProps {
   answer: string;
@@ -15,7 +16,9 @@ export default function AnswerContent({
   mediaFilename,
   mediaType,
 }: AnswerContentProps) {
-  const hasText = Boolean(answer?.trim());
+  // Hide any @@ ... @@ private bot instructions from the public answer.
+  const visibleAnswer = stripBotInstructions(answer);
+  const hasText = Boolean(visibleAnswer);
   const hasMedia = Boolean(mediaFilename && mediaType);
 
   if (!hasText && !hasMedia) return null;
@@ -26,7 +29,7 @@ export default function AnswerContent({
         <div className="scroll-field rounded-lg">
           <p className="text-slate-700 leading-loose whitespace-pre-wrap break-words [overflow-wrap:anywhere] urdu-text text-sm sm:text-base">
             <LinkifiedText
-              text={answer}
+              text={visibleAnswer}
               className="text-primary-600 font-medium underline decoration-primary-300 underline-offset-2 hover:text-primary-700 break-all"
             />
           </p>

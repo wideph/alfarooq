@@ -21,6 +21,7 @@ import {
   parseBotJson,
 } from "@/lib/bot";
 import { fetchPrivateSiteSettingsFromDb } from "@/lib/get-site-settings";
+import { stripBotInstructions } from "@/lib/strip-instructions";
 import { prisma } from "@/lib/prisma";
 import {
   findBlockedVisitorByIp,
@@ -332,8 +333,10 @@ export async function POST(request: NextRequest) {
       providerError = error instanceof Error ? error.message : "Bot provider failed";
     }
 
-    // A usable answer is any non-empty text that is not itself the fallback line.
-    const trimmedAnswer = parsed.answer.trim();
+    // Strip any @@ ... @@ private instructions that may have leaked into the
+    // model output — the visitor must never see them. A usable answer is any
+    // non-empty text that is not itself the fallback line.
+    const trimmedAnswer = stripBotInstructions(parsed.answer);
     const hasUsableAnswer =
       trimmedAnswer.length > 0 && trimmedAnswer !== BOT_FALLBACK_ANSWER;
 

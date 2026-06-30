@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { callBotJson } from "@/lib/bot-ai";
 import { fetchPrivateSiteSettingsFromDb } from "@/lib/get-site-settings";
+import { stripBotInstructions } from "@/lib/strip-instructions";
 
 // How many source knowledge items (course description + each Q&A) one trigger
 // processes. Keeps each run to a single model call within the request timeout;
@@ -80,6 +81,7 @@ const LEARNING_SYSTEM_PROMPT = [
   "Lists are important: if an item's content lists options (available technologies, diplomas, years, trades, fees, etc.), create ONE question per listed option — e.g. 'Kya Mechanical ka 3 saal ka diploma mil sakta hai?' with a yes/no answer strictly from the list — PLUS one summary question that lists all available options.",
   "Write questions exactly how real visitors type them: short, natural, Roman Urdu / Urdu / English mix, with common phrasings and synonyms. Keep answers concise and factual, in the same language style as the source answer.",
   "Generate 1 to 5 pairs per item (lists may produce more). Do not duplicate the same question.",
+  "Any text between @@ and @@ inside an item is a PRIVATE instruction about how to vary the answer — follow it, but NEVER copy the @@ markers or their text into the questions or answers you produce.",
   "Tag every pair with the REF of the item it came from.",
   'Return ONLY a single-line JSON object: {"pairs":[{"ref":"...","question":"...","answer":"..."}]}. No markdown, no prose. Inside strings escape newlines as \\n and quotes as \\".',
 ].join("\n");
@@ -209,8 +211,10 @@ export async function runBotLearning(
   }> = [];
 
   for (const pair of pairs) {
-    const question = typeof pair.question === "string" ? pair.question.trim() : "";
-    const answer = typeof pair.answer === "string" ? pair.answer.trim() : "";
+    const question =
+      typeof pair.question === "string" ? stripBotInstructions(pair.question) : "";
+    const answer =
+      typeof pair.answer === "string" ? stripBotInstructions(pair.answer) : "";
     if (!question || !answer) continue;
     const ref =
       typeof pair.ref === "string" && validRefs.has(pair.ref) ? pair.ref : batch[0].ref;
@@ -230,10 +234,17 @@ export async function runBotLearning(
   // back to a passthrough entry built from the source content itself.
   for (const unit of batch) {
     if (refsWithPairs.has(unit.ref)) continue;
+    const cleanAnswer = stripBotInstructions(unit.answer);
+    if (!cleanAnswer) {
+      refsWithPairs.add(unit.ref);
+      continue;
+    }
     toCreate.push({
       courseId,
-      question: (unit.question || `${course.title} — is ke baare mein batayein`).slice(0, 1000),
-      answer: unit.answer.slice(0, 3000),
+      question: (
+        stripBotInstructions(unit.question) || `${course.title} — is ke baare mein batayein`
+      ).slice(0, 1000),
+      answer: cleanAnswer.slice(0, 3000),
       source: "self",
       sourceRef: unit.ref,
     });
