@@ -19,19 +19,34 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const courseId = searchParams.get("courseId") || undefined;
 
-  const entries = await prisma.botTrainingEntry.findMany({
-    where: courseId ? { courseId } : {},
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      courseId: true,
-      question: true,
-      answer: true,
-      source: true,
-      course: { select: { id: true, title: true } },
-    },
-    take: 200,
-  });
+  const where = courseId ? { courseId } : {};
+  const baseSelect = {
+    id: true,
+    courseId: true,
+    question: true,
+    answer: true,
+    course: { select: { id: true, title: true } },
+  } as const;
+
+  let entries;
+  try {
+    // Preferred: include `source` so the self-learning badge can show.
+    entries = await prisma.botTrainingEntry.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: { ...baseSelect, source: true },
+      take: 200,
+    });
+  } catch {
+    // DB not migrated yet (no source/sourceRef columns) — still load the
+    // existing entries so the admin list and old data stay visible.
+    entries = await prisma.botTrainingEntry.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: baseSelect,
+      take: 200,
+    });
+  }
 
   return NextResponse.json(entries);
 }
@@ -60,7 +75,6 @@ export async function POST(request: NextRequest) {
         courseId: true,
         question: true,
         answer: true,
-        source: true,
         course: { select: { id: true, title: true } },
       },
     });
@@ -97,7 +111,6 @@ export async function PUT(request: NextRequest) {
         courseId: true,
         question: true,
         answer: true,
-        source: true,
         course: { select: { id: true, title: true } },
       },
     });

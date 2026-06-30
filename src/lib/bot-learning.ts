@@ -110,6 +110,17 @@ export async function runBotLearning(
     throw new Error("Bot model (provider/model/API key) configure nahi hai.");
   }
 
+  // Self-learning needs the source / sourceRef columns. If the migration has not
+  // reached this database yet, fail with a clear message instead of a raw error.
+  const columns = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'BotTrainingEntry' AND column_name IN ('source', 'sourceRef')`
+  );
+  if (columns.length < 2) {
+    throw new Error(
+      "DB migration pending hai: BotTrainingEntry mein 'source'/'sourceRef' columns nahi hain. Pehle migration apply karein, phir train karein."
+    );
+  }
+
   const course = await prisma.course.findUnique({
     where: { id: courseId },
     include: {
