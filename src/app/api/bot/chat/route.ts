@@ -7,6 +7,7 @@ import {
   BOT_SAMPLE_INTRO,
   answerCourseQuestionFromTree,
   botExpiresAt,
+  buildCandidateBotContext,
   buildBotSystemPrompt,
   buildCourseBotContext,
   buildSampleLinks,
@@ -17,6 +18,7 @@ import {
   isRequirementQuestion,
   isSampleRequest,
   isWhatsappContactQuestion,
+  findBotEvidenceCandidates,
   normalizeBotName,
   pickBotName,
   parseBotJson,
@@ -393,6 +395,43 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const candidates = course ? findBotEvidenceCandidates(message, course) : [];
+    if (course && candidates.length === 0) {
+      await queueBotQuestionForAdmin({
+        courseId: course.id,
+        message,
+        visitorId: visitor?.id,
+        conversationId: conversation.id,
+      });
+
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: BOT_FALLBACK_ANSWER,
+          metadata: {
+            canAnswer: false,
+            evidenceSearch: true,
+            reason: "no_matching_answer_candidates",
+            botName,
+          },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer: BOT_FALLBACK_ANSWER,
+        canAnswer: false,
+        whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+        botName,
+      });
+    }
+
+    const evidenceContext =
+      course && candidates.length > 0 ? buildCandidateBotContext(course, candidates) : context;
+
     const recentMessages = await prisma.botMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
@@ -400,7 +439,7 @@ export async function POST(request: NextRequest) {
     });
 
     const systemPrompt = [
-      buildBotSystemPrompt(context, settings.botSystemNote),
+      buildBotSystemPrompt(evidenceContext, settings.botSystemNote),
       `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
     ].join("\n");
     const providerMessages: BotChatMessage[] = [
@@ -425,13 +464,15 @@ export async function POST(request: NextRequest) {
 
     // Strip any @@ ... @@ private instructions that may have leaked into the
     // model output — the visitor must never see them. A usable answer is any
-    // non-empty text that is not itself the fallback line.
+    // non-empty text that is not itself the fallback line, and only when the
+    // model says the selected evidence directly answers the visitor.
     const trimmedAnswer = stripBotInstructions(parsed.answer);
     const hasUsableAnswer =
-      trimmedAnswer.length > 0 && trimmedAnswer !== BOT_FALLBACK_ANSWER;
+      parsed.canAnswer === true &&
+      trimmedAnswer.length > 0 &&
+      trimmedAnswer !== BOT_FALLBACK_ANSWER;
 
-    // Trust a real answer even if the model conservatively flagged canAnswer=false.
-    const canAnswer = parsed.canAnswer || hasUsableAnswer;
+    const canAnswer = hasUsableAnswer;
     const answerBody = hasUsableAnswer ? trimmedAnswer : BOT_FALLBACK_ANSWER;
 
     // Queue for admin whenever we could not fully answer (fallback used or partial).

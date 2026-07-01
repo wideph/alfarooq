@@ -262,6 +262,17 @@ type CourseDecisionData = {
   }>;
 };
 
+export type BotEvidenceCandidate = {
+  id: string;
+  source: "description" | "question" | "userQuestion" | "botTraining";
+  question: string;
+  answer: string;
+  score: number;
+  link?: string;
+  hasMedia?: boolean;
+  trainingOnly?: boolean;
+};
+
 const PRICE_WORDS = [
   "price",
   "fee",
@@ -435,6 +446,9 @@ const TECHNOLOGY_ALIASES = [
 function normalizeLookup(value: string | null | undefined) {
   return (value || "")
     .toLowerCase()
+    .replace(/\bmaric\b/g, "matric")
+    .replace(/\bmetric\b/g, "matric")
+    .replace(/\bmatrik\b/g, "matric")
     .replace(/[\u064b-\u065f]/g, "")
     .replace(/[^a-z0-9+\u0600-\u06ff]+/g, " ")
     .replace(/\s+/g, " ")
@@ -447,6 +461,10 @@ function includesAny(normalized: string, words: readonly string[]) {
 
 function hasYear(normalized: string) {
   return /\b(?:19|20)\d{2}\b/.test(normalized);
+}
+
+function extractYear(normalized: string) {
+  return normalized.match(/\b(?:19|20)\d{2}\b/)?.[0] || "";
 }
 
 function detectDuration(normalized: string) {
@@ -490,6 +508,22 @@ function isMatricIntent(normalized: string) {
   }
 
   return false;
+}
+
+function isNoMatricQuestion(normalized: string) {
+  if (!normalized.includes("matric")) return false;
+  return includesAny(normalized, [
+    "na ho",
+    "nahi ho",
+    "nah ho",
+    "bager",
+    "baghair",
+    "beghair",
+    "without",
+    "no matric",
+    "matric nahi",
+    "matric nahin",
+  ]);
 }
 
 function publicQuestionByOrder(course: CourseDecisionData, order: number) {
@@ -678,6 +712,235 @@ function matricEligibilityAnswer(course: CourseDecisionData) {
   ].join("\n");
 }
 
+const SEARCH_STOP_WORDS = new Set([
+  "aap",
+  "ap",
+  "apka",
+  "apki",
+  "mera",
+  "meri",
+  "mere",
+  "main",
+  "men",
+  "me",
+  "hai",
+  "hain",
+  "hen",
+  "hoga",
+  "hogi",
+  "kya",
+  "kia",
+  "kiya",
+  "ka",
+  "ki",
+  "ke",
+  "k",
+  "ko",
+  "se",
+  "sy",
+  "per",
+  "par",
+  "aur",
+  "ya",
+  "to",
+  "b",
+  "bhi",
+  "ly",
+  "le",
+  "lena",
+  "hasil",
+  "sakta",
+  "sakti",
+  "sakte",
+  "kar",
+  "ker",
+  "kr",
+  "do",
+  "dy",
+  "ga",
+  "gi",
+  "gy",
+]);
+
+function searchTokens(value: string) {
+  return normalizeLookup(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !SEARCH_STOP_WORDS.has(token));
+}
+
+function candidateScore(message: string, question: string, answer: string) {
+  const query = normalizeLookup(message);
+  const questionText = normalizeLookup(question);
+  const answerText = normalizeLookup(answer);
+  const queryTokens = new Set(searchTokens(message));
+  let score = 0;
+
+  for (const token of queryTokens) {
+    if (questionText.includes(token)) score += 5;
+    if (answerText.includes(token)) score += 2;
+  }
+
+  if (query && questionText.includes(query)) score += 20;
+  if (query && answerText.includes(query)) score += 10;
+
+  if (isRequirementQuestion(message) && includesAny(`${questionText} ${answerText}`, REQUIREMENT_WORDS)) {
+    score += 18;
+  }
+  if (isSampleRequest(message) && includesAny(`${questionText} ${answerText}`, ["sample", "namoona", "namuna"])) {
+    score += 18;
+  }
+  if (includesAny(query, PRICE_WORDS) && includesAny(`${questionText} ${answerText}`, PRICE_WORDS)) {
+    score += 16;
+  }
+  if (includesAny(query, PAYMENT_WORDS) && includesAny(`${questionText} ${answerText}`, PAYMENT_WORDS)) {
+    score += 16;
+  }
+  if (includesAny(query, ATTESTATION_WORDS) && includesAny(`${questionText} ${answerText}`, ATTESTATION_WORDS)) {
+    score += 14;
+  }
+  if (includesAny(query, SEC_WORDS) && includesAny(`${questionText} ${answerText}`, SEC_WORDS)) {
+    score += 14;
+  }
+  if (isMatricIntent(query) && includesAny(`${questionText} ${answerText}`, ["matric", "arts", "science"])) {
+    score += 14;
+  }
+
+  return score;
+}
+
+function allEvidenceCandidates(course: CourseDecisionData): BotEvidenceCandidate[] {
+  const candidates: BotEvidenceCandidate[] = [];
+
+  if (course.description?.trim()) {
+    candidates.push({
+      id: `${course.id}:description`,
+      source: "description",
+      question: `${course.title} ke baare mein maloomat`,
+      answer: course.description,
+      score: 0,
+    });
+  }
+
+  for (const item of course.questions || []) {
+    candidates.push({
+      id: item.id,
+      source: "question",
+      question: item.question,
+      answer: item.answer,
+      score: 0,
+      link: `/courses/${course.id}#qa-${item.id}`,
+      hasMedia: Boolean(item.answerMediaFilename),
+    });
+  }
+
+  for (const item of course.userQuestions || []) {
+    if (!item.answer || !["answered", "training"].includes(item.status)) continue;
+    candidates.push({
+      id: item.id,
+      source: "userQuestion",
+      question: item.question,
+      answer: item.answer,
+      score: 0,
+      link: `/courses/${course.id}#qa-user-${item.id}`,
+      hasMedia: Boolean(item.answerMediaFilename),
+      trainingOnly: item.trainingOnly || item.status === "training",
+    });
+  }
+
+  for (const item of course.botTraining || []) {
+    candidates.push({
+      id: `${course.id}:training:${item.question}`,
+      source: "botTraining",
+      question: item.question,
+      answer: item.answer,
+      score: 0,
+    });
+  }
+
+  return candidates;
+}
+
+export function findBotEvidenceCandidates(
+  message: string,
+  course: CourseDecisionData | null,
+  limit = 8
+) {
+  if (!course) return [];
+
+  const normalized = normalizeLookup(message);
+  const requestedYear = extractYear(normalized);
+  if (requestedYear) {
+    return allEvidenceCandidates(course)
+      .filter((candidate) =>
+        normalizeLookup(`${candidate.question}\n${candidate.answer}`).includes(requestedYear)
+      )
+      .map((candidate) => ({
+        ...candidate,
+        answer: stripBotInstructions(candidate.answer),
+        score: candidateScore(message, candidate.question, candidate.answer) + 20,
+      }))
+      .filter((candidate) => candidate.answer)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  if (isNoMatricQuestion(normalized)) {
+    const exactNoMatricMatches = allEvidenceCandidates(course).filter((candidate) =>
+      includesAny(normalizeLookup(`${candidate.question}\n${candidate.answer}`), [
+        "matric na ho",
+        "matric nahi ho",
+        "matric nahin ho",
+        "bager matric",
+        "baghair matric",
+        "without matric",
+        "no matric",
+      ])
+    );
+    return exactNoMatricMatches.slice(0, limit);
+  }
+
+  return allEvidenceCandidates(course)
+    .map((candidate) => ({
+      ...candidate,
+      answer: stripBotInstructions(candidate.answer),
+      score: candidateScore(message, candidate.question, candidate.answer),
+    }))
+    .filter((candidate) => candidate.answer && candidate.score >= 8)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
+export function buildCandidateBotContext(
+  course: CourseDecisionData,
+  candidates: BotEvidenceCandidate[]
+) {
+  return [
+    `CURRENT COURSE TITLE: ${course.title}`,
+    `CURRENT COURSE URL: /courses/${course.id}`,
+    "IMPORTANT: The visitor's question must be answered ONLY from MATCHED ANSWER CANDIDATES below.",
+    "If these candidates are related but do not directly answer the visitor's exact question, set canAnswer=false and use the exact Fallback sentence.",
+    "Do not use general course knowledge, assumptions, or nearby answers to fill missing facts.",
+    "Example rule: an answer about 'Matric Arts' does NOT answer 'without matric / matric na ho' unless a candidate explicitly says that.",
+    "",
+    "MATCHED ANSWER CANDIDATES:",
+    ...candidates.map((candidate, index) =>
+      [
+        `Candidate ${index + 1} | source=${candidate.source} | score=${candidate.score}`,
+        `Q: ${clip(candidate.question, 900)}`,
+        `A: ${clip(candidate.answer, 3000)}`,
+        candidate.link ? `Link: ${candidate.link}` : "",
+        candidate.hasMedia
+          ? "Sample/media attached: yes. If using this candidate, include the Link above."
+          : "",
+        candidate.trainingOnly ? "Training only: yes" : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    ),
+  ].join("\n");
+}
+
 export function answerCourseQuestionFromTree(
   message: string,
   course: CourseDecisionData | null
@@ -686,6 +949,8 @@ export function answerCourseQuestionFromTree(
 
   const normalized = normalizeLookup(message);
   if (!normalized) return null;
+
+  if (isNoMatricQuestion(normalized)) return null;
 
   if (isRequirementQuestion(message)) {
     return {
@@ -776,7 +1041,9 @@ export function answerCourseQuestionFromTree(
     };
   }
 
-  if (includesAny(normalized, OLD_DATE_WORDS) || hasYear(normalized)) {
+  if (hasYear(normalized)) return null;
+
+  if (includesAny(normalized, OLD_DATE_WORDS)) {
     return oldDateAnswer(normalized);
   }
 
