@@ -5,6 +5,7 @@ import {
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
   BOT_SAMPLE_INTRO,
+  answerFromSavedKnowledge,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
@@ -338,6 +339,33 @@ export async function POST(request: NextRequest) {
     }
 
     const { course, context } = await buildCourseBotContext(courseId);
+
+    const savedKnowledgeReply = answerFromSavedKnowledge(message, course);
+    if (savedKnowledgeReply) {
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: savedKnowledgeReply.answer,
+          metadata: {
+            canAnswer: true,
+            savedKnowledge: true,
+            reason: savedKnowledgeReply.reason,
+            botName,
+          },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer: savedKnowledgeReply.answer,
+        canAnswer: true,
+        whatsappUrl: null,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+        botName,
+      });
+    }
 
     const recentMessages = await prisma.botMessage.findMany({
       where: { conversationId: conversation.id },

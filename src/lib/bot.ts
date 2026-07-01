@@ -796,6 +796,9 @@ function candidateScore(message: string, question: string, answer: string) {
   if (includesAny(query, PAYMENT_WORDS) && includesAny(`${questionText} ${answerText}`, PAYMENT_WORDS)) {
     score += 16;
   }
+  if (includesAny(query, TIME_WORDS) && includesAny(`${questionText} ${answerText}`, TIME_WORDS)) {
+    score += 16;
+  }
   if (includesAny(query, ATTESTATION_WORDS) && includesAny(`${questionText} ${answerText}`, ATTESTATION_WORDS)) {
     score += 14;
   }
@@ -939,6 +942,144 @@ export function buildCandidateBotContext(
         .join("\n")
     ),
   ].join("\n");
+}
+
+export function answerFromSavedKnowledge(
+  message: string,
+  course: CourseDecisionData | null
+): BotDecisionTreeAnswer | null {
+  if (!course) return null;
+
+  const normalized = normalizeLookup(message);
+  if (!normalized) return null;
+
+  // These require exact saved facts, not related answers.
+  if (isNoMatricQuestion(normalized)) {
+    const exactNoMatric = allEvidenceCandidates(course)
+      .map((candidate) => ({
+        ...candidate,
+        normalizedText: normalizeLookup(`${candidate.question}\n${candidate.answer}`),
+        answer: stripBotInstructions(candidate.answer),
+      }))
+      .find(
+        (candidate) =>
+          candidate.answer &&
+          includesAny(candidate.normalizedText, [
+            "matric na ho",
+            "matric nahi ho",
+            "matric nahin ho",
+            "matric k bager",
+            "bager matric",
+            "baghair matric",
+            "without matric",
+            "no matric",
+          ])
+      );
+
+    return exactNoMatric
+      ? {
+          canAnswer: true,
+          reason: `saved-no-matric-${exactNoMatric.source}`,
+          answer: exactNoMatric.answer,
+        }
+      : null;
+  }
+
+  if (hasYear(normalized)) {
+    const requestedYear = extractYear(normalized);
+    const exactYear = allEvidenceCandidates(course)
+      .map((candidate) => ({
+        ...candidate,
+        normalizedText: normalizeLookup(`${candidate.question}\n${candidate.answer}`),
+        answer: stripBotInstructions(candidate.answer),
+      }))
+      .find((candidate) => candidate.answer && candidate.normalizedText.includes(requestedYear));
+
+    return exactYear
+      ? {
+          canAnswer: true,
+          reason: `saved-year-${exactYear.source}`,
+          answer: exactYear.answer,
+        }
+      : null;
+  }
+
+  if (includesAny(normalized, TIME_WORDS)) {
+    const item = publicQuestionByOrder(course, 10);
+    const answer = item ? qaAnswer(course, item) : "";
+    if (answer) {
+      return {
+        canAnswer: true,
+        reason: "saved-timeline",
+        answer,
+      };
+    }
+  }
+
+  if (includesAny(normalized, PAYMENT_WORDS)) {
+    const item = publicQuestionByOrder(course, 4);
+    const answer = item ? qaAnswer(course, item) : "";
+    if (answer) {
+      return {
+        canAnswer: true,
+        reason: "saved-payment",
+        answer,
+      };
+    }
+  }
+
+  if (isMatricIntent(normalized)) {
+    const item = publicQuestionByOrder(course, 18);
+    const answer = item ? qaAnswer(course, item) : "";
+    if (answer) {
+      return {
+        canAnswer: true,
+        reason: "saved-matric-eligibility",
+        answer,
+      };
+    }
+  }
+
+  const exact = allEvidenceCandidates(course)
+    .map((candidate) => ({
+      ...candidate,
+      normalizedQuestion: normalizeLookup(candidate.question),
+      normalizedAnswer: normalizeLookup(candidate.answer),
+      answer: stripBotInstructions(candidate.answer),
+    }))
+    .find((candidate) => {
+      if (!candidate.answer) return false;
+      return (
+        candidate.normalizedQuestion === normalized ||
+        candidate.normalizedQuestion.includes(normalized) ||
+        normalized.includes(candidate.normalizedQuestion)
+      );
+    });
+
+  if (exact) {
+    return {
+      canAnswer: true,
+      reason: `saved-exact-${exact.source}`,
+      answer:
+        exact.hasMedia && exact.link
+          ? `${exact.answer}\n\n[Sample dekhein](${exact.link})`
+          : exact.answer,
+    };
+  }
+
+  const [best] = findBotEvidenceCandidates(message, course, 1);
+  if (best && best.score >= 32) {
+    return {
+      canAnswer: true,
+      reason: `saved-fuzzy-${best.source}`,
+      answer:
+        best.hasMedia && best.link
+          ? `${best.answer}\n\n[Sample dekhein](${best.link})`
+          : best.answer,
+    };
+  }
+
+  return null;
 }
 
 export function answerCourseQuestionFromTree(
@@ -1226,7 +1367,6 @@ export async function buildCourseBotContext(courseId: string | null) {
         orderBy: [{ order: "asc" }, { answeredAt: "desc" }],
       },
       botTraining: {
-        where: { source: { not: "self" } },
         orderBy: { updatedAt: "desc" },
         take: 80,
         select: { question: true, answer: true },
