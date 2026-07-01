@@ -35,7 +35,7 @@ async function callOpenAiLike(
       model: settings.botModel,
       messages,
       temperature: 0.2,
-      max_tokens: 1500,
+      max_tokens: 4000,
       response_format: { type: "json_object" },
     }),
   });
@@ -77,7 +77,7 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
       system,
       messages: conversation,
       temperature: 0.2,
-      max_tokens: 1500,
+      max_tokens: 4000,
       stop_sequences: ["```"],
     }),
   });

@@ -5,9 +5,7 @@ import {
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
   BOT_SAMPLE_INTRO,
-  answerCourseQuestionFromTree,
   botExpiresAt,
-  buildCandidateBotContext,
   buildBotSystemPrompt,
   buildCourseBotContext,
   buildSampleLinks,
@@ -18,7 +16,6 @@ import {
   isRequirementQuestion,
   isSampleRequest,
   isWhatsappContactQuestion,
-  findBotEvidenceCandidates,
   normalizeBotName,
   pickBotName,
   parseBotJson,
@@ -342,96 +339,6 @@ export async function POST(request: NextRequest) {
 
     const { course, context } = await buildCourseBotContext(courseId);
 
-    const treeReply = answerCourseQuestionFromTree(message, course);
-    if (treeReply) {
-      if (treeReply.queueForAdmin && course?.id) {
-        await queueBotQuestionForAdmin({
-          courseId: course.id,
-          message,
-          visitorId: visitor?.id,
-          conversationId: conversation.id,
-        });
-      }
-
-      const whatsappUrl =
-        treeReply.offerWhatsapp && course
-          ? buildWhatsappUrl(settings.whatsappNumber, [
-              "Assalam o Alaikum, main course proceed karna chahta/chahti hoon.",
-              `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
-              `Course: ${course.title}`,
-              `Course ID: ${course.id}`,
-              `Question: ${message}`,
-              `Chat ID: ${conversation.id}`,
-            ])
-          : null;
-
-      const answer = whatsappUrl
-        ? `${treeReply.answer}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne baqi documents isi number par share karein.`
-        : treeReply.answer;
-
-      await prisma.botMessage.create({
-        data: {
-          conversationId: conversation.id,
-          role: "assistant",
-          content: answer,
-          metadata: {
-            canAnswer: true,
-            decisionTree: true,
-            reason: treeReply.reason,
-            whatsappUrl,
-            botName,
-          },
-        },
-      });
-
-      return NextResponse.json({
-        conversationId: conversation.id,
-        answer,
-        canAnswer: true,
-        whatsappUrl,
-        expiresAt: conversation.expiresAt,
-        visitorKey: visitor?.visitorKey || visitorKey,
-        botName,
-      });
-    }
-
-    const candidates = course ? findBotEvidenceCandidates(message, course) : [];
-    if (course && candidates.length === 0) {
-      await queueBotQuestionForAdmin({
-        courseId: course.id,
-        message,
-        visitorId: visitor?.id,
-        conversationId: conversation.id,
-      });
-
-      await prisma.botMessage.create({
-        data: {
-          conversationId: conversation.id,
-          role: "assistant",
-          content: BOT_FALLBACK_ANSWER,
-          metadata: {
-            canAnswer: false,
-            evidenceSearch: true,
-            reason: "no_matching_answer_candidates",
-            botName,
-          },
-        },
-      });
-
-      return NextResponse.json({
-        conversationId: conversation.id,
-        answer: BOT_FALLBACK_ANSWER,
-        canAnswer: false,
-        whatsappUrl: null,
-        expiresAt: conversation.expiresAt,
-        visitorKey: visitor?.visitorKey || visitorKey,
-        botName,
-      });
-    }
-
-    const evidenceContext =
-      course && candidates.length > 0 ? buildCandidateBotContext(course, candidates) : context;
-
     const recentMessages = await prisma.botMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
@@ -439,7 +346,7 @@ export async function POST(request: NextRequest) {
     });
 
     const systemPrompt = [
-      buildBotSystemPrompt(evidenceContext, settings.botSystemNote),
+      buildBotSystemPrompt(context, settings.botSystemNote),
       `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
     ].join("\n");
     const providerMessages: BotChatMessage[] = [
