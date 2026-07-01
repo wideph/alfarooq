@@ -5,6 +5,7 @@ import {
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
   BOT_SAMPLE_INTRO,
+  answerCourseQuestionFromTree,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
@@ -49,6 +50,42 @@ async function findOrCreateVisitor(
       source: "bot",
       lastSeenAt: new Date(),
       ipAddress,
+    },
+  });
+}
+
+async function queueBotQuestionForAdmin({
+  courseId,
+  message,
+  visitorId,
+  conversationId,
+}: {
+  courseId: string;
+  message: string;
+  visitorId?: string | null;
+  conversationId: string;
+}) {
+  const existing = await prisma.userQuestion.findFirst({
+    where: {
+      courseId,
+      question: message,
+      status: "pending",
+      source: "bot",
+    },
+    select: { id: true },
+  });
+
+  if (existing) return;
+
+  await prisma.userQuestion.create({
+    data: {
+      courseId,
+      question: message,
+      status: "pending",
+      source: "bot",
+      visitorId,
+      botConversationId: conversationId,
+      publishForUsers: true,
     },
   });
 }
@@ -303,6 +340,59 @@ export async function POST(request: NextRequest) {
 
     const { course, context } = await buildCourseBotContext(courseId);
 
+    const treeReply = answerCourseQuestionFromTree(message, course);
+    if (treeReply) {
+      if (treeReply.queueForAdmin && course?.id) {
+        await queueBotQuestionForAdmin({
+          courseId: course.id,
+          message,
+          visitorId: visitor?.id,
+          conversationId: conversation.id,
+        });
+      }
+
+      const whatsappUrl =
+        treeReply.offerWhatsapp && course
+          ? buildWhatsappUrl(settings.whatsappNumber, [
+              "Assalam o Alaikum, main course proceed karna chahta/chahti hoon.",
+              `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
+              `Course: ${course.title}`,
+              `Course ID: ${course.id}`,
+              `Question: ${message}`,
+              `Chat ID: ${conversation.id}`,
+            ])
+          : null;
+
+      const answer = whatsappUrl
+        ? `${treeReply.answer}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne baqi documents isi number par share karein.`
+        : treeReply.answer;
+
+      await prisma.botMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: answer,
+          metadata: {
+            canAnswer: true,
+            decisionTree: true,
+            reason: treeReply.reason,
+            whatsappUrl,
+            botName,
+          },
+        },
+      });
+
+      return NextResponse.json({
+        conversationId: conversation.id,
+        answer,
+        canAnswer: true,
+        whatsappUrl,
+        expiresAt: conversation.expiresAt,
+        visitorKey: visitor?.visitorKey || visitorKey,
+        botName,
+      });
+    }
+
     const recentMessages = await prisma.botMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
@@ -349,16 +439,11 @@ export async function POST(request: NextRequest) {
       !hasUsableAnswer || answerBody.includes(BOT_FALLBACK_ANSWER);
 
     if (shouldQueueForAdmin && course?.id) {
-      await prisma.userQuestion.create({
-        data: {
-          courseId: course.id,
-          question: message,
-          status: "pending",
-          source: "bot",
-          visitorId: visitor?.id,
-          botConversationId: conversation.id,
-          publishForUsers: true,
-        },
+      await queueBotQuestionForAdmin({
+        courseId: course.id,
+        message,
+        visitorId: visitor?.id,
+        conversationId: conversation.id,
       });
     }
 
