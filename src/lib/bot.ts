@@ -358,6 +358,14 @@ const OLD_DATE_WORDS = [
   "final result",
 ];
 
+const MATRIC_WORDS = [
+  "matric",
+  "maric",
+  "metric",
+  "matrik",
+  "matriculation",
+];
+
 const TECHNOLOGY_ALIASES = [
   {
     aliases: ["civil", "construction", "quality control", "quantity survey"],
@@ -454,6 +462,36 @@ function detectDuration(normalized: string) {
   return null;
 }
 
+function isMatricIntent(normalized: string) {
+  if (includesAny(normalized, MATRIC_WORDS)) return true;
+
+  const hasEducationContext = includesAny(normalized, [
+    "base",
+    "basis",
+    "sath",
+    "saath",
+    "mera",
+    "meri",
+    "mere",
+    "men hai",
+    "main hai",
+    "education",
+    "taleem",
+    "taleemi",
+  ]);
+  const isGraphicArts = includesAny(normalized, ["graphic", "printing"]);
+
+  if (normalized.includes("arts") && hasEducationContext && !isGraphicArts) {
+    return true;
+  }
+
+  if (normalized.includes("science") && hasEducationContext) {
+    return true;
+  }
+
+  return false;
+}
+
 function publicQuestionByOrder(course: CourseDecisionData, order: number) {
   return course.questions?.find((item) => Math.round(item.order) === order) || null;
 }
@@ -542,7 +580,7 @@ function findTechnology(message: string, course: CourseDecisionData) {
       .filter(
         (token) =>
           token.length >= 4 &&
-          !["technology", "with", "specialization", "and", "the"].includes(token)
+          !["technology", "with", "specialization", "and", "the", "arts"].includes(token)
       );
     if (tokens.some((token) => normalized.includes(token))) {
       return { name: candidate.name, note: "" };
@@ -628,6 +666,18 @@ function oldDateAnswer(normalized: string): BotDecisionTreeAnswer {
   };
 }
 
+function matricEligibilityAnswer(course: CourseDecisionData) {
+  const item = publicQuestionByOrder(course, 18);
+  const saved = item ? qaAnswer(course, item) : "";
+  if (saved) return saved;
+
+  return [
+    "Matric Arts ke sath 3 years diploma nahi mil sakta, Matric Science zaroori hai.",
+    "Agar aap guarantee den ke aap diploma aur matric certificate aik sath Pakistan mein use nahi karenge to phir edit kar ke matric certificate lagwaya ja sakta hai, lekin behtar ye hai ke pehle Matric Tech lein.",
+    "Matric Tech ki maloomat ke liye home page par Matric Tech wale section mein jayein.",
+  ].join("\n");
+}
+
 export function answerCourseQuestionFromTree(
   message: string,
   course: CourseDecisionData | null
@@ -652,7 +702,7 @@ export function answerCourseQuestionFromTree(
     (includesAny(normalized, ["embassy", "mofa"]) && includesAny(normalized, ["bina", "without", "baghair"]));
 
   if (
-    includesAny(normalized, ["matric"]) &&
+    isMatricIntent(normalized) &&
     (includesAny(normalized, ["mofa", "embassy", "ibcc", "genuine", "original"]) ||
       includesAny(normalized, ATTESTATION_WORDS))
   ) {
@@ -673,6 +723,26 @@ export function answerCourseQuestionFromTree(
         "",
         "Matric ki separate IBCC/MOFA/Embassy attestation ya extra charges ki detail saved data mein clear nahi hai, is liye is part ko admin confirm karega.",
       ].join("\n"),
+    };
+  }
+
+  if (isMatricIntent(normalized)) {
+    if (includesAny(normalized, ["saudi engineering", "sec", "sce", "mang", "demand"])) {
+      const training = trainingMatching(course, (text) => text.includes("matric tech nahi mangti"));
+      return {
+        canAnswer: true,
+        reason: "matric-sec",
+        queueForAdmin: includesAny(normalized, ["mofa", "embassy", "ibcc", "genuine"]),
+        answer:
+          (training ? stripBotInstructions(training.answer) : "") ||
+          "Saudi Engineering Council aam tor par matric tech nahi mangti, woh diploma check karte hain. Behtar ye hai ke agar matric science nahi hai to pehle Matric Tech ki information lein.",
+      };
+    }
+
+    return {
+      canAnswer: true,
+      reason: "matric-eligibility",
+      answer: matricEligibilityAnswer(course),
     };
   }
 
@@ -793,22 +863,6 @@ export function answerCourseQuestionFromTree(
     }
     const item = publicQuestionByOrder(course, 5);
     return { canAnswer: true, reason: "sec-acceptance", answer: qaAnswer(course, item || { id: "", answer: "" }) };
-  }
-
-  if (includesAny(normalized, ["matric", "science", "arts", "certificate"])) {
-    if (includesAny(normalized, ["saudi engineering", "sec", "sce", "mang", "demand"])) {
-      const training = trainingMatching(course, (text) => text.includes("matric tech nahi mangti"));
-      return {
-        canAnswer: true,
-        reason: "matric-sec",
-        queueForAdmin: includesAny(normalized, ["mofa", "embassy", "ibcc", "genuine"]),
-        answer:
-          (training ? stripBotInstructions(training.answer) : "") ||
-          "Saudi Engineering Council aam tor par matric tech nahi mangti, woh diploma check karte hain. Behtar ye hai ke agar matric science nahi hai to pehle Matric Tech ki information lein.",
-      };
-    }
-    const item = publicQuestionByOrder(course, 18);
-    return { canAnswer: true, reason: "matric-eligibility", answer: qaAnswer(course, item || { id: "", answer: "" }) };
   }
 
   if (includesAny(normalized, ["physical", "qvp"])) {
