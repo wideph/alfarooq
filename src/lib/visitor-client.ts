@@ -2,8 +2,8 @@
 
 export const VISITOR_STORAGE_KEY = "bbte_visitor_id";
 export const PREVIOUS_VISITOR_STORAGE_KEY = "bbte_previous_visitor_id";
-const CANONICAL_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://alfarooq-services.vercel.app";
+// Per-deployment canonical host; when unset, visitor URLs keep their own host.
+const CANONICAL_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "";
 
 function makeVisitorKey() {
   const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -50,6 +50,7 @@ export function peekPreviousVisitorKey() {
 
 export function canonicalizeVisitorUrl(value: string | null | undefined) {
   if (!value) return "";
+  if (!CANONICAL_SITE_URL) return value;
 
   try {
     const url = new URL(value);

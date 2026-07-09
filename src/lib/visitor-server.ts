@@ -1,13 +1,13 @@
 import type { Prisma, Visitor } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
+// Per-deployment canonical host; when unset, tracked URLs keep their own host.
 const CANONICAL_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  process.env.SITE_PUBLIC_URL ||
-  "https://alfarooq-services.vercel.app";
+  process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_PUBLIC_URL || "";
 
 export function canonicalizeTrackedUrl(value: string | null | undefined) {
   if (!value) return null;
+  if (!CANONICAL_SITE_URL) return value;
 
   try {
     const url = new URL(value);

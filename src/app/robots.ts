@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
-const CANONICAL_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://alfarooq-services.vercel.app";
+// Per-deployment canonical host; only declared when the Vercel project sets it.
+const CANONICAL_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "";
 
 // Keep the data and admin surfaces out of crawlers (Meta's included) so the
 // course / Q&A JSON is not fetched or indexed off-site. Media stays allowed so
@@ -15,6 +15,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/", "/admin/"],
       },
     ],
-    host: CANONICAL_SITE_URL,
+    ...(CANONICAL_SITE_URL ? { host: CANONICAL_SITE_URL } : {}),
   };
 }
