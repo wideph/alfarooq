@@ -95,6 +95,57 @@ async function queueBotQuestionForAdmin({
   });
 }
 
+// When the deterministic layers missed but the model found the answer inside
+// the course data, save the pair as a training-only Q&A. Next time the same
+// question is answered instantly from saved knowledge (no model tokens), and
+// the admin can review/edit or delete the learned answer in the course QAs.
+async function saveLearnedAnswer({
+  courseId,
+  message,
+  answer,
+  visitorId,
+  conversationId,
+}: {
+  courseId: string;
+  message: string;
+  answer: string;
+  visitorId?: string | null;
+  conversationId: string;
+}) {
+  const question = message.trim().slice(0, 1000);
+  const cleanAnswer = answer.trim().slice(0, 4000);
+  if (question.length < 4 || !cleanAnswer) return;
+
+  // Never store a second copy of a question the admin (or a previous learning
+  // pass) already has — the admin's version stays authoritative.
+  const existing = await prisma.userQuestion.findFirst({
+    where: { courseId, question },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const existingTraining = await prisma.botTrainingEntry.findFirst({
+    where: { courseId, question },
+    select: { id: true },
+  });
+  if (existingTraining) return;
+
+  await prisma.userQuestion.create({
+    data: {
+      courseId,
+      question,
+      answer: cleanAnswer,
+      status: "training",
+      trainingOnly: true,
+      publishForUsers: false,
+      source: "bot",
+      visitorId,
+      botConversationId: conversationId,
+      answeredAt: new Date(),
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   await cleanupExpiredBotConversations();
 
@@ -458,6 +509,22 @@ export async function POST(request: NextRequest) {
         visitorId: visitor?.id,
         conversationId: conversation.id,
       });
+    }
+
+    // Auto-learning: a usable model answer came from the full course data, so
+    // keep it for next time. Failures here must never break the reply.
+    if (hasUsableAnswer && course?.id) {
+      try {
+        await saveLearnedAnswer({
+          courseId: course.id,
+          message,
+          answer: trimmedAnswer,
+          visitorId: visitor?.id,
+          conversationId: conversation.id,
+        });
+      } catch {
+        // ignore — the visitor still gets the answer
+      }
     }
 
     // For requirement / proceed questions always offer the WhatsApp hand-off so
