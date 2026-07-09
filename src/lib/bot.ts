@@ -15,56 +15,158 @@ export const BOT_BLOCKED_ANSWER =
 
 export const BOT_NAMES = ["Asad", "Hammad", "Ramiz", "Ahmed", "Haroon"] as const;
 
-const REQUIREMENT_WORDS = [
+// Strict "what documents/details do you need" intent.
+const DOCUMENT_WORDS = [
   "requirement",
   "requirements",
   "document",
   "documents",
-  "proceed",
-  "chahye",
-  "chahiye",
   "kya kya",
+  "kia kia",
   "kya chahiye",
+  "kya chahye",
+  "kia chahiye",
   "darkar",
   "kaghzat",
   "kaghazat",
   "papers",
+  "درکار",
+  "کاغذات",
+  "دستاویز",
+  "ڈاکیومنٹ",
+  "کیا کیا",
+];
+
+// "I want to move forward / get this made" intent — used to attach the
+// WhatsApp hand-off, and as a documents-answer catch when nothing more
+// specific matched. Deliberately excludes "admission" (that is the
+// further-use question) and bare "chahiye" (that is usually availability).
+const PROCEED_WORDS = [
+  "proceed",
   "apply",
-  "admission",
   "daakhla",
   "dakhla",
   "register",
   "registration",
   "enroll",
   "enrollment",
-  "درکار",
-  "کاغذات",
-  "دستاویز",
-  "چاہیے",
+  "process kerwa",
+  "process karwa",
+  "process kerna",
+  "process karna",
+  "banwana",
+  "banwao",
+  "bnwana",
+  "lena chahta",
+  "lena chahti",
+  "lena chahta",
   "پروسیڈ",
   "داخلہ",
+  "اپلائی",
+  "بنوانا",
+  "حاصل کرنا چاہتا",
 ];
 
 const GENERAL_CHAT_PATTERNS = [
   /\bass?alam\b/i,
   /\bsalam\b/i,
+  /\baoa\b/i,
   /\bhello\b/i,
   /\bhi\b/i,
   /\bhey\b/i,
-  /\bkya hal\b/i,
+  /\bk[iy]a hal\b/i,
+  /\bkya haal\b/i,
   /\bkaise ho\b/i,
   /\bkesy ho\b/i,
   /\bkaisay ho\b/i,
   /\bthanks?\b/i,
   /\bthank you\b/i,
   /\bshukriya\b/i,
+  /السلام/,
+  /سلام/,
+  /شکریہ/,
 ];
+
+// Signals that the message carries a real course question, so a greeting
+// prefix ("Assalam o alaikum, fees kitni hai?") must NOT hijack the reply.
+const CONTENT_SIGNAL_WORDS = [
+  "diploma",
+  "ڈپلومہ",
+  "certificate",
+  "سرٹیفکیٹ",
+  "course",
+  "کورس",
+  "board",
+  "بورڈ",
+  "matric",
+  "میٹرک",
+  "fee",
+  "fees",
+  "فیس",
+  "price",
+  "qeemat",
+  "qimat",
+  "قیمت",
+  "rate",
+  "ریٹ",
+  "paisy",
+  "paise",
+  "پیسے",
+  "payment",
+  "پیمنٹ",
+  "advance",
+  "ایڈوانس",
+  "document",
+  "ڈاکیومنٹ",
+  "کاغذات",
+  "دستاویز",
+  "attestation",
+  "attestion",
+  "اٹیسٹیشن",
+  "تصدیق",
+  "mofa",
+  "موفا",
+  "embassy",
+  "ایمبیسی",
+  "ibcc",
+  "sample",
+  "سیمپل",
+  "نمونہ",
+  "whatsapp",
+  "واٹس",
+  "number",
+  "نمبر",
+  "time",
+  "ٹائم",
+  "وقت",
+  "kitna",
+  "kitni",
+  "kitne",
+  "kitny",
+  "کتنا",
+  "کتنی",
+  "کتنے",
+  "technology",
+  "ٹیکنالوجی",
+  "membership",
+  "ممبرشپ",
+  "council",
+  "کونسل",
+  "verify",
+  "verification",
+  "ویریفیکیشن",
+];
+
+function hasContentSignal(message: string) {
+  const normalized = normalizeLookup(message);
+  return includesAny(normalized, CONTENT_SIGNAL_WORDS) || hasYear(normalized);
+}
 
 // "Are you AI / a robot / human?" and "what is your name?" — identity questions.
 // Only match when the question is clearly about the bot ("you/tum/aap"), so a
 // course-name question like "course ka naam kya hai" is NOT hijacked.
 const IDENTITY_PATTERNS =
-  /\bwho are you\b|\btum (kon|kaun)\b|\b(your|tumhara|tmhara|tumhare|tera|aap ?ka|aapka|apka)\s*(naam|name)\b|\bwhat'?s your name\b|\b(are|r)\s*(you|u)\b[^.?!]*\b(a\.?i\.?|ai|robot|bot|human|insaan|insan|machine)\b|\bkya\b[^.?!]*\btum\b[^.?!]*\b(a\.?i\.?|ai|robot|insaan|insan|human|machine)\b|\btum\s*(a\.?i\.?|ai|robot|insaan|insan|human|machine)\s*ho\b/i;
+  /\bwho are you\b|\btum (kon|kaun)\b|\b(your|(?:tum|tm)\w{0,2}r[aey]|tera|aap ?ka|aapka|apka)\s*(naam|name)\b|\bwhat'?s your name\b|\b(are|r)\s*(you|u)\b[^.?!]*\b(a\.?i\.?|ai|robot|bot|human|insaan|insan|machine)\b|\bkya\b[^.?!]*\btum\b[^.?!]*\b(a\.?i\.?|ai|robot|insaan|insan|human|machine)\b|\btum\s*(a\.?i\.?|ai|robot|insaan|insan|human|machine)\s*ho\b|(?:تمہارا|تمھارا|آپ کا|اپکا)\s*نام/i;
 
 // "How do you answer SO fast?" — requires the "so/itna/kitna fast" notion so it
 // does not fire on requests like "jaldi jawab chahiye".
@@ -73,21 +175,34 @@ const SPEED_PATTERNS =
 
 // "Show me a sample / send the sample / can you show a sample?"
 const SAMPLE_REQUEST_PATTERNS = [
-  /\bsample\b[^.?!]*\b(dikh\w*|dekh\w*|show|send|bhej\w*|chahiy?e|de\s*do|de\s*sakt\w*)\b/i,
-  /\b(dikh\w*|dekh\w*|show|send|bhej\w*)\b[^.?!]*\bsample\b/i,
+  /\bsample\b[^.?!]*\b(d[iy]kh\w*|dekh\w*|show|send|bhej\w*|chahiy?e|chahy?e|de\s*do|de\s*sakt\w*|mil\w*)\b/i,
+  /\b(d[iy]kh\w*|dekh\w*|show|send|bhej\w*)\b[^.?!]*\bsample\b/i,
   /\b(namoona|namuna|nmoona)\b/i,
   /نمونہ/,
   /سیمپل/,
+  /سمپل/,
+  /sample[^.?!]*(دیکھ|دکھا)/i,
 ];
+
+// Very short messages that are just the word "sample" ("sample?", "Phr
+// sample") are sample requests too.
+function isBareSampleMessage(message: string) {
+  const normalized = normalizeLookup(message);
+  if (!normalized) return false;
+  const tokens = normalized.split(" ");
+  return tokens.length <= 3 && tokens.some((token) => token === "sample" || token === "سیمپل" || token === "نمونہ");
+}
 
 // "What is your WhatsApp number / how do I contact you?"
 const WHATSAPP_CONTACT_PATTERNS = [
   /whats?\s?app/i,
   /\bwhatsap\b/i,
+  /واٹس\s?ایپ/,
   /contact\s*(number|no|details)/i,
   /\b(aap ?ka|aapka|apka|tumhara|tmhara|tera|your)\s*number\b/i,
   /\bnumber\s*(kya|kia|btao|batao|do|den|den?gy|share)\b/i,
   /\brabta\s*(number|no|kaise|kese)\b/i,
+  /نمبر\s*(کیا|بتائیں|بتاؤ|دیں|دو|چاہیے|شیئر)/,
 ];
 
 const ABUSIVE_PATTERNS = [
@@ -105,9 +220,18 @@ const ABUSIVE_PATTERNS = [
   /\bbehen\s*chod\w*\b/i,
 ];
 
+export function isDocumentsQuestion(message: string) {
+  const normalized = normalizeLookup(message);
+  return includesAny(normalized, DOCUMENT_WORDS);
+}
+
+export function isProceedIntent(message: string) {
+  const normalized = normalizeLookup(message);
+  return includesAny(normalized, PROCEED_WORDS);
+}
+
 export function isRequirementQuestion(message: string) {
-  const normalized = message.toLowerCase();
-  return REQUIREMENT_WORDS.some((word) => normalized.includes(word));
+  return isDocumentsQuestion(message) || isProceedIntent(message);
 }
 
 export function isWhatsappContactQuestion(message: string) {
@@ -115,7 +239,10 @@ export function isWhatsappContactQuestion(message: string) {
 }
 
 export function isSampleRequest(message: string) {
-  return SAMPLE_REQUEST_PATTERNS.some((pattern) => pattern.test(message));
+  return (
+    SAMPLE_REQUEST_PATTERNS.some((pattern) => pattern.test(message)) ||
+    isBareSampleMessage(message)
+  );
 }
 
 export function buildSampleLinks(
@@ -153,6 +280,11 @@ export function getGeneralChatAnswer(message: string, botName = "Asad") {
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   if (wordCount > 14) return "";
+
+  // A greeting attached to a real question ("Assalam o alaikum, fees kitni
+  // hai?") must fall through to the knowledge flow, not get a greeting-only
+  // reply that ignores the actual question.
+  if (hasContentSignal(message)) return "";
 
   // Identity ("are you AI / a robot / your name?"). One consistent name per chat.
   if (IDENTITY_PATTERNS.test(normalized)) {
@@ -280,12 +412,24 @@ const PRICE_WORDS = [
   "charges",
   "qeemat",
   "qimat",
+  "keemat",
   "kitne ka",
   "kitny ka",
   "kitna ka",
+  "kitne mein",
+  "kitny men",
+  "kitne men",
   "rate",
   "paisy",
   "paise",
+  "قیمت",
+  "فیس",
+  "ریٹ",
+  "کتنے کا",
+  "کتنے کی",
+  "کتنے میں",
+  "کتنی فیس",
+  "پیسے",
 ];
 
 const PAYMENT_WORDS = [
@@ -299,6 +443,12 @@ const PAYMENT_WORDS = [
   "pay",
   "paise kab",
   "paisy kab",
+  "qist",
+  "پیمنٹ",
+  "ایڈوانس",
+  "ادائیگی",
+  "قسط",
+  "شیڈیول",
 ];
 
 const TIME_WORDS = [
@@ -309,16 +459,26 @@ const TIME_WORDS = [
   "kitny din",
   "kitne din",
   "kab tak",
+  "kitna arsa",
+  "kitne arsy",
   "mil jae ga",
   "mil jayega",
   "mil jaye ga",
+  "ٹائم",
+  "کتنا وقت",
+  "کتنے دن",
+  "کب تک",
+  "کتنا عرصہ",
 ];
 
 const ATTESTATION_WORDS = [
   "attestation",
   "attestations",
+  "attestion",
+  "atestation",
   "tasdeeq",
   "tasdeeqat",
+  "tasdiq",
   "verify",
   "verification",
   "mofa",
@@ -326,9 +486,13 @@ const ATTESTATION_WORDS = [
   "ibcc",
   "sticker",
   "foreign office",
+  "اٹیسٹیشن",
   "سعودی ایمبیسی",
+  "ایمبیسی",
   "موفا",
   "تصدیق",
+  "سٹکر",
+  "سٹیکر",
 ];
 
 const GENUINE_WORDS = [
@@ -337,10 +501,13 @@ const GENUINE_WORDS = [
   "fake",
   "asli",
   "jaali",
+  "jali",
   "jenuine",
-  "جنون",
+  "جینون",
+  "جینوئن",
   "اصلی",
   "جعلی",
+  "اوریجنل",
 ];
 
 const SEC_WORDS = [
@@ -350,6 +517,8 @@ const SEC_WORDS = [
   "membership",
   "technician",
   "engineering council",
+  "انجینئرنگ کونسل",
+  "ممبرشپ",
 ];
 
 const OLD_DATE_WORDS = [
@@ -367,6 +536,12 @@ const OLD_DATE_WORDS = [
   "treekhon",
   "result year",
   "final result",
+  "kin dates",
+  "kis date",
+  "پرانی",
+  "تاریخ",
+  "بیک ڈیٹ",
+  "فائنل رزلٹ",
 ];
 
 const MATRIC_WORDS = [
@@ -375,6 +550,7 @@ const MATRIC_WORDS = [
   "metric",
   "matrik",
   "matriculation",
+  "میٹرک",
 ];
 
 const TECHNOLOGY_ALIASES = [
@@ -449,10 +625,34 @@ function normalizeLookup(value: string | null | undefined) {
     .replace(/\bmaric\b/g, "matric")
     .replace(/\bmetric\b/g, "matric")
     .replace(/\bmatrik\b/g, "matric")
+    // Fold Arabic-keyboard letter forms into the Urdu forms used in saved data.
+    .replace(/[\u064a\u0649]/g, "\u06cc")
+    .replace(/\u0643/g, "\u06a9")
+    .replace(/[\u0647\u0629]/g, "\u06c1")
+    .replace(/[\u0623\u0625\u0622]/g, "\u0627")
+    // Arabic-Indic and Extended Arabic-Indic digits -> ASCII digits.
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    // Urdu/Arabic punctuation (\u061f \u060c \u061b \u06d4 \u066a \u2026) sits inside \u0600-\u06ff, so strip
+    // it explicitly or "\u0642\u06cc\u0645\u062a\u061f" never matches "\u0642\u06cc\u0645\u062a".
+    .replace(/[\u060c\u061b\u061f\u066a-\u066d\u06d4]/g, " ")
     .replace(/[\u064b-\u065f]/g, "")
     .replace(/[^a-z0-9+\u0600-\u06ff]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// Substring matching is right for phrases, but short single words ("sec",
+// "kam") must match as whole tokens or they fire inside unrelated words
+// ("second", "mukammal").
+function includesWordSafe(normalized: string, words: readonly string[]) {
+  const tokens = new Set(normalized.split(" "));
+  return words.some((word) => {
+    const clean = normalizeLookup(word);
+    if (!clean) return false;
+    if (clean.includes(" ") || clean.length > 4) return normalized.includes(clean);
+    return tokens.has(clean);
+  });
 }
 
 function includesAny(normalized: string, words: readonly string[]) {
@@ -467,14 +667,16 @@ function extractYear(normalized: string) {
   return normalized.match(/\b(?:19|20)\d{2}\b/)?.[0] || "";
 }
 
+// NOTE: \b does not work next to Urdu letters in JS regex, so Urdu number
+// words and "سال/سالہ" are matched without word boundaries.
 function detectDuration(normalized: string) {
-  if (/\b(?:3|three|teen|tin)\s*(?:year|years|saal|sala|سال)\b/.test(normalized)) {
+  if (/(?:\b(?:3|three|teen|tin)\b|تین)\s*(?:years?\b|saal\b|sala\b|سالہ|سالا|سال)/.test(normalized)) {
     return 3;
   }
-  if (/\b(?:2|two|do)\s*(?:year|years|saal|sala|سال)\b/.test(normalized)) {
+  if (/(?:\b(?:2|two|do)\b|دو)\s*(?:years?\b|saal\b|sala\b|سالہ|سالا|سال)/.test(normalized)) {
     return 2;
   }
-  if (/\b(?:1|one|aik|ek)\s*(?:year|years|saal|sala|سال)\b/.test(normalized)) {
+  if (/(?:\b(?:1|one|aik|ek)\b|ایک)\s*(?:years?\b|saal\b|sala\b|سالہ|سالا|سال)/.test(normalized)) {
     return 1;
   }
   return null;
@@ -643,73 +845,257 @@ function isAvailabilityQuestion(normalized: string) {
   );
 }
 
-function documentsAnswer(): string {
-  return [
-    "Diploma process karne ke liye ye documents/details chahiye:",
-    "CNIC front/back ki picture",
-    "Aakhri taleemi sanad, kam az kam matric",
-    "Trade/technology ka naam",
-    "Duration: 1, 2 ya 3 years",
-    "Final result kis year ka chahiye",
-    "Passport size photo",
-    "",
-    "Agar aap information se mutmain hain aur proceed karna chahte hain to ye details WhatsApp par share kar dein.",
-  ].join("\n");
+// Matches on the saved QUESTION text only — needed where several answers share
+// the same keywords but only one question is about that topic.
+function publicQuestionByQuestionText(
+  course: CourseDecisionData,
+  matcher: (text: string) => boolean
+) {
+  return (
+    course.questions?.find((item) => matcher(normalizeLookup(item.question))) || null
+  );
 }
 
-function priceAnswer(duration: number | null, withoutEmbassy: boolean) {
-  if (withoutEmbassy) {
-    if (duration === 3) return "Without Embassy aur MOFA attestation 3 years diploma 70000 rupees mein milega.";
-    if (duration === 2) return "Without Embassy aur MOFA attestation 2 years diploma 55000 rupees mein milega.";
-    if (duration === 1) return "Without Embassy aur MOFA attestation 1 year diploma 40000 rupees mein milega.";
-    return [
-      "Without Embassy aur MOFA attestation rates:",
-      "3 years: 70000 rupees",
-      "2 years: 55000 rupees",
-      "1 year: 40000 rupees",
-    ].join("\n");
-  }
+// --- Content-based finders for the key saved answers -----------------------
+// Order numbers break silently when the admin reorders/inserts Q&A, so every
+// branch locates its entry by distinctive content first and only falls back
+// to today's known order number.
 
-  if (duration === 3) return "3 years Balochistan Technical Board diploma 90000 rupees mein milega.";
-  if (duration === 2) return "2 years Balochistan Technical Board diploma 70000 rupees mein milega.";
-  if (duration === 1) return "1 year Balochistan Technical Board diploma 55000 rupees mein milega.";
-  return [
-    "Balochistan Technical Board diploma rates:",
-    "3 years: 90000 rupees",
-    "2 years: 70000 rupees",
-    "1 year: 55000 rupees",
-  ].join("\n");
+function findDocumentsQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) =>
+        (text.includes("ڈاکیومنٹس") || text.includes("documents")) &&
+        (text.includes("شناختی") || text.includes("cnic") || text.includes("تفصیلات"))
+    ) || publicQuestionByOrder(course, 23)
+  );
 }
 
-function oldDateAnswer(normalized: string): BotDecisionTreeAnswer {
-  if (hasYear(normalized)) {
-    return {
-      canAnswer: true,
-      reason: "specific-old-year-partial",
-      queueForAdmin: true,
-      answer:
-        "Final result ka year documents/details mein aap se liya jata hai, aur saved data ke mutabiq IBCC UV light security wala sticker back dates mein hota hai. Lekin jo specific year aap ne poocha hai, uski availability admin confirm karega. Aap trade/technology aur duration bhi bata dein taake confirm jawab mil jaye.",
-    };
-  }
-
-  return {
-    canAnswer: true,
-    reason: "old-date-general",
-    answer:
-      "Saved details ke mutabiq final result ka year aap se liya jata hai, aur IBCC UV light security wala sticker back dates mein hota hai. Aap jis year ka result chahte hain wo year, trade aur duration bata dein.",
-  };
+function findRatesQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) => text.includes("90000") && text.includes("55000")
+    ) || publicQuestionByOrder(course, 1)
+  );
 }
 
-function matricEligibilityAnswer(course: CourseDecisionData) {
-  const item = publicQuestionByOrder(course, 18);
-  const saved = item ? qaAnswer(course, item) : "";
-  if (saved) return saved;
+function findWithoutEmbassyRatesQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(course, (text) => text.includes("40000")) ||
+    publicQuestionByOrder(course, 9)
+  );
+}
 
-  return [
-    "Matric Arts ke sath 3 years diploma nahi mil sakta, Matric Science zaroori hai.",
-    "Agar aap guarantee den ke aap diploma aur matric certificate aik sath Pakistan mein use nahi karenge to phir edit kar ke matric certificate lagwaya ja sakta hai, lekin behtar ye hai ke pehle Matric Tech lein.",
-    "Matric Tech ki maloomat ke liye home page par Matric Tech wale section mein jayein.",
-  ].join("\n");
+function findPaymentQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) =>
+        (text.includes("پیمنٹ") || text.includes("payment")) &&
+        (text.includes("ایڈوانس") || text.includes("advance"))
+    ) || publicQuestionByOrder(course, 4)
+  );
+}
+
+function findTimelineQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) =>
+        (text.includes("ٹائم") || text.includes("time") || text.includes("وقت")) &&
+        (text.includes("کتنا") || text.includes("kitna") || text.includes("لگے"))
+    ) || publicQuestionByOrder(course, 10)
+  );
+}
+
+function findMatricEligibilityQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(course, (text) => text.includes("matric arts")) ||
+    publicQuestionByOrder(course, 18)
+  );
+}
+
+function findAttestationPackageQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) => text.includes("ibcc") && (text.includes("mofa") || text.includes("موفا"))
+    ) || publicQuestionByOrder(course, 3)
+  );
+}
+
+function findEditLinkQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("ایڈٹ لنک") || text.includes("edit link")
+    ) || publicQuestionByOrder(course, 6)
+  );
+}
+
+function findIbccStickerQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) =>
+        (text.includes("آئی بی سی سی") || text.includes("ibcc")) &&
+        (text.includes("سٹکر") || text.includes("سٹیکر") || text.includes("sticker"))
+    ) || publicQuestionByOrder(course, 8)
+  );
+}
+
+function findEmbassyGenuineQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("سعودی ایمبیسی") || text.includes("جینون")
+    ) || publicQuestionByOrder(course, 7)
+  );
+}
+
+function findSecAcceptanceQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) =>
+        (text.includes("انجینئرنگ کونسل") || text.includes("engineering council")) &&
+        (text.includes("تسلیم") || text.includes("accept"))
+    ) || publicQuestionByOrder(course, 5)
+  );
+}
+
+function findSecGuaranteeQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("گارنٹی") || text.includes("guarantee")
+    ) || publicQuestionByOrder(course, 13)
+  );
+}
+
+function findPhysicalQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(course, (text) => text.includes("physical")) ||
+    publicQuestionByOrder(course, 11)
+  );
+}
+
+function findMusaddaqQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(course, (text) => text.includes("مصدقہ")) ||
+    publicQuestionByOrder(course, 14)
+  );
+}
+
+function findHecQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("ایچ ای سی") || text.includes("hec")
+    ) || publicQuestionByOrder(course, 15)
+  );
+}
+
+function findOfficeQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("آفس") || text.includes("office") || text.includes("ملاقات")
+    ) || publicQuestionByOrder(course, 16)
+  );
+}
+
+function findCallQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("کال") || text.includes("call")
+    ) || publicQuestionByOrder(course, 19)
+  );
+}
+
+function findCourierQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("courier") || text.includes("کوریئر")
+    ) || publicQuestionByOrder(course, 21)
+  );
+}
+
+function findDiscountQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) => text.includes("discount") || text.includes("ڈسکاؤنٹ")
+    ) || publicQuestionByOrder(course, 22)
+  );
+}
+
+function findFurtherUseQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("ایڈمشن") || text.includes("admission")
+    ) || publicQuestionByOrder(course, 17)
+  );
+}
+
+function findOtherBoardQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(course, (text) => text.includes("punjab")) ||
+    publicQuestionByOrder(course, 12)
+  );
+}
+
+function findDegreeQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionByQuestionText(
+      course,
+      (text) => text.includes("گریجویٹ") || text.includes("degree") || text.includes("ڈگری")
+    ) || publicQuestionByOrder(course, 20)
+  );
+}
+
+function findNeboshQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(course, (text) => text.includes("nebosh")) ||
+    publicQuestionByOrder(course, 25)
+  );
+}
+
+function findProvideListQuestion(course: CourseDecisionData) {
+  return (
+    publicQuestionMatching(
+      course,
+      (text) =>
+        text.includes("bbte edu pk courses") ||
+        (text.includes("کون کون") && text.includes("فراہم"))
+    ) || publicQuestionByOrder(course, 24)
+  );
+}
+
+// Saved rule like "1995 k baad kisi b session ka diploma mil jay ga" that
+// covers a whole range of years — lets the bot answer "2018 ka milega?"
+// without inventing anything.
+function findYearRangeRule(course: CourseDecisionData) {
+  return (
+    allEvidenceCandidates(course)
+      .map((candidate) => ({
+        ...candidate,
+        normalizedText: normalizeLookup(`${candidate.question}\n${candidate.answer}`),
+        answer: stripBotInstructions(candidate.answer),
+      }))
+      .find(
+        (candidate) =>
+          candidate.answer &&
+          candidate.normalizedText.includes("1995") &&
+          (candidate.normalizedText.includes("baad") ||
+            candidate.normalizedText.includes("بعد"))
+      ) || null
+  );
 }
 
 const SEARCH_STOP_WORDS = new Set([
@@ -760,6 +1146,40 @@ const SEARCH_STOP_WORDS = new Set([
   "ga",
   "gi",
   "gy",
+  "mein",
+  "mien",
+  "hum",
+  "ham",
+  "wala",
+  "walay",
+  "waly",
+  "wali",
+  "hoga",
+  "hogi",
+  "hongi",
+  "kaise",
+  "kese",
+  "kesy",
+  "sakty",
+  "saky",
+  "karen",
+  "kero",
+  "kro",
+  "jee",
+  "gee",
+  "کیا",
+  "ہیں",
+  "میں",
+  "اور",
+  "کریں",
+  "ہوگا",
+  "ہوگی",
+  "سکتا",
+  "سکتی",
+  "سکتے",
+  "جائے",
+  "ہوتا",
+  "ہوتی",
 ]);
 
 function searchTokens(value: string) {
@@ -781,10 +1201,16 @@ function candidateScore(message: string, question: string, answer: string) {
     if (answerText.includes(token)) score += 2;
   }
 
-  if (query && questionText.includes(query)) score += 20;
-  if (query && answerText.includes(query)) score += 10;
+  // Whole-message containment is a strong signal only when the message is
+  // substantial; a single word like "diploma" appears in half the entries.
+  const substantialQuery = query.length >= 8 && query.split(" ").length >= 2;
+  if (substantialQuery && questionText.includes(query)) score += 20;
+  if (substantialQuery && answerText.includes(query)) score += 10;
 
-  if (isRequirementQuestion(message) && includesAny(`${questionText} ${answerText}`, REQUIREMENT_WORDS)) {
+  if (
+    isRequirementQuestion(message) &&
+    includesAny(`${questionText} ${answerText}`, [...DOCUMENT_WORDS, ...PROCEED_WORDS])
+  ) {
     score += 18;
   }
   if (isSampleRequest(message) && includesAny(`${questionText} ${answerText}`, ["sample", "namoona", "namuna"])) {
@@ -1004,8 +1430,11 @@ export function answerFromSavedKnowledge(
       : null;
   }
 
-  if (includesAny(normalized, TIME_WORDS)) {
-    const item = publicQuestionByOrder(course, 10);
+  if (
+    includesAny(normalized, TIME_WORDS) &&
+    !includesAny(normalized, ["sample", "سیمپل", "نمونہ", "namuna", "namoona"])
+  ) {
+    const item = findTimelineQuestion(course);
     const answer = item ? qaAnswer(course, item) : "";
     if (answer) {
       return {
@@ -1017,7 +1446,7 @@ export function answerFromSavedKnowledge(
   }
 
   if (includesAny(normalized, PAYMENT_WORDS)) {
-    const item = publicQuestionByOrder(course, 4);
+    const item = findPaymentQuestion(course);
     const answer = item ? qaAnswer(course, item) : "";
     if (answer) {
       return {
@@ -1028,8 +1457,16 @@ export function answerFromSavedKnowledge(
     }
   }
 
-  if (isMatricIntent(normalized)) {
-    const item = publicQuestionByOrder(course, 18);
+  // Matric eligibility — but a matric question that is really about
+  // attestations/genuineness ("matric ki IBCC/MOFA genuine karwa doge?") must
+  // NOT get the "Matric Arts" eligibility answer; the decision tree gives the
+  // grounded partial answer for that case.
+  if (
+    isMatricIntent(normalized) &&
+    !includesAny(normalized, ATTESTATION_WORDS) &&
+    !includesAny(normalized, GENUINE_WORDS)
+  ) {
+    const item = findMatricEligibilityQuestion(course);
     const answer = item ? qaAnswer(course, item) : "";
     if (answer) {
       return {
@@ -1040,6 +1477,12 @@ export function answerFromSavedKnowledge(
     }
   }
 
+  // Substring containment is only safe when the message is substantial —
+  // a one-word message like "diploma" is contained in half the saved
+  // questions and would pick an arbitrary wrong answer.
+  const canSubstringMatch =
+    normalized.length >= 8 && normalized.split(" ").length >= 2;
+
   const exact = allEvidenceCandidates(course)
     .map((candidate) => ({
       ...candidate,
@@ -1049,10 +1492,12 @@ export function answerFromSavedKnowledge(
     }))
     .find((candidate) => {
       if (!candidate.answer) return false;
+      if (candidate.normalizedQuestion === normalized) return true;
+      if (!canSubstringMatch) return false;
       return (
-        candidate.normalizedQuestion === normalized ||
         candidate.normalizedQuestion.includes(normalized) ||
-        normalized.includes(candidate.normalizedQuestion)
+        (candidate.normalizedQuestion.length >= 8 &&
+          normalized.includes(candidate.normalizedQuestion))
       );
     });
 
@@ -1082,6 +1527,20 @@ export function answerFromSavedKnowledge(
   return null;
 }
 
+// Every branch answers ONLY from saved course data (published Q&A / training
+// entries). A branch with no saved entry returns nothing, so the question
+// flows on to the model and, failing that, the admin queue — the bot never
+// invents facts from code.
+function treeAnswer(
+  reason: string,
+  answer: string,
+  extra: Partial<BotDecisionTreeAnswer> = {}
+): BotDecisionTreeAnswer | null {
+  const text = (answer || "").trim();
+  if (!text) return null;
+  return { canAnswer: true, reason, answer: text, ...extra };
+}
+
 export function answerCourseQuestionFromTree(
   message: string,
   course: CourseDecisionData | null
@@ -1091,101 +1550,147 @@ export function answerCourseQuestionFromTree(
   const normalized = normalizeLookup(message);
   if (!normalized) return null;
 
+  // Needs the exact saved "without matric" fact — handled by saved knowledge.
   if (isNoMatricQuestion(normalized)) return null;
 
-  if (isRequirementQuestion(message)) {
-    return {
-      canAnswer: true,
-      reason: "requirements",
-      offerWhatsapp: true,
-      answer: documentsAnswer(),
-    };
-  }
-
+  const attestationAsked = includesAny(normalized, ATTESTATION_WORDS);
   const duration = detectDuration(normalized);
   const withoutEmbassy =
-    includesAny(normalized, ["without embassy", "without mofa", "bina embassy", "baghair embassy"]) ||
-    (includesAny(normalized, ["embassy", "mofa"]) && includesAny(normalized, ["bina", "without", "baghair"]));
+    includesAny(normalized, ["without embassy", "without mofa", "bina embassy", "baghair embassy", "بغیر ایمبیسی", "بغیر موفا"]) ||
+    (includesAny(normalized, ["embassy", "mofa", "ایمبیسی", "موفا"]) &&
+      includesAny(normalized, ["bina", "without", "baghair", "بغیر"]));
 
+  // "Kya is diploma per admission/equivalency milega?" — must come before the
+  // proceed/documents catch, or "admission" would trigger the documents list.
   if (
-    isMatricIntent(normalized) &&
-    (includesAny(normalized, ["mofa", "embassy", "ibcc", "genuine", "original"]) ||
-      includesAny(normalized, ATTESTATION_WORDS))
+    includesWordSafe(normalized, [
+      "admission",
+      "ایڈمشن",
+      "university",
+      "یونیورسٹی",
+      "b tech",
+      "btech",
+      "europe",
+      "یورپ",
+      "canada",
+      "کینیڈا",
+      "uk",
+      "equivalency",
+      "ایکویلنسی",
+    ]) &&
+    !isMatricIntent(normalized)
   ) {
+    const item = findFurtherUseQuestion(course);
+    const answered = treeAnswer("further-use", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
+  }
+
+  // Strict documents/requirements question.
+  if (isDocumentsQuestion(message)) {
+    const item = findDocumentsQuestion(course);
+    const answered = treeAnswer("requirements", item ? qaAnswer(course, item) : "", {
+      offerWhatsapp: true,
+    });
+    if (answered) return answered;
+  }
+
+  // Matric + attestation/genuineness — the saved matric answer is about
+  // eligibility only, so give the grounded partials and let the admin confirm
+  // the rest.
+  if (isMatricIntent(normalized) && (attestationAsked || includesAny(normalized, GENUINE_WORDS))) {
     const secMatric = trainingMatching(course, (text) => text.includes("matric tech nahi mangti"));
-    const packageDetails = publicQuestionByOrder(course, 3);
-    return {
-      canAnswer: true,
-      reason: "matric-attestation-partial",
-      queueForAdmin: true,
-      answer: [
-        secMatric
-          ? stripBotInstructions(secMatric.answer)
-          : "Saudi Engineering Council aam tor par matric tech nahi mangti; woh diploma check karte hain.",
-        "",
-        packageDetails
-          ? qaAnswer(course, packageDetails)
-          : "DAE package mein board attestation, IBCC sticker, Foreign Office Pakistan, Saudi Embassy aur MOFA Saudi Arabia sticker ki details saved hain.",
-        "",
-        "Matric ki separate IBCC/MOFA/Embassy attestation ya extra charges ki detail saved data mein clear nahi hai, is liye is part ko admin confirm karega.",
-      ].join("\n"),
-    };
+    const packageDetails = findAttestationPackageQuestion(course);
+    const parts = [
+      secMatric ? stripBotInstructions(secMatric.answer) : "",
+      packageDetails ? qaAnswer(course, packageDetails) : "",
+    ].filter(Boolean);
+    if (parts.length) {
+      return {
+        canAnswer: true,
+        reason: "matric-attestation-partial",
+        queueForAdmin: true,
+        answer: [
+          ...parts,
+          "Matric ki separate IBCC/MOFA/Embassy attestation ya extra charges ki tafseel ka jawab senior assistant isi course k swal jawab section men post ker den gy.",
+        ].join("\n\n"),
+      };
+    }
   }
 
   if (isMatricIntent(normalized)) {
-    if (includesAny(normalized, ["saudi engineering", "sec", "sce", "mang", "demand"])) {
+    if (includesAny(normalized, ["saudi engineering", "mang", "demand", "انجینئرنگ"]) || includesWordSafe(normalized, ["sec", "sce"])) {
       const training = trainingMatching(course, (text) => text.includes("matric tech nahi mangti"));
-      return {
-        canAnswer: true,
-        reason: "matric-sec",
-        queueForAdmin: includesAny(normalized, ["mofa", "embassy", "ibcc", "genuine"]),
-        answer:
-          (training ? stripBotInstructions(training.answer) : "") ||
-          "Saudi Engineering Council aam tor par matric tech nahi mangti, woh diploma check karte hain. Behtar ye hai ke agar matric science nahi hai to pehle Matric Tech ki information lein.",
-      };
+      const answered = treeAnswer(
+        "matric-sec",
+        training ? stripBotInstructions(training.answer) : ""
+      );
+      if (answered) return answered;
     }
 
-    return {
-      canAnswer: true,
-      reason: "matric-eligibility",
-      answer: matricEligibilityAnswer(course),
-    };
+    const item = findMatricEligibilityQuestion(course);
+    const answered = treeAnswer("matric-eligibility", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (includesAny(normalized, PRICE_WORDS)) {
-    return {
-      canAnswer: true,
-      reason: "price",
-      answer: priceAnswer(duration, withoutEmbassy),
-    };
+    const item = withoutEmbassy
+      ? findWithoutEmbassyRatesQuestion(course)
+      : duration === 3 && attestationAsked
+        ? findAttestationPackageQuestion(course) || findRatesQuestion(course)
+        : findRatesQuestion(course);
+    const answered = treeAnswer("price", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (includesAny(normalized, PAYMENT_WORDS)) {
-    const item = publicQuestionByOrder(course, 4);
-    return {
-      canAnswer: true,
-      reason: "payment",
-      answer:
-        qaAnswer(course, item || { id: "", answer: "" }) ||
-        "Documents ke sath advance nahi liya jata. Result bbte.edu.pk par online hone ke baad 24 hours mein half payment hoti hai; diploma/attestations ki photo ya video ke baad remaining payment hoti hai.",
-    };
+    const item = findPaymentQuestion(course);
+    const answered = treeAnswer("payment", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, TIME_WORDS) && !includesAny(normalized, ["sample", "namuna"])) {
-    const item = publicQuestionByOrder(course, 10);
-    return {
-      canAnswer: true,
-      reason: "timeline",
-      answer:
-        qaAnswer(course, item || { id: "", answer: "" }) ||
-        "2-3 din mein result online hota hai; half payment ke baad 7 din mein diploma issue hota hai; attestations hon to mazeed taqreeban 10 din lagte hain. Total approx 20 din.",
-    };
+  if (
+    includesAny(normalized, TIME_WORDS) &&
+    !includesAny(normalized, ["sample", "namuna", "سیمپل", "نمونہ"])
+  ) {
+    const item = findTimelineQuestion(course);
+    const answered = treeAnswer("timeline", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (hasYear(normalized)) return null;
+  // Specific year ("2018 ka diploma milega?"): the saved range rule
+  // ("1995 k baad kisi b session ka...") answers any year it covers.
+  if (hasYear(normalized)) {
+    const year = Number(extractYear(normalized));
+    const currentYear = new Date().getFullYear();
+    if (year > 1995 && year <= currentYear) {
+      const rule = findYearRangeRule(course);
+      const answered = treeAnswer(
+        "year-range-rule",
+        rule ? stripBotInstructions(rule.answer) : "",
+        { offerWhatsapp: isProceedIntent(message) }
+      );
+      if (answered) return answered;
+    }
+    return null;
+  }
 
   if (includesAny(normalized, OLD_DATE_WORDS)) {
-    return oldDateAnswer(normalized);
+    const rule = findYearRangeRule(course);
+    const item = rule ? null : findIbccStickerQuestion(course);
+    const answered = treeAnswer(
+      "old-dates",
+      rule ? stripBotInstructions(rule.answer) : item ? qaAnswer(course, item) : "",
+      { offerWhatsapp: isProceedIntent(message) }
+    );
+    if (answered) return answered;
+  }
+
+  // Another province's board — must come before the availability checks so
+  // "punjab board ka diploma milega?" gets the specific saved answer.
+  if (includesAny(normalized, ["punjab", "پنجاب", "sindh", "سندھ", "kpk", "khyber", "خیبر", "another board", "aur board", "دوسرے بورڈ", "کسی اور بورڈ"])) {
+    const item = findOtherBoardQuestion(course);
+    const answered = treeAnswer("other-board", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   const technology = findTechnology(message, course);
@@ -1194,123 +1699,159 @@ export function answerCourseQuestionFromTree(
     return {
       canAnswer: true,
       reason: "technology-availability",
-      offerWhatsapp: includesAny(normalized, ["proceed", "apply", "chahiye", "chaye", "lena", "process"]),
-      answer: `${note}G bilkul, ${technology.name} ka diploma BBTE available list mein mojood hai. Agar aap process karwana chahte hain to trade ka naam, duration aur final result year ke sath documents share kar dein.`,
+      offerWhatsapp: includesAny(normalized, ["proceed", "apply", "chahiye", "chaye", "چاہیے", "lena", "process"]),
+      answer: `${note}G bilkul, ${technology.name} ka diploma mil jay ga. Ager aap mazeed malomat lena chahty hen to sawal ker sakty hen, aur ager aap process kerwana chahty hen to trade ka naam, duration aur final result year ke sath documents WhatsApp per share ker den.`,
     };
+  }
+
+  // "Kon kon se diploma/technologies available hain?" — the saved list.
+  if (
+    includesAny(normalized, ["kon kon", "کون کون", "konsy diploma", "konsi technology", "list"]) &&
+    includesAny(normalized, ["diploma", "ڈپلومہ", "technology", "ٹیکنالوجی", "certificate", "سرٹیفکیٹ"])
+  ) {
+    const item = findAvailabilityQuestion(course) || findProvideListQuestion(course);
+    const answered = treeAnswer("availability-list", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
+  }
+
+  // Availability of a technology we could NOT match to the saved list —
+  // the saved answer says: check the BBTE website list. Skipped when the
+  // visitor means the current diploma/board itself ("ye/is diploma mil jay
+  // ga?", "balochistan board ka diploma...").
+  const refersToCurrentDiploma =
+    includesWordSafe(normalized, ["ye", "yeh", "یہ", "is", "us", "اس"]) ||
+    includesAny(normalized, ["balochistan", "بلوچستان", "bbte"]);
+  if (
+    isAvailabilityQuestion(normalized) &&
+    !technology &&
+    !refersToCurrentDiploma &&
+    /(?:\b(?:ka|ki|k)\b|کا|کی)\s*(?:diploma|ڈپلومہ|certificate|سرٹیفکیٹ)/.test(normalized)
+  ) {
+    const item = findProvideListQuestion(course);
+    const answered = treeAnswer("availability-check-list", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (includesAny(normalized, ["nebosh", "iosh", "osha"])) {
-    const item = publicQuestionByOrder(course, 25);
-    return { canAnswer: true, reason: "outside-certification", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+    const item = findNeboshQuestion(course);
+    const answered = treeAnswer("outside-certification", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["degree", "graduation", "bachelor", "bs ", "master"])) {
-    const item = publicQuestionByOrder(course, 20);
-    return { canAnswer: true, reason: "degree-unavailable", answer: qaAnswer(course, item || { id: "", answer: "" }) };
-  }
-
-  if (includesAny(normalized, ["punjab", "sindh", "kpk", "khyber", "another board", "aur board"])) {
-    const item = publicQuestionByOrder(course, 12);
-    return { canAnswer: true, reason: "other-board", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["degree", "ڈگری", "graduation", "گریجویشن", "bachelor", "بیچلر", "master", "ماسٹر"]) || includesWordSafe(normalized, ["bs", "ba", "bsc"])) {
+    const item = findDegreeQuestion(course);
+    const answered = treeAnswer("degree-unavailable", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (
-    includesAny(normalized, ATTESTATION_WORDS) &&
-    includesAny(normalized, ["kon kon", "konsi", "konsy", "which", "details", "kerwa", "karwa", "do gy", "doge"])
+    attestationAsked &&
+    !includesWordSafe(normalized, ["hec", "ایچ ای سی", "musaddaq", "mosadqa", "مصدقہ"]) &&
+    includesAny(normalized, ["kon kon", "کون کون", "konsi", "konsy", "کونسی", "which", "details", "تفصیل", "kerwa", "karwa", "کروا", "do gy", "doge", "دو گے", "دیں گے"])
   ) {
-    const item = publicQuestionByOrder(course, 3);
-    return {
-      canAnswer: true,
-      reason: "attestation-package",
-      answer:
-        qaAnswer(course, item || { id: "", answer: "" }) ||
-        "3 years package mein board attestation, IBCC UV light security wala without-record sticker back dates mein, Foreign Office Pakistan edit-link attestation, Saudi Embassy attestation aur MOFA Saudi Arabia sticker shamil hain.",
-    };
+    const item = findAttestationPackageQuestion(course);
+    const answered = treeAnswer("attestation-package", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["edit link", "foreign office", "fo ", "mofa pakistan"])) {
-    const item = publicQuestionByOrder(course, 6);
-    return { canAnswer: true, reason: "edit-link", answer: qaAnswer(course, item || { id: "", answer: "" }, { linkMedia: true }) };
+  if (includesAny(normalized, ["edit link", "ایڈٹ لنک", "foreign office", "فارن آفس", "mofa pakistan", "موفا پاکستان"])) {
+    const item = findEditLinkQuestion(course);
+    const answered = treeAnswer(
+      "edit-link",
+      item ? qaAnswer(course, item, { linkMedia: true }) : ""
+    );
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["ibcc", "sticker", "without record", "uv light"])) {
-    const item = publicQuestionByOrder(course, 8);
-    return { canAnswer: true, reason: "ibcc-sticker", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["ibcc", "آئی بی سی سی", "sticker", "سٹکر", "سٹیکر", "without record", "بغیر ریکارڈ", "uv light", "یو وی"])) {
+    const item = findIbccStickerQuestion(course);
+    const answered = treeAnswer("ibcc-sticker", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (includesAny(normalized, GENUINE_WORDS)) {
     const diplomaOriginal = trainingMatching(course, (text) => text.includes("diploma original"));
-    const item =
-      includesAny(normalized, ["attestation", "attestations", "mofa", "embassy"])
-        ? publicQuestionByOrder(course, 7) || publicQuestionByOrder(course, 3)
-        : null;
-    return {
-      canAnswer: true,
-      reason: "genuine-original",
-      answer:
-        (item ? qaAnswer(course, item) : "") ||
-        (diplomaOriginal ? stripBotInstructions(diplomaOriginal.answer) : "") ||
-        "Diploma online record ke sath hota hai; agar koi idara Balochistan Technical Board ko verification ke liye email kare to board verify karta hai.",
-    };
+    const item = attestationAsked ? findEmbassyGenuineQuestion(course) : null;
+    const answered = treeAnswer(
+      "genuine-original",
+      (item ? qaAnswer(course, item) : "") ||
+        (diplomaOriginal ? stripBotInstructions(diplomaOriginal.answer) : "")
+    );
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, SEC_WORDS)) {
-    if (includesAny(normalized, ["guarantee", "garranty", "zaroor", "confirm mil", "pakka"])) {
-      const item = publicQuestionByOrder(course, 13);
-      return { canAnswer: true, reason: "sec-guarantee", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesWordSafe(normalized, SEC_WORDS)) {
+    if (includesAny(normalized, ["guarantee", "garranty", "گارنٹی", "zaroor", "ضرور", "confirm mil", "pakka", "پکا"])) {
+      const item = findSecGuaranteeQuestion(course);
+      const answered = treeAnswer("sec-guarantee", item ? qaAnswer(course, item) : "");
+      if (answered) return answered;
     }
-    if (includesAny(normalized, ["apply", "membership ly", "membership le", "karwa", "kerwa"])) {
-      const training = trainingMatching(course, (text) => text.includes("membership") && text.includes("aap khud"));
-      return {
-        canAnswer: true,
-        reason: "sec-apply",
-        answer:
-          (training ? stripBotInstructions(training.answer) : "") ||
-          "Is diploma aur attestations ke baad Saudi Engineering Council ki Technician membership aap khud Saudi Arabia se apply karenge. Board verification email par board diploma verify karta hai.",
-      };
+    if (includesAny(normalized, ["apply", "اپلائی", "membership ly", "membership le", "ممبرشپ لے", "karwa", "kerwa", "کروا"])) {
+      const training = trainingMatching(
+        course,
+        (text) => text.includes("membership") && text.includes("aap khud")
+      );
+      const answered = treeAnswer(
+        "sec-apply",
+        training ? stripBotInstructions(training.answer) : ""
+      );
+      if (answered) return answered;
     }
-    const item = publicQuestionByOrder(course, 5);
-    return { canAnswer: true, reason: "sec-acceptance", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+    const item = findSecAcceptanceQuestion(course);
+    const answered = treeAnswer("sec-acceptance", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["physical", "qvp"])) {
-    const item = publicQuestionByOrder(course, 11);
-    return { canAnswer: true, reason: "physical-verification", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["physical", "فزیکل", "qvp"])) {
+    const item = findPhysicalQuestion(course);
+    const answered = treeAnswer("physical-verification", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
   if (includesAny(normalized, ["musaddaq", "mosadqa", "مصدقہ"])) {
-    const item = publicQuestionByOrder(course, 14);
-    return { canAnswer: true, reason: "musaddaq", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+    const item = findMusaddaqQuestion(course);
+    const answered = treeAnswer("musaddaq", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["hec"])) {
-    const item = publicQuestionByOrder(course, 15);
-    return { canAnswer: true, reason: "hec", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesWordSafe(normalized, ["hec", "ایچ ای سی"])) {
+    const item = findHecQuestion(course);
+    const answered = treeAnswer("hec", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["office", "mulaqat", "meeting", "milna"])) {
-    const item = publicQuestionByOrder(course, 16);
-    return { canAnswer: true, reason: "office-meeting", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["office", "آفس", "دفتر", "address", "ایڈریس", "mulaqat", "ملاقات", "meeting", "milna"])) {
+    const item = findOfficeQuestion(course);
+    const answered = treeAnswer("office-meeting", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["call", "phone par", "bat ho sakti"])) {
-    const item = publicQuestionByOrder(course, 19);
-    return { canAnswer: true, reason: "call-policy", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["phone par", "bat ho sakti", "فون پر", "بات ہو سکتی"]) || includesWordSafe(normalized, ["call", "کال"])) {
+    const item = findCallQuestion(course);
+    const answered = treeAnswer("call-policy", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["courier", "tcs", "saudi arabia men courier", "delivery"])) {
-    const item = publicQuestionByOrder(course, 21);
-    return { canAnswer: true, reason: "courier", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["courier", "کوریئر", "tcs", "delivery", "ڈیلیوری"])) {
+    const item = findCourierQuestion(course);
+    const answered = treeAnswer("courier", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["discount", "kam", "riayat", "sasta"])) {
-    const item = publicQuestionByOrder(course, 22);
-    return { canAnswer: true, reason: "discount", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  if (includesAny(normalized, ["discount", "ڈسکاؤنٹ", "riayat", "رعایت", "sasta", "سستا", "kam kar", "kam ho", "کم کر", "کم ہو"])) {
+    const item = findDiscountQuestion(course);
+    const answered = treeAnswer("discount", item ? qaAnswer(course, item) : "");
+    if (answered) return answered;
   }
 
-  if (includesAny(normalized, ["admission", "b tech", "btech", "university", "europe", "canada", "uk"])) {
-    const item = publicQuestionByOrder(course, 17);
-    return { canAnswer: true, reason: "further-use", answer: qaAnswer(course, item || { id: "", answer: "" }) };
+  // Broad "I want to proceed" with nothing more specific matched — give the
+  // saved documents answer and the WhatsApp hand-off.
+  if (isProceedIntent(message)) {
+    const item = findDocumentsQuestion(course);
+    const answered = treeAnswer("proceed-documents", item ? qaAnswer(course, item) : "", {
+      offerWhatsapp: true,
+    });
+    if (answered) return answered;
   }
 
   return null;
@@ -1454,13 +1995,13 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     "",
     "P4 SENSITIVE TOPICS = SAVED WORDING: For genuineness / real / asli / original / authentic / verified, guarantee, discount, refund, or physical verification — answer using the matching saved answer's wording as it is. Do NOT soften, exaggerate, add reassurance, promises, warnings, disclaimers, or opinions of your own. Keep the business's honest stance (e.g. no future guarantee; let the customer verify themselves where the data says so).",
     "",
-    "P5 DIRECT-FIT CHECK: Matching is by MEANING, not only keywords. Handle typos, missing spaces, synonyms, Roman Urdu/Urdu/English, and map ideas (documents = papers = kaghazat = darkar = requirements; proceed = apply = aage barhna = daakhla). But a related answer is NOT enough. Before answering, ask: 'Does the saved answer resolve the exact customer question?' If yes, answer from it. If no, use the Fallback sentence. Example: a saved answer about 'Matric Arts ke sath diploma' does NOT answer 'matric na ho / matric ke baghair diploma' unless the context explicitly says without matric is allowed or not allowed. Example: a saved answer about back-dates does NOT answer a specific year like 2005 unless that year is explicitly mentioned.",
+    "P5 DIRECT-FIT CHECK: Matching is by MEANING, not only keywords. Handle typos, missing spaces, synonyms, Roman Urdu/Urdu/English, and map ideas (documents = papers = kaghazat = darkar = requirements; proceed = apply = aage barhna = daakhla). But a related answer is NOT enough. Before answering, ask: 'Does the saved answer resolve the exact customer question?' If yes, answer from it. If no, use the Fallback sentence. Example: a saved answer about 'Matric Arts ke sath diploma' does NOT answer 'matric na ho / matric ke baghair diploma' unless the context explicitly says without matric is allowed or not allowed. Example: a saved answer about back-dates does NOT answer a specific year like 2005 — EXCEPT when a saved rule explicitly covers a range (e.g. '1995 k baad kisi b session ka diploma mil jay ga' covers every year after 1995): then answer the asked year from that rule using its own wording.",
     "",
     "P6 SPECIAL QUESTION TYPES (pick the matching saved entry):",
     "- AVAILABILITY ('kya X mil sakta hai', 'is X available', a trade/technology/duration/board): check the supplied lists. If it is listed, confirm using its EXACT name. If it is clearly not offered (a degree, another province/board, an outside certification not in the data), say so honestly and offer the closest available alternative ONLY if the data has one.",
     "- REQUIREMENTS / how to proceed / how & where to send documents / what is needed: give the saved DOCUMENTS answer, then invite the visitor to share those documents on WhatsApp.",
     "- PROCEDURE / process / tareeqa / fee plan / installments / payment schedule: give the saved PAYMENT-SCHEDULE answer. This is DIFFERENT from the documents answer — never swap the two.",
-    "- SAMPLE / picture / attached material, OR any entry marked 'Sample attached to this answer: yes': keep your helpful message AND add that entry's link as a short markdown label, e.g. [Sample dekhein](LINK) — never a raw long URL, never drop the message. Preserve bare domains like bbte.edu.pk exactly.",
+    "- SAMPLE / picture / attached material, OR any entry marked 'Sample attached to this answer: yes': keep your helpful message AND add that entry's link as a short markdown label, e.g. [Sample dekhein](LINK) — never a raw long URL, never drop the message. NEVER reply with only a link: always write at least one helpful sentence with it. Preserve bare domains like bbte.edu.pk exactly.",
     "- ASKS YOUR PHONE / WHATSAPP NUMBER: do not paste a number; say the information is available here, and to share documents they can use the WhatsApp link.",
     "- ANOTHER COURSE: don't answer from the current one; give that other course's link as a short labelled markdown link.",
     "",

@@ -5,6 +5,7 @@ import {
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
   BOT_SAMPLE_INTRO,
+  answerCourseQuestionFromTree,
   answerFromSavedKnowledge,
   botExpiresAt,
   buildBotSystemPrompt,
@@ -30,6 +31,10 @@ import {
   getClientIpFromHeaders,
 } from "@/lib/visitor-server";
 import { sendVisitorSignal } from "@/lib/ad-signals";
+
+// The model call (especially reasoning models) can take well past Vercel's
+// default function window; give the route the full minute.
+export const maxDuration = 60;
 
 function clean(value: unknown, max = 1000) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "";
@@ -340,17 +345,49 @@ export async function POST(request: NextRequest) {
 
     const { course, context } = await buildCourseBotContext(courseId);
 
-    const savedKnowledgeReply = answerFromSavedKnowledge(message, course);
-    if (savedKnowledgeReply) {
+    // Deterministic layers: exact/high-confidence saved knowledge first, then
+    // the intent decision tree — both answer ONLY from saved course data.
+    const deterministicReply =
+      answerFromSavedKnowledge(message, course) ||
+      answerCourseQuestionFromTree(message, course);
+
+    if (deterministicReply?.answer?.trim()) {
+      if (deterministicReply.queueForAdmin && course?.id) {
+        await queueBotQuestionForAdmin({
+          courseId: course.id,
+          message,
+          visitorId: visitor?.id,
+          conversationId: conversation.id,
+        });
+      }
+
+      const treeWhatsappUrl =
+        deterministicReply.offerWhatsapp && course
+          ? buildWhatsappUrl(settings.whatsappNumber, [
+              "Assalam o Alaikum, main course proceed karna chahta/chahti hoon.",
+              `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
+              `Course: ${course.title}`,
+              `Course ID: ${course.id}`,
+              `Question: ${message}`,
+              `Chat ID: ${conversation.id}`,
+            ])
+          : null;
+
+      const treeAnswerBody = treeWhatsappUrl
+        ? `${deterministicReply.answer}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne documents isi number par share karein.`
+        : deterministicReply.answer;
+
       await prisma.botMessage.create({
         data: {
           conversationId: conversation.id,
           role: "assistant",
-          content: savedKnowledgeReply.answer,
+          content: treeAnswerBody,
           metadata: {
             canAnswer: true,
             savedKnowledge: true,
-            reason: savedKnowledgeReply.reason,
+            reason: deterministicReply.reason,
+            whatsappUrl: treeWhatsappUrl,
+            queuedForAdmin: Boolean(deterministicReply.queueForAdmin),
             botName,
           },
         },
@@ -358,9 +395,9 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         conversationId: conversation.id,
-        answer: savedKnowledgeReply.answer,
+        answer: treeAnswerBody,
         canAnswer: true,
-        whatsappUrl: null,
+        whatsappUrl: treeWhatsappUrl,
         expiresAt: conversation.expiresAt,
         visitorKey: visitor?.visitorKey || visitorKey,
         botName,

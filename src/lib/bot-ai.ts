@@ -20,6 +20,11 @@ async function readError(response: Response) {
   return text || `${response.status} ${response.statusText}`;
 }
 
+// Abort the provider call before the serverless function itself times out, so
+// the route can still reply with the graceful fallback (and queue the question
+// for the admin) instead of the visitor seeing a dead request.
+const PROVIDER_TIMEOUT_MS = 50_000;
+
 async function callOpenAiLike(
   settings: SiteSettings,
   messages: BotChatMessage[],
@@ -27,6 +32,7 @@ async function callOpenAiLike(
 ) {
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.botApiKey}`,
@@ -67,6 +73,7 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "x-api-key": settings.botApiKey,
@@ -118,6 +125,7 @@ export async function callBotJson(
   if (settings.botProvider === "claude") {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       headers: {
         "Content-Type": "application/json",
         "x-api-key": settings.botApiKey,
@@ -150,6 +158,7 @@ export async function callBotJson(
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.botApiKey}`,
