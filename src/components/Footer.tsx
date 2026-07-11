@@ -16,7 +16,7 @@ export default function Footer() {
             {settings.logoFilename ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`/api/media/${encodeURIComponent(settings.logoFilename)}`}
+                src={`/api/media/${encodeURIComponent(settings.logoFilename)}?direct=1`}
                 alt=""
                 className="w-7 h-7 rounded-lg object-cover ring-2 ring-white shadow"
               />

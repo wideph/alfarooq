@@ -10,6 +10,12 @@ type TrainingEntry = {
   question: string;
   answer: string;
   source?: string;
+  sourceRef?: string | null;
+  reviewStatus?: string;
+  evidence?: unknown;
+  confidence?: number | null;
+  usageCount?: number;
+  conflictWith?: { id: string; question: string; answer: string } | null;
   course?: { id: string; title: string };
 };
 type BotConversation = {
@@ -55,6 +61,9 @@ export default function BotAdminPanel({
   const [loadingChats, setLoadingChats] = useState(false);
   const [learning, setLearning] = useState(false);
   const [message, setMessage] = useState("");
+  const [testQuestion, setTestQuestion] = useState("");
+  const [testResult, setTestResult] = useState("");
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (!selectedCourseId && courses[0]) setSelectedCourseId(courses[0].id);
@@ -117,6 +126,45 @@ export default function BotAdminPanel({
     if (res.ok) {
       setMessage("Training entry delete ho gayi.");
       await loadTraining();
+    }
+  }
+
+  async function reviewTraining(id: string, action: "approve" | "reject") {
+    if (!canTrainingWrite) return;
+    const res = await fetch("/api/admin/bot-training", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action }),
+    });
+    if (res.ok) {
+      setMessage(action === "approve" ? "AI answer approve ho gaya." : "AI answer reject ho gaya.");
+      await loadTraining();
+    } else setMessage("Review update nahi ho saka.");
+  }
+
+  async function testBot() {
+    if (!selectedCourseId || !testQuestion.trim() || testing) return;
+    setTesting(true);
+    setTestResult("");
+    try {
+      const res = await fetch("/api/bot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: selectedCourseId,
+          message: testQuestion,
+          visitorKey: `admin-test-${Date.now()}`,
+          previousVisitorKey: "",
+          conversationId: "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bot test fail");
+      setTestResult(data.answer || "Koi answer nahi mila.");
+    } catch (error) {
+      setTestResult(error instanceof Error ? error.message : "Bot test fail");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -207,6 +255,32 @@ export default function BotAdminPanel({
             </div>
 
             {canTrainingWrite && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 space-y-2">
+                <p className="text-xs font-semibold text-sky-900">Bot test console</p>
+                <textarea
+                  value={testQuestion}
+                  onChange={(event) => setTestQuestion(event.target.value)}
+                  rows={2}
+                  placeholder="Customer ka test sawal..."
+                  className="w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm urdu-text"
+                />
+                <button
+                  type="button"
+                  onClick={testBot}
+                  disabled={!testQuestion.trim() || testing}
+                  className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {testing ? "Testing..." : "Bot ka jawab check karein"}
+                </button>
+                {testResult && (
+                  <p className="whitespace-pre-line rounded-xl bg-white p-3 text-sm text-slate-700 urdu-text">
+                    {testResult}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {canTrainingWrite && (
               <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
                 <p className="text-xs text-slate-600 leading-relaxed">
                   Bot khud course ke Q&amp;A se anticipated sawal-jawab bana kar
@@ -295,14 +369,49 @@ export default function BotAdminPanel({
                         BOT self-learning
                       </span>
                     )}
+                    {entry.source === "ai" && (
+                      <span className={`mb-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        entry.reviewStatus === "approved"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : entry.reviewStatus === "rejected"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-800"
+                      }`}>
+                        <Sparkles className="w-3 h-3" />
+                        AI BOT POSTED — {entry.reviewStatus || "pending review"}
+                      </span>
+                    )}
+                    {entry.conflictWith && (
+                      <p className="mt-2 rounded-lg bg-red-50 p-2 text-[11px] text-red-700">
+                        Conflict warning: isi sawal ka approved jawab mukhtalif hai — {entry.conflictWith.answer}
+                      </p>
+                    )}
                     <p className="text-sm font-semibold text-slate-800 urdu-text leading-loose">
                       Q: {entry.question}
                     </p>
                     <p className="mt-1 text-xs text-slate-500 urdu-text leading-loose">
                       A: {entry.answer}
                     </p>
+                    {entry.source === "ai" && (
+                      <p className="mt-1 break-all text-[11px] text-slate-400">
+                        Confidence: {Math.round((entry.confidence || 0) * 100)}% · Used: {entry.usageCount || 0}
+                        {Array.isArray(entry.evidence) && entry.evidence.length
+                          ? ` · Evidence: ${entry.evidence.join(", ")}`
+                          : ""}
+                      </p>
+                    )}
                     {canTrainingWrite && (
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {entry.source === "ai" && entry.reviewStatus !== "approved" && (
+                          <button type="button" onClick={() => reviewTraining(entry.id, "approve")} className="text-xs font-semibold text-emerald-700">
+                            Approve
+                          </button>
+                        )}
+                        {entry.source === "ai" && entry.reviewStatus !== "rejected" && (
+                          <button type="button" onClick={() => reviewTraining(entry.id, "reject")} className="text-xs font-semibold text-amber-700">
+                            Reject
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {

@@ -22,7 +22,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.redirect(signedUrl, {
         status: 307,
         headers: {
-          "Cache-Control": "private, max-age=300",
+          // The object URL is short-lived but the filename is already guarded.
+          // Let the browser/CDN reuse this redirect instead of signing on every
+          // logo, image and PDF request.
+          "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=60",
         },
       });
     }

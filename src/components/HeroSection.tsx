@@ -18,7 +18,7 @@ export default function HeroSection({ settings }: { settings: SiteSettingsData }
   if (!settings.heroText) return null;
 
   const logoSrc = settings.logoFilename
-    ? `/api/media/${encodeURIComponent(settings.logoFilename)}`
+    ? `/api/media/${encodeURIComponent(settings.logoFilename)}?direct=1`
     : null;
 
   const logoClass =

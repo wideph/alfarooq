@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getPdfJs } from "@/lib/pdfjs";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -53,12 +52,6 @@ export default function CoursePageView({
 }) {
   const [course, setCourse] = useState(initialCourse);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const hasPdfSample = course.samples.some((sample) => sample.type === "pdf");
-
-  useEffect(() => {
-    if (hasPdfSample) void getPdfJs();
-  }, [hasPdfSample]);
-
   // Scroll to (and briefly highlight) the Q&A / sample a bot link points at.
   // Content renders/relayouts async (images, PDFs), so retry until the id exists.
   useEffect(() => {

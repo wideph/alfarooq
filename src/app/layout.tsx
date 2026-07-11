@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
 import { SiteSettingsProvider } from "@/components/SiteSettingsProvider";
-import PreloadAssets from "@/components/PreloadAssets";
 import FloatingHomeButton from "@/components/FloatingHomeButton";
 import VisitorTracker from "@/components/VisitorTracker";
 import VisitorBlockGate from "@/components/VisitorBlockGate";
@@ -77,7 +76,6 @@ export default async function RootLayout({
         {logoUrl ? <link rel="preload" href={logoUrl} as="image" /> : null}
       </head>
       <body className="antialiased text-slate-800">
-        <PreloadAssets logoUrl={logoUrl} />
         <SiteSettingsProvider initialSettings={settings}>{children}</SiteSettingsProvider>
         <VisitorTracker />
         <VisitorBlockGate />

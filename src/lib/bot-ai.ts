@@ -41,7 +41,9 @@ async function callOpenAiLike(
       model: settings.botModel,
       messages,
       temperature: 0.2,
-      max_tokens: 4000,
+      // This only caps the model's reply, not the supplied knowledge context.
+      // Leave enough room for multi-part customer questions and JSON escaping.
+      max_tokens: 8000,
       response_format: { type: "json_object" },
     }),
   });
@@ -84,7 +86,7 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
       system,
       messages: conversation,
       temperature: 0.2,
-      max_tokens: 4000,
+      max_tokens: 8000,
       stop_sequences: ["```"],
     }),
   });

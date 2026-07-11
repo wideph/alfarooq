@@ -139,17 +139,24 @@ model VisitorEvent {
 }
 
 model BotTrainingEntry {
-  id        String   @id @default(cuid())
-  courseId  String
-  question  String
-  answer    String
-  source    String   @default("admin")
-  sourceRef String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  courseId     String
+  question     String
+  answer       String
+  source       String    @default("admin")
+  sourceRef    String?
+  reviewStatus String    @default("approved")
+  evidence     Json?
+  confidence   Float?
+  usageCount   Int       @default(0)
+  approvedAt   DateTime?
+  rejectedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@index([courseId, source])
+  @@index([courseId, reviewStatus])
 }
 
 model BotConversation {

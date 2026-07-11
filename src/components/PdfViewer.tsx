@@ -51,10 +51,6 @@ export default function PdfViewer({ filename, title, compact = false }: PdfViewe
   const [containerWidth, setContainerWidth] = useState(320);
 
   useEffect(() => {
-    void getPdfJs();
-  }, []);
-
-  useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 

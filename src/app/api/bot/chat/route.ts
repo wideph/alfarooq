@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { callBotModel, type BotChatMessage } from "@/lib/bot-ai";
 import {
   BOT_FALLBACK_ANSWER,
   BOT_BLOCKED_ANSWER,
   BOT_WHATSAPP_CONTACT_GUIDE,
   BOT_SAMPLE_INTRO,
-  answerCourseQuestionFromTree,
   answerFromSavedKnowledge,
   botExpiresAt,
   buildBotSystemPrompt,
   buildCourseBotContext,
+  buildCandidateBotContext,
   buildSampleLinks,
   buildWhatsappUrl,
-  cleanupExpiredBotConversations,
+  findBotEvidenceCandidates,
   getGeneralChatAnswer,
   isAbusiveMessage,
   isRequirementQuestion,
@@ -32,12 +33,24 @@ import {
 } from "@/lib/visitor-server";
 import { sendVisitorSignal } from "@/lib/ad-signals";
 
-// The model call (especially reasoning models) can take well past Vercel's
-// default function window; give the route the full minute.
+// A rejected tree candidate can require a second, full-knowledge model pass.
 export const maxDuration = 60;
 
 function clean(value: unknown, max = 1000) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "";
+}
+
+async function callStrictBotModel(
+  settings: Awaited<ReturnType<typeof fetchPrivateSiteSettingsFromDb>>,
+  messages: BotChatMessage[]
+) {
+  let last = parseBotJson("");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callBotModel(settings, messages);
+    last = parseBotJson(raw);
+    if (last.parsed) return last;
+  }
+  return last;
 }
 
 async function findOrCreateVisitor(
@@ -70,15 +83,25 @@ async function queueBotQuestionForAdmin({
   visitorId?: string | null;
   conversationId: string;
 }) {
-  const existing = await prisma.userQuestion.findFirst({
+  const pending = await prisma.userQuestion.findMany({
     where: {
       courseId,
-      question: message,
       status: "pending",
       source: "bot",
     },
-    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: { id: true, question: true },
   });
+  const normalize = (value: string) =>
+    value
+      .normalize("NFKC")
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06ff]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const normalizedMessage = normalize(message);
+  const existing = pending.find((item) => normalize(item.question) === normalizedMessage);
 
   if (existing) return;
 
@@ -95,60 +118,72 @@ async function queueBotQuestionForAdmin({
   });
 }
 
-// When the deterministic layers missed but the model found the answer inside
-// the course data, save the pair as a training-only Q&A. Next time the same
-// question is answered instantly from saved knowledge (no model tokens), and
-// the admin can review/edit or delete the learned answer in the course QAs.
-async function saveLearnedAnswer({
-  courseId,
-  message,
-  answer,
-  visitorId,
-  conversationId,
-}: {
-  courseId: string;
-  message: string;
-  answer: string;
-  visitorId?: string | null;
-  conversationId: string;
-}) {
-  const question = message.trim().slice(0, 1000);
-  const cleanAnswer = answer.trim().slice(0, 4000);
-  if (question.length < 4 || !cleanAnswer) return;
+async function saveAiRecoveredTraining(
+  courseId: string,
+  question: string,
+  answer: string,
+  evidenceIds: string[],
+  confidence: number
+) {
+  const normalizedQuestion = question
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06ff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fingerprint = createHash("sha256")
+    .update(`${courseId}\n${normalizedQuestion}`)
+    .digest("hex");
+  const sourceRef = `live:${fingerprint}`;
 
-  // Never store a second copy of a question the admin (or a previous learning
-  // pass) already has — the admin's version stays authoritative.
-  const existing = await prisma.userQuestion.findFirst({
-    where: { courseId, question },
-    select: { id: true },
-  });
-  if (existing) return;
-
-  const existingTraining = await prisma.botTrainingEntry.findFirst({
-    where: { courseId, question },
-    select: { id: true },
-  });
-  if (existingTraining) return;
-
-  await prisma.userQuestion.create({
-    data: {
+  const data = {
       courseId,
       question,
-      answer: cleanAnswer,
-      status: "training",
-      trainingOnly: true,
-      publishForUsers: false,
-      source: "bot",
-      visitorId,
-      botConversationId: conversationId,
-      answeredAt: new Date(),
-    },
+      answer,
+      source: "ai",
+      sourceRef,
+      reviewStatus: "pending",
+      evidence: evidenceIds,
+      confidence,
+  } as const;
+  const existing = await prisma.botTrainingEntry.findFirst({
+    where: { courseId, source: "ai", sourceRef },
+    select: { id: true },
   });
+  if (existing) {
+    const entry = await prisma.botTrainingEntry.update({
+      where: { id: existing.id },
+      data: {
+      question,
+      answer,
+      reviewStatus: "pending",
+      evidence: evidenceIds,
+      confidence,
+      rejectedAt: null,
+      },
+      select: { id: true },
+    });
+    return entry.id;
+  }
+
+  try {
+    const entry = await prisma.botTrainingEntry.create({
+      data,
+      select: { id: true },
+    });
+    return entry.id;
+  } catch {
+    // A concurrent identical question may have won the partial unique index.
+    const raced = await prisma.botTrainingEntry.findFirst({
+      where: { courseId, source: "ai", sourceRef },
+      select: { id: true },
+    });
+    if (raced) return raced.id;
+    throw new Error("AI training entry save nahi ho saki.");
+  }
 }
 
 export async function POST(request: NextRequest) {
-  await cleanupExpiredBotConversations();
-
   const settings = await fetchPrivateSiteSettingsFromDb();
   if (!settings.botEnabled || !settings.botApiKey || !settings.botModel) {
     return NextResponse.json({ error: "Bot configured nahi hai" }, { status: 404 });
@@ -172,9 +207,15 @@ export async function POST(request: NextRequest) {
 
     const visitor = await findOrCreateVisitor(visitorKey, previousVisitorKey, ipAddress);
 
-    const existingConversation = conversationId
+    const requestedConversation = conversationId
       ? await prisma.botConversation.findUnique({ where: { id: conversationId } })
       : null;
+    // A client-provided chat ID is not authority to access that conversation.
+    // Reuse it only when it belongs to the resolved visitor.
+    const existingConversation =
+      requestedConversation && visitor?.id && requestedConversation.visitorId === visitor.id
+        ? requestedConversation
+        : null;
 
     const conversation = existingConversation
       ? await prisma.botConversation.update({
@@ -396,63 +437,23 @@ export async function POST(request: NextRequest) {
 
     const { course, context } = await buildCourseBotContext(courseId);
 
-    // Deterministic layers: exact/high-confidence saved knowledge first, then
-    // the intent decision tree — both answer ONLY from saved course data.
-    const deterministicReply =
-      answerFromSavedKnowledge(message, course) ||
-      answerCourseQuestionFromTree(message, course);
-
-    if (deterministicReply?.answer?.trim()) {
-      if (deterministicReply.queueForAdmin && course?.id) {
-        await queueBotQuestionForAdmin({
-          courseId: course.id,
-          message,
-          visitorId: visitor?.id,
-          conversationId: conversation.id,
+    // Stage 1: retrieve a small tree/search result and ask the LLM to verify
+    // semantic fit. A high keyword score is never sent directly to a customer.
+    const savedKnowledgeReply = answerFromSavedKnowledge(message, course);
+    const candidates = findBotEvidenceCandidates(message, course, 8);
+    if (savedKnowledgeReply && course) {
+      const alreadyPresent = candidates.some(
+        (item) => stripBotInstructions(item.answer) === savedKnowledgeReply.answer
+      );
+      if (!alreadyPresent) {
+        candidates.unshift({
+          id: `tree:${savedKnowledgeReply.reason}`,
+          source: "botTraining",
+          question: message,
+          answer: savedKnowledgeReply.answer,
+          score: 100,
         });
       }
-
-      const treeWhatsappUrl =
-        deterministicReply.offerWhatsapp && course
-          ? buildWhatsappUrl(settings.whatsappNumber, [
-              "Assalam o Alaikum, main course proceed karna chahta/chahti hoon.",
-              `Visitor ID: ${visitor?.visitorKey || visitorKey || "unknown"}`,
-              `Course: ${course.title}`,
-              `Course ID: ${course.id}`,
-              `Question: ${message}`,
-              `Chat ID: ${conversation.id}`,
-            ])
-          : null;
-
-      const treeAnswerBody = treeWhatsappUrl
-        ? `${deterministicReply.answer}\n\nMazeed proceed kerny ke liye WhatsApp link par click karein aur apne documents isi number par share karein.`
-        : deterministicReply.answer;
-
-      await prisma.botMessage.create({
-        data: {
-          conversationId: conversation.id,
-          role: "assistant",
-          content: treeAnswerBody,
-          metadata: {
-            canAnswer: true,
-            savedKnowledge: true,
-            reason: deterministicReply.reason,
-            whatsappUrl: treeWhatsappUrl,
-            queuedForAdmin: Boolean(deterministicReply.queueForAdmin),
-            botName,
-          },
-        },
-      });
-
-      return NextResponse.json({
-        conversationId: conversation.id,
-        answer: treeAnswerBody,
-        canAnswer: true,
-        whatsappUrl: treeWhatsappUrl,
-        expiresAt: conversation.expiresAt,
-        visitorKey: visitor?.visitorKey || visitorKey,
-        botName,
-      });
     }
 
     const recentMessages = await prisma.botMessage.findMany({
@@ -461,12 +462,11 @@ export async function POST(request: NextRequest) {
       take: 10,
     });
 
-    const systemPrompt = [
+    const fullSystemPrompt = [
       buildBotSystemPrompt(context, settings.botSystemNote),
       `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
     ].join("\n");
-    const providerMessages: BotChatMessage[] = [
-      { role: "system", content: systemPrompt },
+    const conversationMessages: BotChatMessage[] = [
       ...recentMessages
         .reverse()
         .map((item) => ({
@@ -475,12 +475,52 @@ export async function POST(request: NextRequest) {
         }) satisfies BotChatMessage),
     ];
 
-    let parsed = { canAnswer: false, answer: "", parsed: false };
+    let parsed = {
+      canAnswer: false,
+      answer: "",
+      evidenceIds: [] as string[],
+      confidence: 0,
+      parsed: false,
+    };
     let providerError: string | null = null;
+    let usedFullRecovery = candidates.length === 0;
 
     try {
-      const raw = await callBotModel(settings, providerMessages);
-      parsed = parseBotJson(raw);
+      if (course && candidates.length > 0) {
+        const candidatePrompt = [
+          buildBotSystemPrompt(
+            buildCandidateBotContext(course, candidates),
+            settings.botSystemNote
+          ),
+          "This is verification stage 1. Set canAnswer=true only when a supplied candidate directly and completely resolves the visitor's question.",
+        ].join("\n");
+        parsed = await callStrictBotModel(settings, [
+          { role: "system", content: candidatePrompt },
+          ...conversationMessages,
+        ]);
+      }
+
+      const candidateAnswer = stripBotInstructions(parsed.answer);
+      const candidateIds = new Set(candidates.map((item) => item.id));
+      const candidateEvidenceValid =
+        parsed.evidenceIds.length > 0 &&
+        parsed.evidenceIds.every((id) => candidateIds.has(id));
+      const candidateWorked =
+        parsed.canAnswer === true &&
+        candidateAnswer.length > 0 &&
+        candidateAnswer !== BOT_FALLBACK_ANSWER &&
+        candidateEvidenceValid &&
+        parsed.confidence >= 0.65;
+
+      // Stage 2: if retrieval was absent or rejected, give the model the full
+      // course description, every QA and all training entries for recovery.
+      if (!candidateWorked) {
+        usedFullRecovery = true;
+        parsed = await callStrictBotModel(settings, [
+          { role: "system", content: fullSystemPrompt },
+          ...conversationMessages,
+        ]);
+      }
     } catch (error) {
       providerError = error instanceof Error ? error.message : "Bot provider failed";
     }
@@ -490,13 +530,57 @@ export async function POST(request: NextRequest) {
     // non-empty text that is not itself the fallback line, and only when the
     // model says the selected evidence directly answers the visitor.
     const trimmedAnswer = stripBotInstructions(parsed.answer);
+    const fullEvidenceIds = new Set<string>([
+      ...(course ? [`${course.id}:description`] : []),
+      ...(course?.questions || []).map((item) => item.id),
+      ...(course?.userQuestions || []).map((item) => item.id),
+      ...(course?.botTraining || []).map((item) => item.id),
+      ...candidates.map((item) => item.id),
+    ]);
+    const evidenceIsValid =
+      parsed.evidenceIds.length > 0 &&
+      parsed.evidenceIds.every((id) => fullEvidenceIds.has(id));
     const hasUsableAnswer =
       parsed.canAnswer === true &&
       trimmedAnswer.length > 0 &&
-      trimmedAnswer !== BOT_FALLBACK_ANSWER;
+      trimmedAnswer !== BOT_FALLBACK_ANSWER &&
+      evidenceIsValid &&
+      parsed.confidence >= 0.65;
 
     const canAnswer = hasUsableAnswer;
     const answerBody = hasUsableAnswer ? trimmedAnswer : BOT_FALLBACK_ANSWER;
+
+    // A successful full-data recovery becomes a reusable, admin-editable tree
+    // entry. It is visibly marked as AI-posted in the training panel.
+    let learnedEntryId: string | null = null;
+    if (hasUsableAnswer && usedFullRecovery && course?.id) {
+      try {
+        learnedEntryId = await saveAiRecoveredTraining(
+          course.id,
+          message,
+          trimmedAnswer,
+          parsed.evidenceIds,
+          parsed.confidence
+        );
+      } catch (error) {
+        providerError = [
+          providerError,
+          `AI training save failed: ${error instanceof Error ? error.message : "unknown"}`,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+      }
+    }
+
+    if (hasUsableAnswer && parsed.evidenceIds.length) {
+      await prisma.botTrainingEntry.updateMany({
+        where: {
+          id: { in: parsed.evidenceIds },
+          reviewStatus: "approved",
+        },
+        data: { usageCount: { increment: 1 } },
+      });
+    }
 
     // Queue for admin whenever we could not fully answer (fallback used or partial).
     const shouldQueueForAdmin =
@@ -509,22 +593,6 @@ export async function POST(request: NextRequest) {
         visitorId: visitor?.id,
         conversationId: conversation.id,
       });
-    }
-
-    // Auto-learning: a usable model answer came from the full course data, so
-    // keep it for next time. Failures here must never break the reply.
-    if (hasUsableAnswer && course?.id) {
-      try {
-        await saveLearnedAnswer({
-          courseId: course.id,
-          message,
-          answer: trimmedAnswer,
-          visitorId: visitor?.id,
-          conversationId: conversation.id,
-        });
-      } catch {
-        // ignore — the visitor still gets the answer
-      }
     }
 
     // For requirement / proceed questions always offer the WhatsApp hand-off so
@@ -556,6 +624,10 @@ export async function POST(request: NextRequest) {
           model: settings.botModel,
           whatsappUrl,
           providerError,
+          retrievalStage: usedFullRecovery ? "full-recovery" : "tree-verified",
+          learnedEntryId,
+          evidenceIds: parsed.evidenceIds,
+          confidence: parsed.confidence,
           botName,
         },
       },
