@@ -1946,7 +1946,7 @@ export async function buildCourseBotContext(courseId: string | null) {
   const context = [
     `CURRENT COURSE TITLE: ${course.title}`,
     `CURRENT COURSE URL: ${currentCourseUrl}`,
-    `CURRENT COURSE DESCRIPTION | Evidence ID=${course.id}:description:\n${clip(stripBotInstructions(course.description), 12000)}`,
+    `CURRENT COURSE DESCRIPTION | Evidence ID=${course.id}:description:\n${stripBotInstructions(course.description)}`,
     "",
     "SAMPLES / ATTACHED MATERIAL LINKS:",
     ...course.samples.map(
@@ -1958,8 +1958,8 @@ export async function buildCourseBotContext(courseId: string | null) {
     ...course.questions.map((item) =>
       [
         `- Evidence ID: ${item.id}`,
-        `  Q: ${clip(item.question, 2000)}`,
-        `  A: ${clip(stripBotInstructions(item.answer), 12000)}`,
+        `  Q: ${item.question}`,
+        `  A: ${stripBotInstructions(item.answer)}`,
         `  Link: ${currentCourseUrl}#qa-${item.id}`,
         sampleAttachmentNote(item.answerMediaFilename, item.answerMediaType),
       ]
@@ -1971,8 +1971,8 @@ export async function buildCourseBotContext(courseId: string | null) {
     ...course.userQuestions.map((item) =>
       [
         `- Evidence ID: ${item.id}`,
-        `  Q: ${clip(item.question, 2000)}`,
-        `  A: ${clip(stripBotInstructions(item.answer), 12000)}`,
+        `  Q: ${item.question}`,
+        `  A: ${stripBotInstructions(item.answer)}`,
         `  Link: ${currentCourseUrl}#qa-user-${item.id}`,
         `  Training only: ${item.trainingOnly || item.status === "training"}`,
         sampleAttachmentNote(item.answerMediaFilename, item.answerMediaType),
@@ -1984,7 +1984,7 @@ export async function buildCourseBotContext(courseId: string | null) {
     "HIDDEN BOT TRAINING:",
     ...course.botTraining.map(
       (item) =>
-        `- Evidence ID: ${item.id}\n  Q: ${clip(item.question, 2000)}\n  A: ${clip(stripBotInstructions(item.answer), 8000)}`
+        `- Evidence ID: ${item.id}\n  Q: ${item.question}\n  A: ${stripBotInstructions(item.answer)}`
     ),
     "",
     "OTHER COURSE LINKS:",
