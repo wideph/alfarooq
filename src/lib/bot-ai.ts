@@ -25,6 +25,11 @@ async function readError(response: Response) {
 // for the admin) instead of the visitor seeing a dead request.
 const PROVIDER_TIMEOUT_MS = 50_000;
 
+// Quick calls (message understanding, general-chat replies) run BEFORE the main
+// pipeline stages, so they get a much shorter budget — the whole route must
+// still finish inside the 60s maxDuration even when the provider is slow.
+export const BOT_QUICK_TIMEOUT_MS = 15_000;
+
 async function callOpenAiLike(
   settings: SiteSettings,
   messages: BotChatMessage[],
@@ -117,17 +122,20 @@ export async function callBotModel(settings: SiteSettings, messages: BotChatMess
 
 // Generic JSON-object generation call, used by the offline bot self-learning
 // pass. `prefillKey` (e.g. '{"pairs"') forces Claude to start a JSON object.
+// `timeoutMs` lets quick pre-pipeline calls (understanding, general chat)
+// use a shorter budget; the default keeps the existing behavior unchanged.
 export async function callBotJson(
   settings: SiteSettings,
   system: string,
   user: string,
   prefillKey: string,
-  maxTokens = 2500
+  maxTokens = 2500,
+  timeoutMs = PROVIDER_TIMEOUT_MS
 ) {
   if (settings.botProvider === "claude") {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         "Content-Type": "application/json",
         "x-api-key": settings.botApiKey,
@@ -160,7 +168,7 @@ export async function callBotJson(
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.botApiKey}`,

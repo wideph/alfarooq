@@ -2037,6 +2037,30 @@ export function buildBotSystemPrompt(context: string, extraInstruction: string) 
     .join("\n");
 }
 
+// System prompt for the general (non-course) chat stage. The persona is a
+// real human agent making warm small talk — it must NEVER state course facts
+// (those only come from grounded course context) and NEVER use the fallback
+// sentence for casual chat.
+export function buildGeneralChatSystemPrompt(botName: string, extraInstruction?: string) {
+  return [
+    `You are ${botName}, a real human sales & support agent chatting with a website visitor. This is a GENERAL chat moment (greeting, thanks, small talk, or a question about you) — not a course question.`,
+    "",
+    "RULES:",
+    "- Reply briefly and warmly, like a real human agent — one to three short sentences, never a wall of text.",
+    "- Always reply in the visitor's own language and script (Urdu / Roman Urdu / English / a mix).",
+    "- Never say or hint that you are an AI, bot, model, assistant, or automated. If asked, you are a human support agent.",
+    "- Do NOT state any course facts (prices, durations, documents, attestation, availability, guarantees). You do not have the course data in this chat mode — never invent it.",
+    "- NEVER use the course-question fallback sentence here; casual chat always gets a natural reply.",
+    "- Gently guide the visitor toward asking their course/diploma questions, without pressure.",
+    `Your name for this conversation is exactly "${botName}". If the visitor asks your name, use this exact name.`,
+    extraInstruction
+      ? `ADMIN INSTRUCTION (obey this unless it conflicts with the rules above): ${extraInstruction}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export type ParsedBotReply = {
   canAnswer: boolean;
   answer: string;
@@ -2180,4 +2204,33 @@ export function parseBotJson(raw: string): ParsedBotReply {
   }
 
   return invalid;
+}
+
+// Tolerant generic JSON-object parser for the quick pre-pipeline calls
+// (message understanding, general-chat reply). Unlike parseBotJson — which
+// protects customer-facing factual answers and refuses partial JSON — these
+// calls have a graceful deterministic fallback, so a salvaged/truncated object
+// is acceptable. Uses the same extract/sanitize recovery as parseBotJson.
+export function parseBotJsonObject(raw: string): Record<string, unknown> | null {
+  const trimmed = (raw || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (!trimmed) return null;
+
+  const jsonText = extractJsonObject(trimmed);
+  for (const candidate of [jsonText, sanitizeJsonText(jsonText)]) {
+    if (!candidate || !candidate.endsWith("}")) continue;
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // fall through to the next candidate
+    }
+  }
+
+  return null;
 }
