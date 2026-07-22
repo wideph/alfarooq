@@ -23,21 +23,22 @@ async function readError(response: Response) {
 // Abort the provider call before the serverless function itself times out, so
 // the route can still reply with the graceful fallback (and queue the question
 // for the admin) instead of the visitor seeing a dead request.
-const PROVIDER_TIMEOUT_MS = 50_000;
+export const PROVIDER_TIMEOUT_MS = 50_000;
 
 // Quick calls (message understanding, general-chat replies) run BEFORE the main
 // pipeline stages, so they get a much shorter budget — the whole route must
 // still finish inside the 60s maxDuration even when the provider is slow.
-export const BOT_QUICK_TIMEOUT_MS = 15_000;
+export const BOT_QUICK_TIMEOUT_MS = 8_000;
 
 async function callOpenAiLike(
   settings: SiteSettings,
   messages: BotChatMessage[],
-  baseUrl: string
+  baseUrl: string,
+  timeoutMs: number = PROVIDER_TIMEOUT_MS
 ) {
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.botApiKey}`,
@@ -64,7 +65,11 @@ async function callOpenAiLike(
   return data.choices?.[0]?.message?.content || "";
 }
 
-async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
+async function callClaude(
+  settings: SiteSettings,
+  messages: BotChatMessage[],
+  timeoutMs: number = PROVIDER_TIMEOUT_MS
+) {
   const system = messages.find((message) => message.role === "system")?.content || "";
   const conversation = messages
     .filter((message) => message.role !== "system")
@@ -108,16 +113,20 @@ async function callClaude(settings: SiteSettings, messages: BotChatMessage[]) {
   return text ? `${jsonPrefill}${text}` : "";
 }
 
-export async function callBotModel(settings: SiteSettings, messages: BotChatMessage[]) {
+export async function callBotModel(
+  settings: SiteSettings,
+  messages: BotChatMessage[],
+  timeoutMs: number = PROVIDER_TIMEOUT_MS
+) {
   if (settings.botProvider === "claude") {
-    return callClaude(settings, messages);
+    return callClaude(settings, messages, timeoutMs);
   }
 
   if (settings.botProvider === "deepseek") {
-    return callOpenAiLike(settings, messages, "https://api.deepseek.com");
+    return callOpenAiLike(settings, messages, "https://api.deepseek.com", timeoutMs);
   }
 
-  return callOpenAiLike(settings, messages, "https://api.openai.com/v1");
+  return callOpenAiLike(settings, messages, "https://api.openai.com/v1", timeoutMs);
 }
 
 // Generic JSON-object generation call, used by the offline bot self-learning

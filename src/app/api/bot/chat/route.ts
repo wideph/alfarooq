@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import {
   BOT_QUICK_TIMEOUT_MS,
+  PROVIDER_TIMEOUT_MS,
   callBotJson,
   callBotModel,
   type BotChatMessage,
@@ -48,13 +49,19 @@ function clean(value: unknown, max = 1000) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : "";
 }
 
+// getTimeoutMs is re-evaluated before EVERY attempt so retries respect the
+// shrinking 60s maxDuration budget. When the budget is nearly gone the loop
+// stops early and the caller's deterministic fallback path takes over.
 async function callStrictBotModel(
   settings: Awaited<ReturnType<typeof fetchPrivateSiteSettingsFromDb>>,
-  messages: BotChatMessage[]
+  messages: BotChatMessage[],
+  getTimeoutMs?: () => number
 ) {
   let last = parseBotJson("");
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await callBotModel(settings, messages);
+    const timeoutMs = getTimeoutMs ? getTimeoutMs() : PROVIDER_TIMEOUT_MS;
+    if (timeoutMs < 5_000) break;
+    const raw = await callBotModel(settings, messages, timeoutMs);
     last = parseBotJson(raw);
     if (last.parsed) return last;
   }
@@ -220,10 +227,13 @@ async function generateGeneralChatReply(
   );
   const parsed = parseBotJsonObject(raw);
   const reply = parsed && typeof parsed.reply === "string" ? parsed.reply.trim() : "";
-  return stripBotInstructions(reply);
+  const cleaned = stripBotInstructions(reply);
+  // General chit-chat must never surface the 24h course fallback sentence.
+  return cleaned === BOT_FALLBACK_ANSWER ? "" : cleaned;
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const settings = await fetchPrivateSiteSettingsFromDb();
   if (!settings.botEnabled || !settings.botApiKey || !settings.botModel) {
     return NextResponse.json({ error: "Bot configured nahi hai" }, { status: 404 });
@@ -562,17 +572,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const fullSystemPrompt = [
-      buildBotSystemPrompt(context, settings.botSystemNote),
-      `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
-    ].join("\n");
-    const conversationMessages: BotChatMessage[] = [...chatHistory];
+    // Remaining budget for LLM stages inside the 60s maxDuration: the route
+    // must still have room to save the message and reply even after the worst
+    // provider slowness. Re-evaluated before every model attempt.
+    const llmStageTimeoutMs = () =>
+      Math.min(PROVIDER_TIMEOUT_MS, Math.max(0, 55_000 - (Date.now() - startedAt)));
+
     // K2: the history carries the visitor's raw words while retrieval ran on
     // the corrected message — the verification note below bridges that gap.
     const correctionNote =
       correctedMessage !== message
         ? `Visitor ka message spell-correct hua: '${correctedMessage}' (original: '${message}'). Judge the answer against BOTH forms.`
         : "";
+
+    const fullSystemPrompt = [
+      buildBotSystemPrompt(context, settings.botSystemNote),
+      `Conversation bot name: ${botName}. If the visitor asks your name, use this exact name for this conversation.`,
+      correctionNote,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const conversationMessages: BotChatMessage[] = [...chatHistory];
 
     let parsed = {
       canAnswer: false,
@@ -596,10 +616,11 @@ export async function POST(request: NextRequest) {
         ]
           .filter(Boolean)
           .join("\n");
-        parsed = await callStrictBotModel(settings, [
-          { role: "system", content: candidatePrompt },
-          ...conversationMessages,
-        ]);
+        parsed = await callStrictBotModel(
+          settings,
+          [{ role: "system", content: candidatePrompt }, ...conversationMessages],
+          llmStageTimeoutMs
+        );
       }
 
       const candidateAnswer = stripBotInstructions(parsed.answer);
@@ -618,10 +639,11 @@ export async function POST(request: NextRequest) {
       // course description, every QA and all training entries for recovery.
       if (!candidateWorked) {
         usedFullRecovery = true;
-        parsed = await callStrictBotModel(settings, [
-          { role: "system", content: fullSystemPrompt },
-          ...conversationMessages,
-        ]);
+        parsed = await callStrictBotModel(
+          settings,
+          [{ role: "system", content: fullSystemPrompt }, ...conversationMessages],
+          llmStageTimeoutMs
+        );
       }
     } catch (error) {
       providerError = error instanceof Error ? error.message : "Bot provider failed";
