@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
     const parts = understanding.parts && understanding.parts.length > 0 ? understanding.parts : [correctedMessage];
     const answeredParts: { part: string; answer: string; evidenceIds: string[] }[] = [];
     const unansweredParts: string[] = [];
-    let allEvidenceIds: string[] = [];
+    const allEvidenceIds: string[] = [];
     let totalConfidence = 0;
     let usedFullRecovery = false;
     let providerError: string | null = null;
