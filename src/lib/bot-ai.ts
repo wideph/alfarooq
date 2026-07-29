@@ -49,7 +49,7 @@ async function callOpenAiLike(
       temperature: 0.2,
       // This only caps the model's reply, not the supplied knowledge context.
       // Leave enough room for multi-part customer questions and JSON escaping.
-      max_tokens: 8000,
+      max_tokens: 32000,
       response_format: { type: "json_object" },
     }),
   });
@@ -96,7 +96,7 @@ async function callClaude(
       system,
       messages: conversation,
       temperature: 0.2,
-      max_tokens: 8000,
+      max_tokens: 32000,
       stop_sequences: ["```"],
     }),
   });
