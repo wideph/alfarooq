@@ -16,6 +16,7 @@ export default function ImageViewer({ filename, title, compact = false }: ImageV
   const maxHeight = compact
     ? "max-h-none sm:max-h-[65vh]"
     : "max-h-none sm:max-h-[85vh]";
+  const maxWidth = compact ? "max-w-full md:max-w-3xl" : "max-w-full";
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
@@ -65,7 +66,7 @@ export default function ImageViewer({ filename, title, compact = false }: ImageV
           draggable={false}
           onContextMenu={handleContextMenu}
           style={{ transform: `scale(${scale})`, transformOrigin: "center top" }}
-          className="max-w-full h-auto rounded-lg shadow-md transition-transform duration-200"
+          className={`${maxWidth} h-auto rounded-lg shadow-md transition-transform duration-200`}
         />
       </div>
     </div>
