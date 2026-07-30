@@ -11,7 +11,11 @@ interface ImageViewerProps {
 
 export default function ImageViewer({ filename, title, compact = false }: ImageViewerProps) {
   const [scale, setScale] = useState(1);
-  const maxHeight = compact ? "max-h-none sm:max-h-[40vh]" : "max-h-none sm:max-h-[75vh]";
+  // Desktop par image viewer ko zyada height do taake answer/sample images
+  // chhoti scrollable box mein na ghusein; mobile par natural height rehti hai.
+  const maxHeight = compact
+    ? "max-h-none sm:max-h-[65vh]"
+    : "max-h-none sm:max-h-[85vh]";
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
