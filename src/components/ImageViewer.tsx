@@ -11,12 +11,11 @@ interface ImageViewerProps {
 
 export default function ImageViewer({ filename, title, compact = false }: ImageViewerProps) {
   const [scale, setScale] = useState(1);
-  // Desktop par image viewer ko zyada height do taake answer/sample images
-  // chhoti scrollable box mein na ghusein; mobile par natural height rehti hai.
-  const maxHeight = compact
-    ? "max-h-none sm:max-h-[65vh]"
-    : "max-h-none sm:max-h-[85vh]";
-  const maxWidth = compact ? "max-w-full md:max-w-3xl" : "max-w-full";
+  const maxHeight = compact ? "max-h-none" : "max-h-none sm:max-h-[75vh]";
+  // Desktop par answer image (portrait document) ko viewport height ke andar
+  // fit karo taake wo natural size par "phela hua" na lage; aspect ratio
+  // browser khud maintain karta hai, is liye koi stretching nahi hoti.
+  const imageFit = compact ? "sm:max-h-[80vh]" : "";
 
   const handleContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
@@ -66,7 +65,7 @@ export default function ImageViewer({ filename, title, compact = false }: ImageV
           draggable={false}
           onContextMenu={handleContextMenu}
           style={{ transform: `scale(${scale})`, transformOrigin: "center top" }}
-          className={`${maxWidth} h-auto rounded-lg shadow-md transition-transform duration-200`}
+          className={`max-w-full h-auto rounded-lg shadow-md transition-transform duration-200 ${imageFit}`}
         />
       </div>
     </div>
