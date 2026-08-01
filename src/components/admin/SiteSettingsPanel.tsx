@@ -69,7 +69,7 @@ export default function SiteSettingsPanel({
     form.botProvider === "claude"
       ? ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest"]
       : form.botProvider === "deepseek"
-        ? ["deepseek-chat", "deepseek-reasoner"]
+        ? ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"]
         : ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"];
 
   useEffect(() => {
