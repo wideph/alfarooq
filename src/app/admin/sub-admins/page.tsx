@@ -11,6 +11,7 @@ export default function AdminSubAdminsPage() {
         <SubAdminPanel
           defaultOpen
           canWrite={adminCanAny(admin, ["admins:write"])}
+          isSuperAdmin={admin?.role === "admin"}
         />
       )}
     </AdminPageFrame>

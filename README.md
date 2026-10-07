@@ -72,3 +72,21 @@ Then seed admin locally: `npm run db:seed` (with `.env` set), or insert admin vi
 
 - URL: `/admin/login`
 - Footer link also available (navbar button removed intentionally)
+
+## Office Module (cases / payments / commissions)
+
+Internal case-management sub-system at `/office` (same DB, same login). Full
+design, business rules, roadmap and agent log live in `docs/office-module/`.
+
+- Roles: super admin (existing `admin`), `cashier`, `attestation`, `booking_office`
+  (shareholders = several booking_office logins on one office). Created from
+  `/admin/sub-admins` (super admin only).
+- Files (payment slips) go to **Cloudflare R2**, not Supabase. Create a private R2
+  bucket, an API token with object read/write, and set in `.env` / Vercel:
+  `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+- Expected printing date uses the bot AI configured in Admin → Settings (falls back
+  to weekend-only skipping when no AI key is set); override from `/office/setup`.
+- Migration: `prisma/migrations/20261001120000_office_module/migration.sql`
+  (`npx prisma migrate deploy`, or paste into the Supabase SQL editor).
+- Optional defaults: `npx tsx scripts/seed-office-defaults.ts`
+- Smoke test against a running server: `npx tsx scripts/test-office.ts`

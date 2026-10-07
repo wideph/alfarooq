@@ -9,16 +9,22 @@ datasource db {
 }
 
 model Admin {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  password       String
-  name           String
-  role           String   @default("admin")
-  permissions    String   @default("[]")
-  isActive       Boolean  @default(true)
-  createdByAdmin String?
-  lastLoginAt    DateTime?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  name            String
+  role            String   @default("admin")
+  permissions     String   @default("[]")
+  isActive        Boolean  @default(true)
+  createdByAdmin  String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime @default(now())
+  // Office module: booking_office users belong to one BookingOffice.
+  bookingOfficeId String?
+  bookingOffice   BookingOffice? @relation(fields: [bookingOfficeId], references: [id], onDelete: SetNull)
+  officeMember    BookingOfficeMember?
+
+  @@index([bookingOfficeId])
 }
 
 model Course {
@@ -180,4 +186,297 @@ model BotMessage {
   metadata       Json?
   createdAt      DateTime        @default(now())
   conversation   BotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Office module (cases / payments / commissions). See docs/office-module/.
+// Enum-like columns are TEXT with app-level validation (codebase convention).
+// Money is Decimal(12,2). Files for this module live in Cloudflare R2.
+// ---------------------------------------------------------------------------
+
+model BookingOffice {
+  id          String   @id @default(cuid())
+  name        String
+  // FIXED_COMMISSION | PROFIT_SHARE | SALARY
+  type        String
+  phone       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       Admin[]
+  members     BookingOfficeMember[]
+  commissions BookingOfficeCommission[]
+  cases       Case[]
+  ledger      LedgerEntry[]
+  salaries    SalaryEntry[]
+}
+
+model BookingOfficeMember {
+  id              String   @id @default(cuid())
+  bookingOfficeId String
+  adminId         String?  @unique
+  name            String
+  profitPercent   Decimal  @default(0) @db.Decimal(5, 2)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  bookingOffice   BookingOffice @relation(fields: [bookingOfficeId], references: [id], onDelete: Cascade)
+  admin           Admin?        @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  ledger          LedgerEntry[]
+  salaries        SalaryEntry[]
+
+  @@index([bookingOfficeId])
+}
+
+model BookingOfficeCommission {
+  id              String  @id @default(cuid())
+  bookingOfficeId String
+  categoryId      String
+  amount          Decimal @db.Decimal(12, 2)
+
+  bookingOffice   BookingOffice @relation(fields: [bookingOfficeId], references: [id], onDelete: Cascade)
+  category        CaseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingOfficeId, categoryId])
+}
+
+model CaseCategory {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  defaultAmount Decimal? @db.Decimal(12, 2)
+  order         Float    @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  cases         Case[]
+  commissions   BookingOfficeCommission[]
+}
+
+model AttestationType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Float    @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  caseAttestations CaseAttestation[]
+}
+
+model CaseCounter {
+  year Int @id
+  last Int @default(0)
+}
+
+model Case {
+  id                       String    @id @default(cuid())
+  caseNumber               String    @unique
+  bookingOfficeId          String
+  createdByAdminId         String
+  categoryId               String?
+  clientName               String
+  rollNumber               String?
+  registrationNumber       String?
+  agreedAmount             Decimal   @default(0) @db.Decimal(12, 2)
+  claimedRemaining         Decimal?  @db.Decimal(12, 2)
+  // NONE | PENDING | ACCEPTED
+  claimedRemainingStatus   String    @default("NONE")
+  commissionAmount         Decimal   @default(0) @db.Decimal(12, 2)
+  commissionHalfCreditedAt DateTime?
+  commissionFullCreditedAt DateTime?
+  extraSharePercent        Decimal?  @db.Decimal(5, 2)
+  extraShareCreditedAt     DateTime?
+  profitFinalizedAt        DateTime?
+  // NEW | PAYMENT_PENDING | IN_PROCESS | PRINTED | ATTESTATION | COMPLETED | DELIVERED | CANCELLED
+  status                   String    @default("NEW")
+  isPrinted                Boolean   @default(false)
+  printedAt                DateTime?
+  expectedPrintingDate     DateTime?
+  notes                    String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  bookingOffice BookingOffice     @relation(fields: [bookingOfficeId], references: [id])
+  category      CaseCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  contacts      CaseContact[]
+  addresses     CaseAddress[]
+  attestations  CaseAttestation[]
+  payments      Payment[]
+  expenses      CaseExpense[]
+  ledger        LedgerEntry[]
+
+  @@index([bookingOfficeId, status])
+  @@index([status])
+  @@index([createdAt])
+  @@index([rollNumber])
+  @@index([registrationNumber])
+}
+
+model CaseContact {
+  id        String   @id @default(cuid())
+  caseId    String
+  phone     String
+  label     String?
+  createdAt DateTime @default(now())
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
+
+model CaseAddress {
+  id        String   @id @default(cuid())
+  caseId    String
+  address   String
+  label     String?
+  createdAt DateTime @default(now())
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+}
+
+model CaseAttestation {
+  id                String    @id @default(cuid())
+  caseId            String
+  attestationTypeId String
+  // PENDING | IN_PROGRESS | DONE
+  status            String    @default("PENDING")
+  scheduledDate     DateTime?
+  completedDate     DateTime?
+  notes             String?
+  order             Float     @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  case            Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  attestationType AttestationType @relation(fields: [attestationTypeId], references: [id])
+
+  @@unique([caseId, attestationTypeId])
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  caseId        String
+  amount        Decimal   @db.Decimal(12, 2)
+  paymentDate   DateTime
+  // CASH | BANK | EASYPAISA | JAZZCASH | OTHER
+  method        String    @default("CASH")
+  reference     String?
+  slipKey       String?
+  slipType      String?
+  // PENDING | RECEIVED | NOT_RECEIVED | BOGUS
+  status        String    @default("PENDING")
+  submittedById String
+  verifiedById  String?
+  verifiedAt    DateTime?
+  remarks       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  case   Case          @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  ledger LedgerEntry[]
+
+  @@index([caseId])
+  @@index([status])
+  @@index([paymentDate])
+}
+
+model CaseExpense {
+  id          String   @id @default(cuid())
+  caseId      String
+  amount      Decimal  @db.Decimal(12, 2)
+  description String
+  expenseDate DateTime
+  createdById String
+  createdAt   DateTime @default(now())
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([expenseDate])
+}
+
+model LedgerEntry {
+  id              String   @id @default(cuid())
+  bookingOfficeId String
+  memberId        String?
+  caseId          String?
+  paymentId       String?
+  // COMMISSION_HALF | COMMISSION_FINAL | COMMISSION_ADJUST | EXTRA_SHARE | PROFIT_SHARE | PAYOUT | ADJUSTMENT
+  type            String
+  // CREDIT | DEBIT
+  direction       String
+  amount          Decimal  @db.Decimal(12, 2)
+  entryDate       DateTime
+  method          String?
+  remarks         String?
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  bookingOffice BookingOffice        @relation(fields: [bookingOfficeId], references: [id], onDelete: Cascade)
+  member        BookingOfficeMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  case          Case?                @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  payment       Payment?             @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([bookingOfficeId, entryDate])
+  @@index([memberId])
+  @@index([caseId])
+  @@index([entryDate])
+}
+
+model SalaryEntry {
+  id              String    @id @default(cuid())
+  bookingOfficeId String
+  memberId        String?
+  amount          Decimal   @db.Decimal(12, 2)
+  // YYYY-MM
+  periodMonth     String
+  paidDate        DateTime?
+  remarks         String?
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  bookingOffice BookingOffice        @relation(fields: [bookingOfficeId], references: [id], onDelete: Cascade)
+  member        BookingOfficeMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@index([bookingOfficeId, periodMonth])
+  @@index([paidDate])
+}
+
+model CompanyExpense {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(12, 2)
+  description String
+  category    String?
+  expenseDate DateTime
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([expenseDate])
+}
+
+model WorkingDayCache {
+  id                 String   @id @default(cuid())
+  candidateDate      DateTime @unique
+  workingDate        DateTime
+  isCandidateWorking Boolean
+  reason             String?
+  // AI | FALLBACK | MANUAL
+  source             String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model OfficeAuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actorRole String
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
 }

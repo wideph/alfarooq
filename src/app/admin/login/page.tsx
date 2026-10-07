@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GraduationCap, Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { isOfficeRole } from "@/lib/office/permissions";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -33,7 +34,8 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.push("/admin");
+      // Office staff (cashier / attestation / booking office) land on /office.
+      router.push(isOfficeRole(data.admin?.role) ? "/office" : "/admin");
     } catch {
       setError("Connection error");
       setLoading(false);

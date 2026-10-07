@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       name: admin.name,
       role: admin.role,
       permissions: parsePermissions(admin.permissions),
+      bookingOfficeId: admin.bookingOfficeId,
     });
 
     await prisma.admin.update({
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
         email: admin.email,
         role: admin.role,
         permissions: parsePermissions(admin.permissions),
+        bookingOfficeId: admin.bookingOfficeId,
       },
     });
 

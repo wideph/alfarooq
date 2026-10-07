@@ -23,6 +23,7 @@ import {
   getCachedAdminSession,
   loadAdminSession,
 } from "@/lib/admin-session-client";
+import { isOfficeRole } from "@/lib/office/permissions";
 
 interface Course {
   id: string;
@@ -154,6 +155,10 @@ export default function AdminDashboard() {
       const nextAdmin = await loadAdminSession();
       if (!nextAdmin) {
         router.push("/admin/login");
+        return;
+      }
+      if (isOfficeRole(nextAdmin.role)) {
+        router.replace("/office");
         return;
       }
       setAdmin(nextAdmin);

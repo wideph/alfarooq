@@ -1,0 +1,129 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { hasPermission } from "@/lib/auth";
+import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
+import { logOfficeAction } from "@/lib/office/audit";
+import { caseScope, findAccessibleCase } from "@/lib/office/case-access";
+import { recomputeCaseFinancials } from "@/lib/office/commission";
+import { parseAmount } from "@/lib/office/money";
+import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
+import { uploadOfficeFile } from "@/lib/office/r2";
+import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
+
+export const maxDuration = 60;
+
+// GET ?status=PENDING&caseId=&page= — cashier queue / lists, scoped by role.
+export async function GET(request: NextRequest) {
+  const { session, denied } = await guardOffice("office:cases:read");
+  if (denied) return denied;
+
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get("status") || "";
+  const caseId = searchParams.get("caseId") || "";
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const pageSize = 50;
+
+  const where: Prisma.PaymentWhereInput = { case: caseScope(session) };
+  if (status && (PAYMENT_STATUSES as readonly string[]).includes(status)) where.status = status;
+  if (caseId) where.caseId = caseId;
+
+  const [items, total] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: {
+        case: {
+          select: {
+            id: true,
+            caseNumber: true,
+            clientName: true,
+            agreedAmount: true,
+            bookingOffice: { select: { id: true, name: true, type: true } },
+          },
+        },
+      },
+    }),
+    prisma.payment.count({ where }),
+  ]);
+
+  return NextResponse.json({
+    items: items.map((item) => toJson({ ...item, hasSlip: Boolean(item.slipKey), slipKey: undefined })),
+    total,
+    page,
+    pageSize,
+  });
+}
+
+// POST multipart: caseId, amount, paymentDate, method, reference, remarks, slip.
+// Booking office → PENDING. Cashier / super admin may pass status=RECEIVED to
+// record a payment they received themselves (BR1.1/1.2).
+export async function POST(request: NextRequest) {
+  const { session, denied } = await guardOffice("office:cases:read");
+  if (denied) return denied;
+  const canSubmit = hasPermission(session, "office:payments:submit");
+  const canVerify = hasPermission(session, "office:payments:verify");
+  if (!canSubmit && !canVerify) return forbidden();
+
+  try {
+    const formData = await request.formData();
+    const caseId = String(formData.get("caseId") || "");
+    const item = await findAccessibleCase(session, caseId);
+    if (!item) return notFound("Case nahi mila");
+    if (item.status === "CANCELLED") return badRequest("Cancelled case par payment nahi lag sakti");
+
+    const amount = parseAmount(formData.get("amount"), { allowZero: false });
+    if (amount === null) return badRequest("Amount sahi nahi hai");
+    const paymentDate = parseDateOnly(formData.get("paymentDate"));
+    if (!paymentDate) return badRequest("Payment date zaroori hai");
+    const method = String(formData.get("method") || "CASH") as PaymentMethod;
+    if (!PAYMENT_METHODS.includes(method)) return badRequest("Payment method sahi nahi hai");
+
+    const requestedStatus = String(formData.get("status") || "PENDING");
+    const status = canVerify && requestedStatus === "RECEIVED" ? "RECEIVED" : "PENDING";
+
+    let slipKey: string | null = null;
+    let slipType: string | null = null;
+    const slip = formData.get("slip");
+    if (slip instanceof File && slip.size > 0) {
+      const uploaded = await uploadOfficeFile(slip, `slips/${item.caseNumber}`);
+      slipKey = uploaded.key;
+      slipType = uploaded.type;
+    }
+
+    const payment = await prisma.payment.create({
+      data: {
+        caseId,
+        amount,
+        paymentDate,
+        method,
+        reference: cleanText(formData.get("reference"), 120),
+        remarks: cleanText(formData.get("remarks"), 500),
+        slipKey,
+        slipType,
+        status,
+        submittedById: session.adminId,
+        verifiedById: status === "RECEIVED" ? session.adminId : null,
+        verifiedAt: status === "RECEIVED" ? new Date() : null,
+      },
+    });
+
+    await logOfficeAction(session, {
+      action: "payment.create",
+      entity: "Payment",
+      entityId: payment.id,
+      after: { caseId, amount, paymentDate, method, status, hasSlip: Boolean(slipKey) },
+    });
+
+    const result = await recomputeCaseFinancials(caseId, session, { paymentId: payment.id });
+
+    return NextResponse.json(
+      toJson({ payment: { ...payment, hasSlip: Boolean(slipKey), slipKey: undefined }, ...result }),
+      { status: 201 }
+    );
+  } catch (error) {
+    return serverError(error);
+  }
+}

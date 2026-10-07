@@ -15,12 +15,16 @@
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate && node scripts/copy-pdf-worker.js",
     "sync-admin": "tsx scripts/sync-admin-password.ts",
-    "test": "tsx scripts/test-all.ts"
+    "test": "tsx scripts/test-all.ts",
+    "test:office": "tsx scripts/test-office.ts",
+    "db:seed:office": "tsx scripts/seed-office-defaults.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1143.0",
+    "@aws-sdk/s3-request-presigner": "^3.1143.0",
     "@prisma/client": "^6.9.0",
     "@supabase/supabase-js": "^2.49.8",
     "bcryptjs": "^3.0.2",

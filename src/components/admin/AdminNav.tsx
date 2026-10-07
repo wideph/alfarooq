@@ -5,38 +5,24 @@ import { usePathname } from "next/navigation";
 import {
   Bot,
   BookOpen,
+  Briefcase,
   Home,
   LogOut,
   Settings,
   ShieldCheck,
   Signal,
 } from "lucide-react";
+import type { AdminPermission } from "@/lib/auth";
+import { ALL_OFFICE_PERMISSIONS } from "@/lib/office/permissions";
 
-export type AdminPermission =
-  | "settings:read"
-  | "settings:write"
-  | "courses:read"
-  | "courses:write"
-  | "samples:read"
-  | "samples:write"
-  | "qa:read"
-  | "qa:write"
-  | "userQuestions:read"
-  | "userQuestions:write"
-  | "visitors:read"
-  | "visitors:write"
-  | "botTraining:read"
-  | "botTraining:write"
-  | "botChats:read"
-  | "botChats:write"
-  | "admins:read"
-  | "admins:write";
+export type { AdminPermission };
 
 export type AdminNavUser = {
   name: string;
   email: string;
   role?: string;
   permissions?: AdminPermission[];
+  bookingOfficeId?: string | null;
 };
 
 export function adminCanAny(admin: AdminNavUser | null, permissions: AdminPermission[]) {
@@ -94,6 +80,12 @@ const navItems: Array<{
     label: "Admins",
     icon: ShieldCheck,
     permissions: ["admins:read", "admins:write"],
+  },
+  {
+    href: "/office",
+    label: "Office",
+    icon: Briefcase,
+    permissions: ALL_OFFICE_PERMISSIONS,
   },
 ];
 

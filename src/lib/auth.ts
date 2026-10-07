@@ -25,9 +25,24 @@ export const ADMIN_PERMISSIONS = [
   "botChats:write",
   "admins:read",
   "admins:write",
+  // Office module (docs/office-module/02_ARCHITECTURE.md §2)
+  "office:cases:read",
+  "office:cases:write",
+  "office:payments:submit",
+  "office:payments:verify",
+  "office:attestation:write",
+  "office:ledger:read",
+  "office:ledger:write",
+  "office:expenses:write",
+  "office:finance:read",
+  "office:setup:write",
 ] as const;
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
+
+export const OFFICE_PERMISSIONS = ADMIN_PERMISSIONS.filter((permission) =>
+  permission.startsWith("office:")
+) as AdminPermission[];
 
 const LEGACY_PERMISSION_MAP: Record<string, AdminPermission[]> = {
   manageSettings: ["settings:read", "settings:write"],
@@ -56,6 +71,8 @@ export interface AdminSession {
   name: string;
   role?: string;
   permissions?: AdminPermission[];
+  // Office module: set only for role "booking_office" (scopes case visibility).
+  bookingOfficeId?: string | null;
 }
 
 export function parsePermissions(value: string | null | undefined): AdminPermission[] {
@@ -157,6 +174,7 @@ export async function getFreshAdminSession(): Promise<AdminSession | null> {
       role: true,
       permissions: true,
       isActive: true,
+      bookingOfficeId: true,
     },
   });
 
@@ -168,5 +186,6 @@ export async function getFreshAdminSession(): Promise<AdminSession | null> {
     name: admin.name,
     role: admin.role,
     permissions: parsePermissions(admin.permissions),
+    bookingOfficeId: admin.bookingOfficeId,
   };
 }

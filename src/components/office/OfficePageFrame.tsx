@@ -1,0 +1,78 @@
+"use client";
+
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { adminCanAny, type AdminNavUser, type AdminPermission } from "@/components/admin/AdminNav";
+import OfficeNav from "@/components/office/OfficeNav";
+import {
+  clearCachedAdminSession,
+  getCachedAdminSession,
+  loadAdminSession,
+} from "@/lib/admin-session-client";
+
+// Mirrors AdminPageFrame but with the office nav. Any logged-in user with at
+// least one office permission (or the super admin) may enter.
+export default function OfficePageFrame({
+  children,
+  requiredAny = ["office:cases:read"],
+}: {
+  children: ReactNode | ((admin: AdminNavUser) => ReactNode);
+  requiredAny?: AdminPermission[];
+}) {
+  const router = useRouter();
+  const [admin, setAdmin] = useState<AdminNavUser | null>(() => getCachedAdminSession());
+  const [loading, setLoading] = useState(() => !getCachedAdminSession());
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const nextAdmin = await loadAdminSession();
+      if (!nextAdmin) {
+        router.push("/admin/login");
+        return;
+      }
+      setAdmin(nextAdmin);
+    } catch {
+      router.push("/admin/login");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    clearCachedAdminSession();
+    router.push("/admin/login");
+  }
+
+  if (loading || !admin) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+        </div>
+      </div>
+    );
+  }
+
+  const allowed = requiredAny.length === 0 || adminCanAny(admin, requiredAny);
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <OfficeNav admin={admin} onLogout={handleLogout} />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {allowed ? (
+          typeof children === "function" ? children(admin) : children
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
+            Is page ke liye permission zaroori hai
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
