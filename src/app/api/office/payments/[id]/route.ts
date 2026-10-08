@@ -61,70 +61,80 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const payment = await prisma.payment.update({ where: { id }, data });
 
-    await logOfficeAction(session, {
-      action: "payment.verify",
-      entity: "Payment",
-      entityId: id,
-      before: existing,
-      after: data,
-    });
-
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
 
     // §W11.1: ATTESTATION_COMPLETE par poora payment (remaining=0, agreed>0)
-    // → WAITING_FOR_COURIER (+ courier department ko notify).
+    // → WAITING_FOR_COURIER. Business write request path mein; courier
+    // notification after() mein (W13.2).
+    let notifyCourier = false;
     if (result.remaining === 0 && result.agreedAmount > 0) {
       const caseRow = await prisma.case.findUnique({
         where: { id: existing.caseId },
-        select: { status: true, caseNumber: true },
+        select: { status: true },
       });
       if (caseRow?.status === "ATTESTATION_COMPLETE") {
         await prisma.case.update({
           where: { id: existing.caseId },
           data: { status: "WAITING_FOR_COURIER" },
         });
-        await notifyRole("courier", {
-          type: "case.status",
-          title: `Case ${caseRow.caseNumber}: Payment complete — waiting for courier`,
-          link: `/office/cases/${existing.caseId}`,
-        });
+        notifyCourier = true;
       }
     }
 
     // Wave 2 (§N5/N7): the FIRST payment that turns RECEIVED activates the
     // workflow — case becomes WAITING_FOR_FILE (visible to filing). Runs AFTER
     // the recompute. Failures are logged, never thrown.
-    // AI date generation (DeepSeek, 30–240s on first run) is scheduled via
-    // after() so the verify response returns instantly.
+    let datesNeeded = false;
     if (newStatus === "RECEIVED" && existing.status !== "RECEIVED") {
       const caseId = existing.caseId;
       // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
       // auto-distribute (idempotent). Kabhi throw nahi karta.
       await autoDistributeOnPaymentReceived(caseId, session);
-      const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
-      if (datesNeeded) {
-        after(async () => {
-          try {
-            await generateSetDates(caseId);
-          } catch (error) {
-            console.error("[office] generateSetDates fail", error);
-          }
-        });
-      }
+      ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
     }
 
-    // §W11.8: verify decision → payment submitter + case creator.
-    if (newStatus && newStatus !== existing.status) {
-      const caseRow = await prisma.case.findUnique({
-        where: { id: existing.caseId },
-        select: { caseNumber: true, createdByAdminId: true },
+    // W13.2: audit log + notifications + AI date generation sab response ke
+    // baad — verify response foran return hota hai.
+    const statusChanged = Boolean(newStatus && newStatus !== existing.status);
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "payment.verify",
+        entity: "Payment",
+        entityId: id,
+        before: existing,
+        after: data,
       });
-      await notifyUsers([existing.submittedById, caseRow?.createdByAdminId], {
-        type: "payment.verify",
-        title: `Payment ${PAYMENT_STATUS_LABELS[newStatus] || newStatus} — case ${caseRow?.caseNumber || ""}`,
-        link: `/office/cases/${existing.caseId}`,
-      });
-    }
+      if (notifyCourier) {
+        const caseRow = await prisma.case.findUnique({
+          where: { id: existing.caseId },
+          select: { caseNumber: true },
+        });
+        await notifyRole("courier", {
+          type: "case.status",
+          title: `Case ${caseRow?.caseNumber || ""}: Payment complete — waiting for courier`,
+          link: `/office/cases/${existing.caseId}`,
+        });
+      }
+      // §W11.8: verify decision → payment submitter + case creator.
+      if (newStatus && statusChanged) {
+        const caseRow = await prisma.case.findUnique({
+          where: { id: existing.caseId },
+          select: { caseNumber: true, createdByAdminId: true },
+        });
+        await notifyUsers([existing.submittedById, caseRow?.createdByAdminId], {
+          type: "payment.verify",
+          title: `Payment ${PAYMENT_STATUS_LABELS[newStatus] || newStatus} — case ${caseRow?.caseNumber || ""}`,
+          link: `/office/cases/${existing.caseId}`,
+        });
+      }
+      if (datesNeeded) {
+        try {
+          await generateSetDates(existing.caseId);
+        } catch (error) {
+          console.error("[office] generateSetDates fail", error);
+        }
+      }
+    });
 
     return NextResponse.json(
       toJson({ payment: { ...payment, hasSlip: Boolean(payment.slipKey), slipKey: undefined }, ...result })

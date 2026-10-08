@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -78,18 +78,21 @@ export async function PATCH(request: NextRequest) {
         where: { id },
         data: { status: "REJECTED", decidedById: session.adminId, decidedAt: new Date() },
       });
-      await logOfficeAction(session, {
-        action: "discount.reject",
-        entity: "DiscountRequest",
-        entityId: id,
-        before: existing,
-        after: { status: "REJECTED" },
-      });
-      // §W11.8 — decision par requester ko notification.
-      await notifyUsers([existing.createdById], {
-        type: "request.decided",
-        title: `Case ${existing.case.caseNumber}: discount request reject ho gayi`,
-        link: `/office/cases/${existing.caseId}`,
+      // W13.2: audit log + requester notification response ke baad.
+      after(async () => {
+        await logOfficeAction(session, {
+          action: "discount.reject",
+          entity: "DiscountRequest",
+          entityId: id,
+          before: existing,
+          after: { status: "REJECTED" },
+        });
+        // §W11.8 — decision par requester ko notification.
+        await notifyUsers([existing.createdById], {
+          type: "request.decided",
+          title: `Case ${existing.case.caseNumber}: discount request reject ho gayi`,
+          link: `/office/cases/${existing.caseId}`,
+        });
       });
       return NextResponse.json(toJson(updated));
     }
@@ -148,33 +151,31 @@ export async function PATCH(request: NextRequest) {
         });
       }
 
-      await logOfficeAction(
-        session,
-        {
-          action: "discount.accept",
-          entity: "DiscountRequest",
-          entityId: id,
-          before: existing,
-          after: {
-            status: "ACCEPTED",
-            deductFrom,
-            amount: toNumber(amount),
-            commissionPart: toNumber(commissionPart),
-            profitPart: toNumber(round2(amount.minus(commissionPart))),
-          },
-        },
-        tx
-      );
-
       return row;
     }, { maxWait: 10000, timeout: 30000 });
 
     const result = await recomputeCaseFinancials(existing.caseId, session);
-    // §W11.8 — decision par requester ko notification.
-    await notifyUsers([existing.createdById], {
-      type: "request.decided",
-      title: `Case ${existing.case.caseNumber}: discount request accept ho gayi`,
-      link: `/office/cases/${existing.caseId}`,
+    // W13.2: audit log + requester notification response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "discount.accept",
+        entity: "DiscountRequest",
+        entityId: id,
+        before: existing,
+        after: {
+          status: "ACCEPTED",
+          deductFrom,
+          amount: toNumber(amount),
+          commissionPart: toNumber(commissionPart),
+          profitPart: toNumber(round2(amount.minus(commissionPart))),
+        },
+      });
+      // §W11.8 — decision par requester ko notification.
+      await notifyUsers([existing.createdById], {
+        type: "request.decided",
+        title: `Case ${existing.case.caseNumber}: discount request accept ho gayi`,
+        link: `/office/cases/${existing.caseId}`,
+      });
     });
     return NextResponse.json(toJson({ request: updated, ...result }));
   } catch (error) {

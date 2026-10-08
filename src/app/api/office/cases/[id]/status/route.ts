@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
@@ -112,51 +112,54 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       { maxWait: 10000, timeout: 30000 }
     );
 
-    // Side effects (audit log + notifications) ek saath parallel — response
-    // par koi serial DB round trip add nahi hota.
-    const sideEffects: Promise<unknown>[] = [
-      logOfficeAction(session, {
-        action: "case.status",
-        entity: "Case",
-        entityId: id,
-        before: { status: item.status, isPrinted: item.isPrinted },
-        after: {
-          ...data,
-          ...(jumpResult ? { attestation: jumpResult.name } : {}),
-          ...(adminNote ? { note: adminNote } : {}),
-        },
-      }),
-    ];
+    // W13.2: audit log + notifications response ke baad (after) chalte hain
+    // taake mutation response foran return ho. Sab values plain hain aur
+    // yahan pehle se capture ho chuki hain (koi request-scoped object nahi).
+    after(async () => {
+      const sideEffects: Promise<unknown>[] = [
+        logOfficeAction(session, {
+          action: "case.status",
+          entity: "Case",
+          entityId: id,
+          before: { status: item.status, isPrinted: item.isPrinted },
+          after: {
+            ...data,
+            ...(jumpResult ? { attestation: jumpResult.name } : {}),
+            ...(adminNote ? { note: adminNote } : {}),
+          },
+        }),
+      ];
 
-    // §W11.8: case creator + naye stage ke department ke users ko notify.
-    const newStatus = data.status;
-    if (newStatus && newStatus !== item.status) {
-      const label =
-        newStatus === "ATTESTATION" && jumpResult
-          ? `Attestation: ${jumpResult.name}`
-          : STATUS_LABELS[newStatus] || newStatus;
-      const link = `/office/cases/${id}`;
-      sideEffects.push(
-        notifyUsers([item.createdByAdminId], {
-          type: "case.status",
-          title: `Case ${item.caseNumber}: ${label}`,
-          body: adminNote,
-          link,
-        })
-      );
-      const role = STAGE_ROLE[newStatus];
-      if (role) {
+      // §W11.8: case creator + naye stage ke department ke users ko notify.
+      const newStatus = data.status;
+      if (newStatus && newStatus !== item.status) {
+        const label =
+          newStatus === "ATTESTATION" && jumpResult
+            ? `Attestation: ${jumpResult.name}`
+            : STATUS_LABELS[newStatus] || newStatus;
+        const link = `/office/cases/${id}`;
         sideEffects.push(
-          notifyRole(role, {
+          notifyUsers([item.createdByAdminId], {
             type: "case.status",
             title: `Case ${item.caseNumber}: ${label}`,
             body: adminNote,
             link,
           })
         );
+        const role = STAGE_ROLE[newStatus];
+        if (role) {
+          sideEffects.push(
+            notifyRole(role, {
+              type: "case.status",
+              title: `Case ${item.caseNumber}: ${label}`,
+              body: adminNote,
+              link,
+            })
+          );
+        }
       }
-    }
-    await Promise.all(sideEffects);
+      await Promise.all(sideEffects);
+    });
 
     // Slim response (W12 perf): UI local state + live refresh se re-fetch karti
     // hai, is liye full loadCaseDetail ki heavy queries yahan skip.

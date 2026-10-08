@@ -946,3 +946,34 @@ Next step for the next agent:
 - Verify: /tmp/verifyP rsync + npm install + prisma generate + tsc --noEmit
   → meri files mein 0 errors. Ek unrelated error `scripts/recompute-finance.ts`
   (untracked, doosre agent ka in-progress finance script) — scope ke bahar.
+
+## Wave 13 perf (W13.1, W13.2, W13.4)
+
+- **W13.1 — Sliding JWT refresh (persistent slowness ka ROOT CAUSE fix).**
+  Login JWT ka `iat` sirf ek dafa set hota tha; 15 minute ke baad
+  `requirePermission` ka fast path expire ho jata tha aur baqi 7 din tak HAR
+  API call cross-region DB query pay karti thi (Supabase ←→ Vercel, ~200ms+
+  per query). Client har page navigation par `/api/auth/me` call karta hai
+  (60s client cache) — is liye stale path ab fresh DB session ke baad
+  `refreshSessionCookie(response, fresh)` se naya JWT (naya `iat`, same
+  claims) set kar deta hai. Active user ka token hamesha fresh rehta hai →
+  baqi sab API calls zero-DB fast path. Cookie options (admin_session,
+  httpOnly, secure prod, sameSite=lax, maxAge 7d, path=/) ab shared constant
+  `SESSION_COOKIE_NAME` / `SESSION_COOKIE_OPTIONS` (src/lib/auth.ts) mein —
+  login route bhi wohi use karta hai.
+- **W13.2 — Mutations instant feel:** tamam hot office routes mein audit-log
+  insert (`logOfficeAction`) aur notifications (`notify*`) ab
+  `next/server` `after()` block mein — mutation response business write
+  commit hote hi return hota hai, audit/notify platform post-response await
+  karta hai. Business writes (case/payment update, recomputeCaseFinancials,
+  autoDistributeOnPaymentReceived, status side effects, R2 upload) request
+  path mein hi rehte hain. Cover: cases status PATCH, case PATCH, payments
+  POST + PATCH, expenses POST/DELETE, remarks POST, attestations
+  POST/PATCH/DELETE + complete-all, files POST/DELETE, discount-requests
+  PATCH (ACCEPT + REJECT), bonus-requests POST + PATCH (ACCEPT + REJECT).
+- **W13.4 — Infra note (owner ke liye):** `preferredRegion = ["sin1"]` code
+  mein already hai, lekin Vercel **Hobby plan par bhi dashboard se region
+  free set ho sakta hai**: Project → Settings → Functions → Region →
+  **Singapore (sin1)**. Ye sab se bara free speed win hai — function aur
+  Supabase DB same region mein hon to har query ka cross-region latency
+  (~200ms+) khatam ho jata hai.

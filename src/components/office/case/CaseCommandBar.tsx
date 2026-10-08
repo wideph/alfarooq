@@ -6,6 +6,7 @@ import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, Tag } from "l
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { caseStatusLabel, STATUS_STYLES } from "@/lib/office/labels";
 import { BOOKING_OFFICE_TYPE_LABELS } from "@/lib/office/permissions";
@@ -135,6 +136,18 @@ export default function CaseCommandBar({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flame className="h-4 w-4" />}
               {detail.isUrgent ? "Urgent hatayein" : "Urgent karein"}
             </button>
+          )}
+          {admin.role === "admin" && (
+            <>
+              <span className="hidden h-6 w-px bg-slate-300 sm:block" aria-hidden="true" />
+              <DeleteCaseButton
+                caseId={detail.id}
+                caseNumber={detail.caseNumber}
+                size="md"
+                redirectTo="/office/cases"
+                onMessage={onMessage}
+              />
+            </>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet, X } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import CaseStatusSelect from "@/components/office/case/CaseStatusSelect";
+import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
@@ -240,6 +241,17 @@ function CasesList() {
               title="Aap ke department ke liye new remarks"
               className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"
             />
+          )}
+          {admin.role === "admin" && (
+            <span className="ml-auto" onClick={stopRowClick} onMouseEnter={(e) => e.stopPropagation()}>
+              <DeleteCaseButton
+                caseId={item.id}
+                caseNumber={item.caseNumber}
+                size="sm"
+                onMessage={showToast}
+                onDeleted={() => setItems((prev) => prev.filter((c) => c.id !== item.id))}
+              />
+            </span>
           )}
         </div>
         <p className="text-slate-800">{item.clientName || "—"}</p>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { createSession, parsePermissions } from "@/lib/auth";
+import { createSession, parsePermissions, SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS } from "@/lib/auth";
 import { ensureAdminFromEnv } from "@/lib/ensure-admin";
 
 export const preferredRegion = ["sin1"];
@@ -64,13 +64,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    response.cookies.set("admin_session", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 
     return response;
   } catch {

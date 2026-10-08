@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -78,19 +78,22 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await logOfficeAction(session, {
-      action: "bonus.request",
-      entity: "BonusRequest",
-      entityId: created.id,
-      after: { bookingOfficeId, caseId, amount, reason: created.reason },
-    });
+    // W13.2: audit log + admin notification response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "bonus.request",
+        entity: "BonusRequest",
+        entityId: created.id,
+        after: { bookingOfficeId, caseId, amount, reason: created.reason },
+      });
 
-    // §W11.8 — nayi bonus request par admins ko notification.
-    await notifyAdmins({
-      type: "request",
-      title: `Bonus request: ${office.name}`,
-      body: created.reason || null,
-      link: caseId ? `/office/cases/${caseId}` : null,
+      // §W11.8 — nayi bonus request par admins ko notification.
+      await notifyAdmins({
+        type: "request",
+        title: `Bonus request: ${office.name}`,
+        body: created.reason || null,
+        link: caseId ? `/office/cases/${caseId}` : null,
+      });
     });
 
     return NextResponse.json(toJson(created), { status: 201 });
@@ -123,19 +126,22 @@ export async function PATCH(request: NextRequest) {
         where: { id },
         data: { status: "REJECTED", decidedById: session.adminId, decidedAt: new Date() },
       });
-      await logOfficeAction(session, {
-        action: "bonus.reject",
-        entity: "BonusRequest",
-        entityId: id,
-        before: existing,
-        after: { status: "REJECTED" },
-      });
-      // §W11.8 — decision par requester ko notification.
-      await notifyUsers([existing.createdById], {
-        type: "request.decided",
-        title: "Bonus request reject ho gayi",
-        body: existing.reason || null,
-        link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
+      // W13.2: audit log + requester notification response ke baad.
+      after(async () => {
+        await logOfficeAction(session, {
+          action: "bonus.reject",
+          entity: "BonusRequest",
+          entityId: id,
+          before: existing,
+          after: { status: "REJECTED" },
+        });
+        // §W11.8 — decision par requester ko notification.
+        await notifyUsers([existing.createdById], {
+          type: "request.decided",
+          title: "Bonus request reject ho gayi",
+          body: existing.reason || null,
+          link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
+        });
       });
       return NextResponse.json(toJson(updated));
     }
@@ -162,26 +168,25 @@ export async function PATCH(request: NextRequest) {
           createdById: session.adminId,
         },
       });
-      await logOfficeAction(
-        session,
-        {
-          action: "bonus.accept",
-          entity: "BonusRequest",
-          entityId: id,
-          before: existing,
-          after: { status: "ACCEPTED", deductFrom, amount: existing.amount },
-        },
-        tx
-      );
       return row;
     }, { maxWait: 10000, timeout: 30000 });
 
-    // §W11.8 — decision par requester ko notification.
-    await notifyUsers([existing.createdById], {
-      type: "request.decided",
-      title: "Bonus request accept ho gayi",
-      body: existing.reason || null,
-      link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
+    // W13.2: audit log + requester notification response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "bonus.accept",
+        entity: "BonusRequest",
+        entityId: id,
+        before: existing,
+        after: { status: "ACCEPTED", deductFrom, amount: existing.amount },
+      });
+      // §W11.8 — decision par requester ko notification.
+      await notifyUsers([existing.createdById], {
+        type: "request.decided",
+        title: "Bonus request accept ho gayi",
+        body: existing.reason || null,
+        link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
+      });
     });
 
     return NextResponse.json(toJson(updated));

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -33,7 +33,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const row = await prisma.caseAttestation.create({
       data: { caseId: id, attestationTypeId, order, scheduledDate: parseDateOnly(body.scheduledDate) },
     });
-    await logOfficeAction(session, { action: "case.attestation.add", entity: "Case", entityId: id, after: row });
+    // W13.2: audit log response ke baad.
+    after(async () => {
+      await logOfficeAction(session, { action: "case.attestation.add", entity: "Case", entityId: id, after: row });
+    });
     return NextResponse.json(await loadCaseDetail(session, id), { status: 201 });
   } catch (error) {
     return serverError(error);
@@ -143,20 +146,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const completed = await evaluateCaseCompletion(id);
     if (completed) nextStatus = "ATTESTATION_COMPLETE";
 
-    // §W11.8: attestation DONE → atta department + admins.
-    if (data.status === "DONE") {
-      const link = `/office/cases/${id}`;
-      const title = `Case ${item.caseNumber}: attestation done`;
-      await notifyRole("atta", { type: "attestation", title, link });
-      await notifyAdmins({ type: "attestation", title, link });
-    }
+    // W13.2: audit log + notifications response ke baad (status side effects
+    // aur evaluateCaseCompletion request path mein hi rehte hain).
+    after(async () => {
+      // §W11.8: attestation DONE → atta department + admins.
+      if (data.status === "DONE") {
+        const link = `/office/cases/${id}`;
+        const title = `Case ${item.caseNumber}: attestation done`;
+        await notifyRole("atta", { type: "attestation", title, link });
+        await notifyAdmins({ type: "attestation", title, link });
+      }
 
-    await logOfficeAction(session, {
-      action: "case.attestation.update",
-      entity: "Case",
-      entityId: id,
-      before: existing,
-      after: { ...data, caseStatus: nextStatus },
+      await logOfficeAction(session, {
+        action: "case.attestation.update",
+        entity: "Case",
+        entityId: id,
+        before: existing,
+        after: { ...data, caseStatus: nextStatus },
+      });
     });
     return NextResponse.json(await loadCaseDetail(session, id));
   } catch (error) {
@@ -175,6 +182,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   if (!row) return notFound("Attestation nahi mili");
   if (row.status !== "PENDING") return badRequest("Sirf pending attestation remove ho sakti hai");
   await prisma.caseAttestation.delete({ where: { id: attestationId } });
-  await logOfficeAction(session, { action: "case.attestation.remove", entity: "Case", entityId: id, before: row });
+  // W13.2: audit log response ke baad.
+  after(async () => {
+    await logOfficeAction(session, { action: "case.attestation.remove", entity: "Case", entityId: id, before: row });
+  });
   return NextResponse.json(await loadCaseDetail(session, id));
 }

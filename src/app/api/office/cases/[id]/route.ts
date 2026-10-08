@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
@@ -122,18 +122,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         console.error("[office] old client picture delete fail", error)
       );
     }
-    // Audit log + (agar agreed change hua) financials recompute parallel —
-    // dono independent hain, serial awaits se ek extra DB round trip bachta hai.
-    await Promise.all([
-      logOfficeAction(session, {
+    // Business write stays in the request path (BR2 recompute); audit log
+    // response ke baad chalti hai (W13.2).
+    if (agreedChanged) {
+      await recomputeCaseFinancials(id, session);
+    }
+    after(async () => {
+      await logOfficeAction(session, {
         action: "case.update",
         entity: "Case",
         entityId: id,
         before: existing,
         after: data,
-      }),
-      agreedChanged ? recomputeCaseFinancials(id, session) : Promise.resolve(),
-    ]);
+      });
+    });
 
     // Full detail is intentionally returned here: multiple detail-tab callers
     // apply the response directly via onUpdated(res.data). (Slimming this

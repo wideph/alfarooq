@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFreshAdminSession, getSession, type AdminSession } from "@/lib/auth";
+import { getFreshAdminSession, getSession, refreshSessionCookie, type AdminSession } from "@/lib/auth";
 
 export const preferredRegion = ["sin1"];
 
@@ -38,5 +38,9 @@ export async function GET() {
   if (!fresh) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
-  return NextResponse.json({ authenticated: true, admin: fresh });
+  // Sliding refresh (W13.1): stale-but-valid token gets a fresh iat so all
+  // subsequent API calls take the zero-DB fast path in requirePermission.
+  const response = NextResponse.json({ authenticated: true, admin: fresh });
+  await refreshSessionCookie(response, fresh);
+  return response;
 }

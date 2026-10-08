@@ -133,27 +133,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await logOfficeAction(session, {
-      action: "payment.create",
-      entity: "Payment",
-      entityId: payment.id,
-      after: { caseId, amount, paymentDate, method, status, hasSlip: Boolean(slipKey) },
-    });
-
     const result = await recomputeCaseFinancials(caseId, session, { paymentId: payment.id });
 
-    // §W11.8: payment submit → verify permission walon ko notification.
-    if (status === "PENDING") {
-      await notifyPermission("office:payments:verify", {
-        type: "payment.submit",
-        title: `Payment submit — case ${item.caseNumber}`,
-        body: `Rs ${amount} ki payment verify karein`,
-        link: `/office/cases/${caseId}`,
-      });
-    }
-
     // §W11.1: direct RECEIVED payment se agar poora hisaab clear ho gaya aur
-    // case ATTESTATION_COMPLETE par hai → WAITING_FOR_COURIER.
+    // case ATTESTATION_COMPLETE par hai → WAITING_FOR_COURIER. Business write
+    // request path mein rehti hai; courier notification after() mein (W13.2).
+    let notifyCourier = false;
     if (status === "RECEIVED" && result.remaining === 0 && result.agreedAmount > 0) {
       const caseRow = await prisma.case.findUnique({
         where: { id: caseId },
@@ -161,32 +146,53 @@ export async function POST(request: NextRequest) {
       });
       if (caseRow?.status === "ATTESTATION_COMPLETE") {
         await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_COURIER" } });
+        notifyCourier = true;
+      }
+    }
+
+    // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
+    // the department workflow when it is the case's first RECEIVED payment.
+    let datesNeeded = false;
+    if (status === "RECEIVED") {
+      // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
+      // auto-distribute (idempotent). Business write: request path mein.
+      await autoDistributeOnPaymentReceived(caseId, session);
+      ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
+    }
+
+    // W13.2: audit log + notifications + AI date generation (DeepSeek, can
+    // take minutes) sab response ke baad — mutation response foran return.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "payment.create",
+        entity: "Payment",
+        entityId: payment.id,
+        after: { caseId, amount, paymentDate, method, status, hasSlip: Boolean(slipKey) },
+      });
+      // §W11.8: payment submit → verify permission walon ko notification.
+      if (status === "PENDING") {
+        await notifyPermission("office:payments:verify", {
+          type: "payment.submit",
+          title: `Payment submit — case ${item.caseNumber}`,
+          body: `Rs ${amount} ki payment verify karein`,
+          link: `/office/cases/${caseId}`,
+        });
+      }
+      if (notifyCourier) {
         await notifyRole("courier", {
           type: "case.status",
           title: `Case ${item.caseNumber}: Payment complete — waiting for courier`,
           link: `/office/cases/${caseId}`,
         });
       }
-    }
-
-    // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
-    // the department workflow when it is the case's first RECEIVED payment.
-    // AI date generation is scheduled via after() so the response is instant.
-    if (status === "RECEIVED") {
-      // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
-      // auto-distribute (idempotent).
-      await autoDistributeOnPaymentReceived(caseId, session);
-      const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
       if (datesNeeded) {
-        after(async () => {
-          try {
-            await generateSetDates(caseId);
-          } catch (error) {
-            console.error("[office] generateSetDates fail", error);
-          }
-        });
+        try {
+          await generateSetDates(caseId);
+        } catch (error) {
+          console.error("[office] generateSetDates fail", error);
+        }
       }
-    }
+    });
 
     return NextResponse.json(
       toJson({ payment: { ...payment, hasSlip: Boolean(slipKey), slipKey: undefined }, ...result }),

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
@@ -124,34 +124,37 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       include: { recipients: true },
     });
 
-    await logOfficeAction(session, {
-      action: "case.remark.create",
-      entity: "Case",
-      entityId: id,
-      after: { remarkId: remark.id, targets, text },
-    });
+    // W13.2: audit log + notifications response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "case.remark.create",
+        entity: "Case",
+        entityId: id,
+        after: { remarkId: remark.id, targets, text },
+      });
 
-    // §W11.8 — har remark target department ke users ko notification.
-    const TARGET_ROLE: Record<Exclude<RemarkTarget, "ADMIN">, string> = {
-      BOOKING: "booking_office",
-      FILING: "filing",
-      PRINTING: "printing",
-      ATTA: "atta",
-      COURIER: "courier",
-    };
-    const notice = {
-      type: "remark",
-      title: `Case ${item.caseNumber}: new remarks`,
-      body: text,
-      link: `/office/cases/${id}`,
-    };
-    await Promise.all(
-      targets.map((target) =>
-        target === "ADMIN"
-          ? notifyAdmins(notice)
-          : notifyRole(TARGET_ROLE[target as Exclude<RemarkTarget, "ADMIN">], notice)
-      )
-    );
+      // §W11.8 — har remark target department ke users ko notification.
+      const TARGET_ROLE: Record<Exclude<RemarkTarget, "ADMIN">, string> = {
+        BOOKING: "booking_office",
+        FILING: "filing",
+        PRINTING: "printing",
+        ATTA: "atta",
+        COURIER: "courier",
+      };
+      const notice = {
+        type: "remark",
+        title: `Case ${item.caseNumber}: new remarks`,
+        body: text,
+        link: `/office/cases/${id}`,
+      };
+      await Promise.all(
+        targets.map((target) =>
+          target === "ADMIN"
+            ? notifyAdmins(notice)
+            : notifyRole(TARGET_ROLE[target as Exclude<RemarkTarget, "ADMIN">], notice)
+        )
+      );
+    });
 
     return NextResponse.json(
       toJson({

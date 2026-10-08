@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
@@ -30,7 +30,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const expense = await prisma.caseExpense.create({
       data: { caseId: id, amount, description, expenseDate, createdById: session.adminId },
     });
-    await logOfficeAction(session, { action: "case.expense.add", entity: "Case", entityId: id, after: expense });
+    // W13.2: audit log response ke baad.
+    after(async () => {
+      await logOfficeAction(session, { action: "case.expense.add", entity: "Case", entityId: id, after: expense });
+    });
     return NextResponse.json(await loadCaseDetail(session, id), { status: 201 });
   } catch (error) {
     return serverError(error);
@@ -47,6 +50,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const expense = await prisma.caseExpense.findFirst({ where: { id: expenseId, caseId: id } });
   if (!expense) return notFound("Expense nahi mila");
   await prisma.caseExpense.delete({ where: { id: expenseId } });
-  await logOfficeAction(session, { action: "case.expense.remove", entity: "Case", entityId: id, before: expense });
+  // W13.2: audit log response ke baad.
+  after(async () => {
+    await logOfficeAction(session, { action: "case.expense.remove", entity: "Case", entityId: id, before: expense });
+  });
   return NextResponse.json(await loadCaseDetail(session, id));
 }

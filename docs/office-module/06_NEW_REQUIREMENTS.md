@@ -389,3 +389,36 @@ implemented in wave-2/§N8 + wave-11 auto-distribute). Verify, don't regress.
 Dropdown clipped by navbar overflow container (opens weird/cut). Fix per W12.2
 (fixed-position dropdown anchored to bell) + verify click → open list, item click →
 navigate, mark-read works.
+
+---
+
+# WAVE 13 (2026-10-09) — Maximum speed + case delete UI
+
+## W13.1 — Sliding JWT refresh (ROOT CAUSE of persistent slowness)
+Login JWT gets `iat` ONCE; after 15 min the fast path expires and EVERY API call
+for the remaining 7 days pays a cross-region DB query. Fix: sliding refresh —
+auth/me (and any guarded route where practical) re-issues a fresh JWT cookie
+(new iat, same claims) whenever the token is stale-but-valid, so the fast path
+keeps working for active users. Cookie: admin_session, httpOnly, secure prod,
+sameSite=lax, maxAge 7d, path=/.
+
+## W13.2 — Mutations feel instant (after() for non-critical writes)
+Audit-log inserts + notification inserts must NOT block mutation responses.
+Wrap them in next/server `after()` (fire post-response, still awaited by the
+platform) across hot routes: cases status PATCH, case PATCH, payments POST +
+verify PATCH, expenses POST, remarks POST, attestations PATCH/complete-all,
+files POST/DELETE, discount/bonus decisions, setup writes. Business writes stay
+in the request path; only audit + notify move to after().
+
+## W13.3 — Case delete UI (backend DELETE already live)
+- Cases list: admin sees a small trash icon per row (stopPropagation) → confirm
+  modal ("Ye case aur us ka sara record (payments, ledger, files) hamesha ke
+  liye delete ho jayega" + case number + confirm/cancel) → DELETE → toast →
+  row removed locally.
+- Case detail command bar: red "Delete case" button (admin only) → same confirm
+  modal → DELETE → router.push("/office/cases") + toast.
+
+## W13.4 — Honest infra note (deliver to user)
+preferredRegion code-side hai; Vercel Hobby par dashboard se bhi region free
+set ho sakta hai: Project → Settings → Functions → Region → Singapore (sin1).
+Ye sab se bara free speed win hai. Agent log mein note karo.

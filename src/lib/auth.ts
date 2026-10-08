@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const secret = new TextEncoder().encode(
@@ -129,6 +130,37 @@ export async function createSession(payload: AdminSession): Promise<string> {
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(secret);
+}
+
+// Shared cookie options so login + sliding refresh always set the exact
+// same admin_session cookie (W13.1).
+export const SESSION_COOKIE_NAME = "admin_session";
+
+export const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  maxAge: 60 * 60 * 24 * 7,
+  path: "/",
+} as const;
+
+// Sliding JWT refresh: re-issue a fresh token (new iat, same claims) so an
+// active user keeps hitting the zero-DB fast path in requirePermission.
+export async function refreshSessionCookie(
+  response: NextResponse,
+  session: AdminSession
+): Promise<void> {
+  // Strip JWT claims (iat/exp) that may ride along on a decoded session.
+  const { adminId, email, name, role, permissions, bookingOfficeId } = session;
+  const token = await createSession({
+    adminId,
+    email,
+    name,
+    role,
+    permissions,
+    bookingOfficeId,
+  });
+  response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
 }
 
 export async function verifySession(token: string): Promise<AdminSession | null> {

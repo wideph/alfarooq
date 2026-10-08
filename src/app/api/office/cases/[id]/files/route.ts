@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -157,34 +157,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (completed) nextStatus = "ATTESTATION_COMPLETE";
       }
 
-      await logOfficeAction(
-        session,
-        {
-          action: "case.file.upload",
-          entity: "CaseFile",
-          entityId: created.id,
-          after: { caseId: id, department, stepKey, fileType: uploaded.type, nextStatus },
-        },
-        tx
-      );
-
       return { created, nextStatus };
     }, { maxWait: 10000, timeout: 30000 });
 
-    // §W11.8: file.upload → admins + next-stage department ke users.
-    if (result.nextStatus !== item.status) {
-      const link = `/office/cases/${id}`;
-      const title = `Case ${item.caseNumber}: ${department} file uploaded`;
-      if (result.nextStatus === "WAITING_FOR_PRINTING") {
-        await notifyRole("printing", { type: "file.upload", title, link });
-        await notifyAdmins({ type: "file.upload", title, link });
-      } else if (result.nextStatus === "PRINTED") {
-        await notifyRole("atta", { type: "file.upload", title, link });
-        await notifyAdmins({ type: "file.upload", title, link });
-      } else {
-        await notifyAdmins({ type: "file.upload", title, link });
+    // W13.2: audit log + notifications response ke baad (R2 upload request
+    // path mein rehta hai — file upload ke baghair row ka koi matlab nahi).
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "case.file.upload",
+        entity: "CaseFile",
+        entityId: result.created.id,
+        after: { caseId: id, department, stepKey, fileType: uploaded.type, nextStatus: result.nextStatus },
+      });
+
+      // §W11.8: file.upload → admins + next-stage department ke users.
+      if (result.nextStatus !== item.status) {
+        const link = `/office/cases/${id}`;
+        const title = `Case ${item.caseNumber}: ${department} file uploaded`;
+        if (result.nextStatus === "WAITING_FOR_PRINTING") {
+          await notifyRole("printing", { type: "file.upload", title, link });
+          await notifyAdmins({ type: "file.upload", title, link });
+        } else if (result.nextStatus === "PRINTED") {
+          await notifyRole("atta", { type: "file.upload", title, link });
+          await notifyAdmins({ type: "file.upload", title, link });
+        } else {
+          await notifyAdmins({ type: "file.upload", title, link });
+        }
       }
-    }
+    });
 
     return NextResponse.json(
       toJson({
@@ -229,11 +229,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await deleteOfficeFile(file.fileKey).catch((error) =>
       console.error("[office] case file delete fail", error)
     );
-    await logOfficeAction(session, {
-      action: "case.file.delete",
-      entity: "CaseFile",
-      entityId: file.id,
-      before: { caseId: id, department: file.department, stepKey: file.stepKey },
+    // W13.2: audit log response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "case.file.delete",
+        entity: "CaseFile",
+        entityId: file.id,
+        before: { caseId: id, department: file.department, stepKey: file.stepKey },
+      });
     });
     return NextResponse.json({ success: true });
   } catch (error) {

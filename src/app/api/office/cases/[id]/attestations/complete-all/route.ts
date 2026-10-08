@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasAnyPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -66,24 +66,27 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       { maxWait: 10000, timeout: 30000 }
     );
 
-    await logOfficeAction(session, {
-      action: "case.attestations.complete-all",
-      entity: "Case",
-      entityId: id,
-      before: {
-        status: item.status,
-        attestations: item.attestations.map((a) => ({ id: a.id, status: a.status })),
-      },
-      after: { status: result.status },
-    });
+    // W13.2: audit log + notifications response ke baad.
+    after(async () => {
+      await logOfficeAction(session, {
+        action: "case.attestations.complete-all",
+        entity: "Case",
+        entityId: id,
+        before: {
+          status: item.status,
+          attestations: item.attestations.map((a) => ({ id: a.id, status: a.status })),
+        },
+        after: { status: result.status },
+      });
 
-    // §W11.8: attestation stage complete → atta department + admins.
-    if (result.status === "ATTESTATION_COMPLETE" && item.status !== "ATTESTATION_COMPLETE") {
-      const link = `/office/cases/${id}`;
-      const title = `Case ${item.caseNumber}: attestation complete`;
-      await notifyRole("atta", { type: "attestation", title, link });
-      await notifyAdmins({ type: "attestation", title, link });
-    }
+      // §W11.8: attestation stage complete → atta department + admins.
+      if (result.status === "ATTESTATION_COMPLETE" && item.status !== "ATTESTATION_COMPLETE") {
+        const link = `/office/cases/${id}`;
+        const title = `Case ${item.caseNumber}: attestation complete`;
+        await notifyRole("atta", { type: "attestation", title, link });
+        await notifyAdmins({ type: "attestation", title, link });
+      }
+    });
 
     return NextResponse.json(toJson({ status: result.status, attestations: result.attestations }));
   } catch (error) {
