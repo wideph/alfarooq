@@ -41,7 +41,9 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
           select: {
             id: true,
             type: true,
-            members: { where: { isActive: true } },
+            // §W12.6 — ALL members (not just active): the snapshot may reference
+            // a member who is now inactive; their share is still honored.
+            members: true,
             // §N8 — partner office general expenses, deducted from the pool.
             expenses: { select: { amount: true } },
           },
@@ -65,13 +67,33 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
     const profit = Prisma.Decimal.max(received.minus(expenses).minus(officeExpenses), 0);
     const entryDate = todayPakistan();
 
+    // §W12.6 — profitShareSnapshot (Json {memberId: percent}): pehli distribution
+    // par members ke percents freeze ho jate hain. Admin panel se profitPercent
+    // badalne se PURANE cases ka distribution nahi badalta — snapshot present ho
+    // to wahi percents use hote hain (inactive member bhi honor hota hai).
+    // Snapshot absent ho to current ACTIVE members ke percents se ban kar isi
+    // transaction mein case par save ho jata hai.
+    let snapshot: Record<string, number>;
+    const existing = item.profitShareSnapshot;
+    if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+      snapshot = existing as Record<string, number>;
+    } else {
+      snapshot = {};
+      for (const member of item.bookingOffice.members) {
+        if (!member.isActive) continue;
+        snapshot[member.id] = toNumber(dec(member.profitPercent));
+      }
+    }
+    const memberById = new Map(item.bookingOffice.members.map((member) => [member.id, member]));
+
     const shares: ProfitShareSummary["shares"] = [];
-    for (const member of item.bookingOffice.members) {
-      const percent = dec(member.profitPercent);
+    // Members not in the snapshot get target 0 (skipped entirely).
+    for (const [memberId, percentValue] of Object.entries(snapshot)) {
+      const percent = dec(percentValue);
       if (percent.isZero()) continue;
       const target = round2(profit.mul(percent).div(100));
       const current = item.ledger
-        .filter((entry) => entry.memberId === member.id)
+        .filter((entry) => entry.memberId === memberId)
         .reduce(
           (acc, entry) => (entry.direction === "CREDIT" ? acc.plus(entry.amount) : acc.minus(entry.amount)),
           new Prisma.Decimal(0)
@@ -81,7 +103,7 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
         await tx.ledgerEntry.create({
           data: {
             bookingOfficeId: item.bookingOfficeId,
-            memberId: member.id,
+            memberId,
             caseId,
             type: current.isZero() ? "PROFIT_SHARE" : "ADJUSTMENT",
             direction: delta.greaterThan(0) ? "CREDIT" : "DEBIT",
@@ -95,15 +117,22 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
         });
       }
       shares.push({
-        memberId: member.id,
-        name: member.name,
+        memberId,
+        name: memberById.get(memberId)?.name ?? "Member",
         percent: toNumber(percent),
         target: toNumber(target),
         delta: toNumber(delta),
       });
     }
 
-    await tx.case.update({ where: { id: caseId }, data: { profitFinalizedAt: new Date() } });
+    await tx.case.update({
+      where: { id: caseId },
+      data: {
+        profitFinalizedAt: new Date(),
+        // §W12.6 — first distribution writes the snapshot (same transaction).
+        ...(item.profitShareSnapshot ? {} : { profitShareSnapshot: snapshot }),
+      },
+    });
 
     // §W11.4 — percent total + admin remainder (explicit in summary).
     const percentSum = shares.reduce((acc, share) => acc.plus(dec(share.percent)), new Prisma.Decimal(0));

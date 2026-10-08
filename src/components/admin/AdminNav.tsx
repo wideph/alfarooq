@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
-  BookOpenCheck,
   Bot,
   BookOpen,
   Briefcase,
@@ -110,17 +109,12 @@ const navItems: Array<{
     permissions: ["office:payments:verify", "office:payments:submit"],
     countKey: "payments",
   },
-  {
-    href: "/office/ledger",
-    label: "Ledger",
-    icon: BookOpenCheck,
-    permissions: ["office:ledger:read", "office:ledger:write", "office:expenses:write"],
-  },
+  // §W12.3: Ledger merge ho gaya Finance mein — /office/ledger redirect karta hai.
   {
     href: "/office/finance",
     label: "Finance",
     icon: PieChart,
-    permissions: ["office:finance:read"],
+    permissions: ["office:finance:read", "office:ledger:read"],
   },
   {
     href: "/office/setup",
@@ -144,39 +138,46 @@ export default function AdminNav({
   const officeUser = adminCanAny(admin, ["office:cases:read"]);
   const counts = useOfficeNavCounts(officeUser);
 
+  // §W12.2 — 3-zone header: LEFT brand (shrink-0) | CENTER nav links (min-w-0
+  // flex-1, hidden-scrollbar horizontal scroll) | RIGHT actions (shrink-0).
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center gap-2 overflow-x-auto whitespace-nowrap">
+        <div className="flex h-16 items-center gap-2">
+          {/* LEFT — brand */}
           <div className="mr-1 hidden min-w-0 shrink-0 sm:block">
             <h1 className="text-base font-bold text-slate-900">Admin</h1>
             {admin && <p className="max-w-28 truncate text-xs text-slate-500">{admin.name}</p>}
           </div>
 
-          <nav className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
-            {visibleItems.map((item) => {
-              const Icon = item.icon;
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch
-                  title={item.label}
-                  className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
-                    active
-                      ? "bg-primary-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden md:inline">{item.label}</span>
-                  {officeUser && <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />}
-                </Link>
-              );
-            })}
+          {/* CENTER — nav links (khud scroll karte hain, scrollbar hidden) */}
+          <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center justify-start gap-1.5 md:justify-center">
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch
+                    title={item.label}
+                    className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
+                      active
+                        ? "bg-primary-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden md:inline">{item.label}</span>
+                    {officeUser && <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />}
+                  </Link>
+                );
+              })}
+            </div>
           </nav>
 
+          {/* RIGHT — actions cluster */}
           <div className="ml-1 flex shrink-0 items-center gap-1">
             {officeUser && <NotificationBell />}
             <Link
@@ -187,6 +188,7 @@ export default function AdminNav({
               <Home className="w-4 h-4" />
             </Link>
             <button
+              type="button"
               onClick={onLogout}
               title="Logout"
               className="grid h-10 w-10 place-items-center rounded-xl text-red-600 hover:bg-red-50 transition-colors"

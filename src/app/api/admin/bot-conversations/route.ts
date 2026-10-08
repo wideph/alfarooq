@@ -19,12 +19,14 @@ export async function GET(request: NextRequest) {
   const denied = await ensureBotPermission("botChats:read");
   if (denied) return denied;
 
-  await cleanupExpiredBotConversations();
-
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim();
 
-  const conversations = await prisma.botConversation.findMany({
+  // Cleanup expired rows in parallel with the list query — one less serial
+  // DB round trip on every admin chat page load.
+  const [, conversations] = await Promise.all([
+    cleanupExpiredBotConversations(),
+    prisma.botConversation.findMany({
     where: q
       ? {
           OR: [
@@ -37,12 +39,13 @@ export async function GET(request: NextRequest) {
       : {},
     orderBy: { updatedAt: "desc" },
     take: 50,
-    include: {
-      visitor: true,
-      course: { select: { id: true, title: true } },
-      messages: { orderBy: { createdAt: "asc" } },
-    },
-  });
+      include: {
+        visitor: true,
+        course: { select: { id: true, title: true } },
+        messages: { orderBy: { createdAt: "asc" } },
+      },
+    }),
+  ]);
 
   return NextResponse.json(
     conversations.map((conversation) => ({

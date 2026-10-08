@@ -167,7 +167,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
 
 /* --------------------- Steps table + printing controls -------------------- */
 
-function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
+function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
   const canEditList = adminCanAny(admin, ["office:cases:write"]);
   const canStatus = adminCanAny(admin, ["office:attestation:write"]);
   // §N7: atta department sirf steps aage barha sakta hai (PENDING → IN_PROGRESS → DONE).
@@ -194,6 +194,21 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
     setBusy(false);
   }
 
+  // §W12.1: status route ab SLIM response deta hai ({ok,status,...}) — full
+  // CaseDetail nahi. Is liye res.data ignore kar ke sirf reload karte hain.
+  async function togglePrinted() {
+    setBusy(true);
+    const res = await officeFetch<{ ok: boolean; isPrinted: boolean }>(
+      `/api/office/cases/${detail.id}/status`,
+      { method: "PATCH", json: { isPrinted: !detail.isPrinted } }
+    );
+    if (res.ok) {
+      onMessage(detail.isPrinted ? "Printed flag hata diya" : "Case printed mark ho gaya");
+      await onReload();
+    } else onMessage(res.error, "error");
+    setBusy(false);
+  }
+
   const available = types.filter((t) => !detail.attestations.some((a) => a.attestationType.id === t.id));
 
   return (
@@ -207,15 +222,9 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
           // (admin, note lazmi) — yahan duplicate status UI nahi. Printed flag
           // workflow shortcut yahin rehta hai.
           <button
+            type="button"
             disabled={busy}
-            onClick={() =>
-              call(
-                `/api/office/cases/${detail.id}/status`,
-                "PATCH",
-                { isPrinted: !detail.isPrinted },
-                detail.isPrinted ? "Printed flag hata diya" : "Case printed mark ho gaya"
-              )
-            }
+            onClick={togglePrinted}
             className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold ${
               detail.isPrinted ? "border border-slate-300 text-slate-700" : "bg-indigo-600 text-white"
             }`}

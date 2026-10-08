@@ -304,6 +304,11 @@ model Case {
   // §W11.9: booking office ko filing department ki files sirf tab dikhen jab
   // admin ne is case par permission di ho. Baqi departments ki files hamesha.
   filingFilesVisibleToBooking Boolean @default(false)
+  // W12: profit-share percent snapshot — pehli distribution ke waqt members ke
+  // percents freeze ho jate hain. Admin panel se percent change SIRF naye cases
+  // par apply hota hai; purane cases ka distribution nahi badalta. Code-formula
+  // correction ke waqt script snapshot clear kar ke recompute karti hai.
+  profitShareSnapshot        Json?
   isPrinted                Boolean   @default(false)
   printedAt                DateTime?
   expectedPrintingDate     DateTime?

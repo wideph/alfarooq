@@ -122,16 +122,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         console.error("[office] old client picture delete fail", error)
       );
     }
-    await logOfficeAction(session, {
-      action: "case.update",
-      entity: "Case",
-      entityId: id,
-      before: existing,
-      after: data,
-    });
+    // Audit log + (agar agreed change hua) financials recompute parallel —
+    // dono independent hain, serial awaits se ek extra DB round trip bachta hai.
+    await Promise.all([
+      logOfficeAction(session, {
+        action: "case.update",
+        entity: "Case",
+        entityId: id,
+        before: existing,
+        after: data,
+      }),
+      agreedChanged ? recomputeCaseFinancials(id, session) : Promise.resolve(),
+    ]);
 
-    if (agreedChanged) await recomputeCaseFinancials(id, session);
-
+    // Full detail is intentionally returned here: multiple detail-tab callers
+    // apply the response directly via onUpdated(res.data). (Slimming this
+    // shape is a UI-side change — see docs/office-module/05_AGENT_LOG.md W12.)
     const detail = await loadCaseDetail(session, updated.id);
     return NextResponse.json(detail);
   } catch (error) {
@@ -139,22 +145,86 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+// §W12.5 — admin force delete: koi bhi case delete ho sakta hai (purana
+// "received payment / ledger exists" guard hata diya). Poora cascade ek
+// interactive transaction mein; R2 objects + audit rows + notifications
+// commit ke baad best-effort. Ledger rows delete hone se users ki
+// earning/wasool/due har jagah apne aap sahi ho jati hai.
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:write");
   if (denied) return denied;
   if (session.role !== "admin") return forbidden("Case sirf super admin delete kar sakta hai");
   const { id } = await params;
 
-  const existing = await prisma.case.findUnique({
-    where: { id },
-    include: { payments: { select: { status: true } }, _count: { select: { ledger: true } } },
-  });
-  if (!existing) return notFound("Case nahi mila");
-  if (existing.payments.some((p) => p.status === "RECEIVED") || existing._count.ledger > 0) {
-    return badRequest("Received payment ya ledger wale case ko delete nahi kar sakte; CANCELLED karein");
-  }
+  try {
+    const existing = await prisma.case.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        caseNumber: true,
+        clientPictureKey: true,
+        payments: { select: { id: true, slipKey: true } },
+        files: { select: { fileKey: true } },
+        remarks: { select: { id: true } },
+      },
+    });
+    if (!existing) return notFound("Case nahi mila");
 
-  await prisma.case.delete({ where: { id } });
-  await logOfficeAction(session, { action: "case.delete", entity: "Case", entityId: id, before: existing });
-  return NextResponse.json({ success: true });
+    const paymentIds = existing.payments.map((payment) => payment.id);
+    const remarkIds = existing.remarks.map((remark) => remark.id);
+
+    // Dependency order: children first, case row last.
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.ledgerEntry.deleteMany({
+          where: { OR: [{ caseId: id }, { paymentId: { in: paymentIds } }] },
+        });
+        await tx.caseExpense.deleteMany({ where: { caseId: id } });
+        await tx.caseAttestation.deleteMany({ where: { caseId: id } });
+        if (remarkIds.length) {
+          await tx.caseRemarkRecipient.deleteMany({ where: { remarkId: { in: remarkIds } } });
+        }
+        await tx.caseRemark.deleteMany({ where: { caseId: id } });
+        await tx.caseContact.deleteMany({ where: { caseId: id } });
+        await tx.caseAddress.deleteMany({ where: { caseId: id } });
+        await tx.discountRequest.deleteMany({ where: { caseId: id } });
+        await tx.bonusRequest.deleteMany({ where: { caseId: id } });
+        await tx.caseFile.deleteMany({ where: { caseId: id } });
+        await tx.payment.deleteMany({ where: { caseId: id } });
+        await tx.case.delete({ where: { id } });
+      },
+      { maxWait: 10000, timeout: 30000 }
+    );
+
+    // After commit (best-effort): R2 objects, then audit + notification rows
+    // for this case. Audit rows wipe hone ke baad "case.delete" ka audit row
+    // mumkin nahi — is liye jaan boojh kar koi audit log nahi likha jata.
+    const r2Keys = [
+      ...existing.files.map((file) => file.fileKey),
+      ...existing.payments.map((payment) => payment.slipKey).filter((key): key is string => Boolean(key)),
+      ...(existing.clientPictureKey ? [existing.clientPictureKey] : []),
+    ];
+    await Promise.all([
+      ...r2Keys.map((key) =>
+        deleteOfficeFile(key).catch((error) => console.error("[office] case.delete R2 cleanup fail", key, error))
+      ),
+      prisma.officeAuditLog
+        .deleteMany({
+          where: {
+            OR: [
+              { entity: "Case", entityId: id },
+              { entity: "Payment", entityId: { in: paymentIds } },
+            ],
+          },
+        })
+        .catch((error) => console.error("[office] case.delete audit cleanup fail", error)),
+      prisma.notification
+        .deleteMany({ where: { link: { contains: `/office/cases/${id}` } } })
+        .catch((error) => console.error("[office] case.delete notification cleanup fail", error)),
+    ]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return serverError(error);
+  }
 }

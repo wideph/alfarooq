@@ -55,8 +55,25 @@ export async function GET(request: NextRequest) {
     prisma.payment.count({ where }),
   ]);
 
+  // §W12.3 — Finance page ko "kon si payment kis case se" aur "kis ne submit
+  // ki" chahiye: case + bookingOffice already included above; submittedByName
+  // ke liye ek hi admin names query (payments par koi submittedBy relation
+  // nahi hai, sirf id).
+  const adminIds = [...new Set(items.map((item) => item.submittedById))];
+  const admins = adminIds.length
+    ? await prisma.admin.findMany({ where: { id: { in: adminIds } }, select: { id: true, name: true } })
+    : [];
+  const adminNames = new Map(admins.map((admin) => [admin.id, admin.name]));
+
   return NextResponse.json({
-    items: items.map((item) => toJson({ ...item, hasSlip: Boolean(item.slipKey), slipKey: undefined })),
+    items: items.map((item) =>
+      toJson({
+        ...item,
+        submittedByName: adminNames.get(item.submittedById) ?? null,
+        hasSlip: Boolean(item.slipKey),
+        slipKey: undefined,
+      })
+    ),
     total,
     page,
     pageSize,

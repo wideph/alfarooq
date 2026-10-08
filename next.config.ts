@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   images: {
     remotePatterns: [],
   },
   experimental: {
+    // Tree-shake icon imports — lucide-react ships thousands of modules.
+    optimizePackageImports: ["lucide-react"],
     serverActions: {
       bodySizeLimit: "10mb",
     },

@@ -57,14 +57,16 @@ export async function GET(request: NextRequest) {
   });
 
   const statusRank: Record<string, number> = { pending: 0, approved: 1, rejected: 2 };
+  // Pre-normalize once (O(n)); the old per-pair find() ran normalizeQuestion
+  // O(n^2) times on every list load.
+  const normalized = entries.map((entry) => normalizeQuestion(entry.question));
   const enriched = entries
-    .map((entry) => {
-      const normalized = normalizeQuestion(entry.question);
+    .map((entry, index) => {
       const conflict = entries.find(
-        (other) =>
+        (other, otherIndex) =>
           other.id !== entry.id &&
           other.reviewStatus === "approved" &&
-          normalizeQuestion(other.question) === normalized &&
+          normalized[otherIndex] === normalized[index] &&
           other.answer.trim() !== entry.answer.trim()
       );
       return {

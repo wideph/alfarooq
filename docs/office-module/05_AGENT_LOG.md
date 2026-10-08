@@ -903,3 +903,46 @@ Next step for the next agent:
   (filingFilesVisibleToBooking); booking navbar Links dropdown admin-only.
 - Speed: case-detail Promise.all + lazy /audit endpoint; hover prefetch; silent reloads.
 - Verified: tsc 0, lint 0, next build exit 0 (real DB). Pushed as ca6bc1b.
+
+## Wave 12 perf notes (Agent P — API/route latency)
+- `cases/[id]/status` PATCH ab slim response deta hai: `{ ok, status,
+  currentAttestationId, isPrinted, message }` — full `loadCaseDetail` (heavy
+  multi-query) skip. Audit log + notifications ab parallel (Promise.all).
+  ⚠️ UI DEPENDENCY: `CaseAttestationsTab.tsx` ka shared `call()` helper
+  `onUpdated(res.data)` karta hai — "Mark printed" button `/status` PATCH ko
+  full CaseDetail samajhta tha. Us caller ko ab live-refresh/reload par shift
+  karna hoga (CaseStatusSelect already response ignore karta hai — safe).
+- `cases/[id]` PATCH: full detail response deliberately KEPT — 3 UI callers
+  (CaseCommandBar.toggleUrgent, CaseOverviewTab save + saveAgreedRemarks)
+  `onUpdated(res.data)` par depend karte hain. Sirf audit-log + financials
+  recompute parallelize kiye. Slim shape tabhi safe jab ye callers local
+  state + live refresh par shift hon.
+- `cases` GET list: count+findMany already Promise.all, selects already
+  minimal, take=50 — sirf explicit `Cache-Control: no-store` add (dono
+  filing/normal paths, shape unchanged).
+- `auth/me`: ab JWT-cheap — fresh token (<15 min, same rule as
+  requirePermission) seedha signed JWT se session return, ZERO DB query;
+  stale token par DB fallback. Har page/frame load par ek cross-region
+  round trip bacha.
+- `courses` GET: `getFreshAdminSession` (har request par DB) → JWT fast path
+  + 15-min staleness DB fallback. Public visitors pehle bhi DB-free the;
+  admin ab bhi 15-min window mein DB-free.
+- `admin/bot-conversations` GET: expired-cleanup aur list query parallel.
+- `admin/bot-training` GET: conflict detection ka normalizeQuestion O(n^2) →
+  O(n) precompute.
+- `next.config.ts`: `poweredByHeader: false`,
+  `experimental.optimizePackageImports: ["lucide-react"]`.
+- PageFrames (Office/Admin) verify: koi double auth fetch NAHI — 60s module
+  cache + inflight dedupe + cached session par instant render. No change.
+- NOT fixed (env/infra limits): (1) Vercel `preferredRegion: ["sin1"]` sirf
+  Pro plan par enforce hota hai — Hobby par function kisi bhi region mein
+  uth sakta hai, phir Supabase (agar ap-southeast-1 hai) tak har query
+  cross-region hoti hai. Agar plan Hobby hai to ye akela sab se bara
+  remaining latency source hai. (2) Cold starts: Prisma + jose bundle ka
+  init ~300-800ms; tiny-DB pages bhi cold start pay karte hain — sirf
+  traffic/warming se kam hota hai. (3) `bot-conversations` GET 50
+  conversations ke tamam messages include karta hai (UI shape dependency —
+  trim karne ke liye UI change chahiye).
+- Verify: /tmp/verifyP rsync + npm install + prisma generate + tsc --noEmit
+  → meri files mein 0 errors. Ek unrelated error `scripts/recompute-finance.ts`
+  (untracked, doosre agent ka in-progress finance script) — scope ke bahar.

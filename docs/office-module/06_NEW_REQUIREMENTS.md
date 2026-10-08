@@ -324,3 +324,68 @@ Admin manual change (dropdown in cases LIST row + detail page):
 ## W11.10 — Verification bar (MANDATORY before done)
 - npm run typecheck = 0 errors, npm run lint = 0, next build exit 0 against real DB.
 - Every changed flow manually traceable to this SPEC.
+
+---
+
+# WAVE 12 (2026-10-09) — Speed deep-pass, nav fix, Finance merge, force delete, retroactive formulas
+
+## W12.1 — Speed (top priority, owner's #1 complaint)
+- Slim mutation responses: status PATCH and other case mutations return MINIMAL json
+  ({ok, status, currentAttestationId, ...}) instead of full loadCaseDetail; UI updates
+  local state (live-refresh covers the rest).
+- No sequential awaits anywhere in hot routes — Promise.all everywhere.
+- /api/auth/me must stay JWT-cheap; client session cache already 60s.
+- Admin course APIs: trim heavy includes.
+- Every office API keeps preferredRegion=["sin1"].
+
+## W12.2 — Navbar overlap fix
+- Root cause: bell/badges inside `overflow-x-auto` flex row — dropdown clipped, items
+  overlap. Fix with proper 3-zone layout: brand (shrink-0) | scrollable nav (min-w-0
+  flex-1 overflow-x-auto, scrollbar hidden) | actions (shrink-0). Badges absolute
+  inside their button. Notification dropdown rendered outside the scroll container
+  (fixed positioning anchored to bell rect) so it never clips.
+
+## W12.3 — Ledger + Finance merge into ONE simple Finance page
+Admin needs at ONE glance:
+- Payments: kon kon si payments aain, kis case ke sath attached (case number + link),
+  amount, method, date, status.
+- Users earnings table (ALL members across offices): name, office, TOTAL EARNING
+  (credits: COMMISSION_*/EXTRA_SHARE/PROFIT_SHARE/BONUS), WASOOL (PAYOUT debits),
+  DUE (earning − wasool). Click a user → detail: har earning entry (type, case, date,
+  amount) + har payout (date, method, amount, remarks).
+- Keep existing company income summary as a compact strip on top (do not remove).
+- Nav: "Ledger" item removed; /office/ledger redirects to /office/finance.
+- New APIs: GET /api/office/finance/users (summary, all members + balances),
+  GET /api/office/finance/users/[memberId] (earnings + payouts lists).
+- Booking-office role keeps its own scoped ledger view (existing page behavior where
+  role==booking_office) — the merge targets the admin/cashier experience.
+
+## W12.4 — Partnership rule (confirmation)
+Pool = received − case expenses − office expenses, THEN share percents (already
+implemented in wave-2/§N8 + wave-11 auto-distribute). Verify, don't regress.
+
+## W12.5 — Admin force delete case
+- DELETE /api/office/cases/[id]: admin may delete ANY case (remove the received-payment
+  /ledger guard). Full cascade in one transaction: ledger entries (caseId + paymentId),
+  expenses, attestations, remarks (+recipients), contacts, addresses, discount/bonus
+  requests, files rows, payments; then case row. R2 objects (case files, payment slips,
+  client picture) deleted best-effort after commit. Audit logs for the case removed.
+  Notifications linking to the case removed. Money effect: deleting ledger rows
+  automatically reduces users' earnings/wasool balances everywhere.
+
+## W12.6 — Formula changes retroactive vs admin percent changes
+- Case.profitShareSnapshot (Json {memberId: percent}) written on FIRST distribution of
+  a case. finalizeProfitShare uses snapshot when present → admin changing a member's
+  profitPercent from the panel does NOT alter old cases; new cases use new percents.
+- CODE formula corrections ARE retroactive: scripts/recompute-finance.ts — for every
+  PROFIT_SHARE case: clear snapshot + finalize (idempotent ADJUSTMENT rows apply the
+  corrected formula); for every FIXED_COMMISSION case: recomputeCaseFinancials; plus
+  backfill memberId=null commission/extra-share ledger entries from case creator's
+  member. Run once against live DB after deploy.
+- Commission amount already snapshots per case at creation (grid changes don't touch
+  old cases) — consistent philosophy.
+
+## W12.7 — Notification bell bug
+Dropdown clipped by navbar overflow container (opens weird/cut). Fix per W12.2
+(fixed-position dropdown anchored to bell) + verify click → open list, item click →
+navigate, mark-read works.

@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getFreshAdminSession, hasAnyPermission, requirePermission } from "@/lib/auth";
+import { getFreshAdminSession, getSession, hasAnyPermission, requirePermission, type AdminSession } from "@/lib/auth";
 import { parseOrder } from "@/lib/parse-order";
+
+// Same freshness rule as requirePermission: a JWT younger than 15 min is
+// trusted without a DB round trip (this route is also hit by the public
+// courses page, where the DB check was pure latency).
+const FRESH_SESSION_MAX_AGE_MS = 15 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const adminView = searchParams.get("admin") === "true";
-  const session = await getFreshAdminSession();
+  let session = await getSession();
+  if (session) {
+    const iat = (session as AdminSession & { iat?: number }).iat;
+    const isFresh = typeof iat === "number" && Date.now() - iat * 1000 < FRESH_SESSION_MAX_AGE_MS;
+    // Stale token: one DB re-check so revoked admins lose the admin view.
+    if (!isFresh) session = await getFreshAdminSession();
+  }
   const canSeeAdminCourses =
     adminView &&
     hasAnyPermission(session, [

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
-import { loadCaseDetail } from "@/lib/office/case-detail";
 import { notifyRole, notifyUsers } from "@/lib/office/notifications";
 import { CASE_STATUSES, type CaseStatus } from "@/lib/office/permissions";
 import { STATUS_LABELS } from "@/lib/office/labels";
@@ -113,17 +112,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       { maxWait: 10000, timeout: 30000 }
     );
 
-    await logOfficeAction(session, {
-      action: "case.status",
-      entity: "Case",
-      entityId: id,
-      before: { status: item.status, isPrinted: item.isPrinted },
-      after: {
-        ...data,
-        ...(jumpResult ? { attestation: jumpResult.name } : {}),
-        ...(adminNote ? { note: adminNote } : {}),
-      },
-    });
+    // Side effects (audit log + notifications) ek saath parallel — response
+    // par koi serial DB round trip add nahi hota.
+    const sideEffects: Promise<unknown>[] = [
+      logOfficeAction(session, {
+        action: "case.status",
+        entity: "Case",
+        entityId: id,
+        before: { status: item.status, isPrinted: item.isPrinted },
+        after: {
+          ...data,
+          ...(jumpResult ? { attestation: jumpResult.name } : {}),
+          ...(adminNote ? { note: adminNote } : {}),
+        },
+      }),
+    ];
 
     // §W11.8: case creator + naye stage ke department ke users ko notify.
     const newStatus = data.status;
@@ -133,24 +136,37 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           ? `Attestation: ${jumpResult.name}`
           : STATUS_LABELS[newStatus] || newStatus;
       const link = `/office/cases/${id}`;
-      await notifyUsers([item.createdByAdminId], {
-        type: "case.status",
-        title: `Case ${item.caseNumber}: ${label}`,
-        body: adminNote,
-        link,
-      });
-      const role = STAGE_ROLE[newStatus];
-      if (role) {
-        await notifyRole(role, {
+      sideEffects.push(
+        notifyUsers([item.createdByAdminId], {
           type: "case.status",
           title: `Case ${item.caseNumber}: ${label}`,
           body: adminNote,
           link,
-        });
+        })
+      );
+      const role = STAGE_ROLE[newStatus];
+      if (role) {
+        sideEffects.push(
+          notifyRole(role, {
+            type: "case.status",
+            title: `Case ${item.caseNumber}: ${label}`,
+            body: adminNote,
+            link,
+          })
+        );
       }
     }
+    await Promise.all(sideEffects);
 
-    return NextResponse.json(await loadCaseDetail(session, id));
+    // Slim response (W12 perf): UI local state + live refresh se re-fetch karti
+    // hai, is liye full loadCaseDetail ki heavy queries yahan skip.
+    return NextResponse.json({
+      ok: true,
+      status: data.status ?? item.status,
+      currentAttestationId: jumpAttestationId ?? item.currentAttestationId ?? null,
+      isPrinted: data.isPrinted ?? item.isPrinted,
+      message: "Status update ho gaya",
+    });
   } catch (error) {
     return serverError(error);
   }

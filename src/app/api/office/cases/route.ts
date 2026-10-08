@@ -101,9 +101,11 @@ export async function GET(request: NextRequest) {
   ]);
 
   // §N7: filing department gets the stripped payload (no money fields).
+  // Cache-Control: no-store — list har waqt fresh honi chahiye (live refresh).
+  const NO_STORE = { "Cache-Control": "no-store" };
   if (isFilingLimited(session)) {
     const rows = await Promise.all(items.map((item) => serializeFilingCase(item)));
-    return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE });
+    return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE }, { headers: NO_STORE });
   }
 
   const unseen = await unseenWarningCaseIds(
@@ -111,17 +113,20 @@ export async function GET(request: NextRequest) {
     items.map((item) => item.id)
   );
 
-  return NextResponse.json({
-    items: items.map((item) => {
-      const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
-      // F6: raw payment rows list payload mein nahi — totals pehle se computed.
-      delete row.payments;
-      return row;
-    }),
-    total,
-    page,
-    pageSize: PAGE_SIZE,
-  });
+  return NextResponse.json(
+    {
+      items: items.map((item) => {
+        const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
+        // F6: raw payment rows list payload mein nahi — totals pehle se computed.
+        delete row.payments;
+        return row;
+      }),
+      total,
+      page,
+      pageSize: PAGE_SIZE,
+    },
+    { headers: NO_STORE }
+  );
 }
 
 export async function POST(request: NextRequest) {
