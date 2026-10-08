@@ -887,3 +887,19 @@ Next step for the next agent:
   Attestation), complete-all button (API route dusre agent ki — FINAL file
   missing par error toast, success par COMPLETED), mobile 360px par tab scroll
   + command bar wrap.
+
+## Wave 11 (2026-10-09) — Owner final polish: status flow + live + notifications
+- Exact 12-step status flow implemented (FIRST_PAYMENT_PENDING → … → MUSADIQA_VERIFIED),
+  ATTESTATION phase dynamic via Case.currentAttestationId; legacy keys mapped in live DB.
+- Admin status dropdown inside cases LIST rows (shared CaseStatusSelect, note lazmi,
+  attestation-jump side effects); detail page bulky stepper replaced with slim
+  CaseStatusHeader (chip + Step X of 12 + next-step hint).
+- Finance: partner auto-distribute on every RECEIVED payment (admin remainder explicit);
+  commission entries carry memberId of case creator (50% first payment / 50% completion).
+- Notifications (Notification table + bell + 20s poll), nav-counts badges (30s),
+  useLiveRefresh (15s visible polling + focus + office:changed) on list/detail/dashboard/
+  payments/ledger. Websockets deliberately replaced with polling (serverless).
+- Booking office filing-file visibility behind per-case admin toggle
+  (filingFilesVisibleToBooking); booking navbar Links dropdown admin-only.
+- Speed: case-detail Promise.all + lazy /audit endpoint; hover prefetch; silent reloads.
+- Verified: tsc 0, lint 0, next build exit 0 (real DB). Pushed as ca6bc1b.

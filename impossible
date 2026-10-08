@@ -65,3 +65,11 @@ IMPOSSIBLE / LIMITATIONS — jo cheezen is environment men 100% mumkin na thin
 
 Baqi tamam instructions (N1-N11) implement ho gayi hen — detail
 docs/office-module/05_AGENT_LOG.md aur 06_NEW_REQUIREMENTS.md men mojod hai.
+
+9. Wave 11 — "usi waqt live change" ke liye websocket ki jagah 15-second
+   polling + focus-refresh + instant local refresh (apni action per foran)
+   use hui hai. Waja: Vercel serverless functions men persistent websocket
+   connection mumkin nahi (har request alag instance, 60s max duration).
+   Polling se doosry departments ko tabdili ~15s men nazar aati hai; apni
+   screen per aap ki apni tabdili foran dikhti hai. Agar bilkul real-time
+   (0s) chahiye to Supabase Realtime ya alag websocket server chahiye ho ga.
