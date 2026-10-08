@@ -60,6 +60,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.courierNumber !== undefined) data.courierNumber = cleanText(body.courierNumber, 120);
     if (body.isUrgent !== undefined) data.isUrgent = Boolean(body.isUrgent);
 
+    // §W11.6: filing-files visibility for booking office users — admin-only.
+    if (body.filingFilesVisibleToBooking !== undefined) {
+      if (session.role !== "admin") {
+        return forbidden("Filing files ki visibility sirf super admin badal sakta hai");
+      }
+      const raw = body.filingFilesVisibleToBooking;
+      data.filingFilesVisibleToBooking = raw === true || raw === "true" || raw === "1";
+    }
+
     if (body.categoryId !== undefined) {
       const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
       if (categoryId) {

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  EyeOff,
   FileText,
   FolderOpen,
   Loader2,
@@ -57,6 +58,8 @@ type Props = {
     rollNumber: string | null;
     setId?: string | null;
     setName: string | null;
+    // §W11.6: booking office ko FILING files tabhi dikhti hain jab ye on ho.
+    filingFilesVisibleToBooking?: boolean;
   };
   admin: AdminNavUser;
   onReload: () => Promise<void>;
@@ -151,6 +154,22 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     return admin.role === "admin" || canWrite(file.department);
   }
 
+  // §W11.6: admin toggle — booking office ko filing files dikhayein / chhupayein.
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+  async function toggleFilingVisibility() {
+    setTogglingVisibility(true);
+    const next = !detail.filingFilesVisibleToBooking;
+    const res = await officeFetch(`/api/office/cases/${detail.id}`, {
+      method: "PATCH",
+      json: { filingFilesVisibleToBooking: next },
+    });
+    if (res.ok) {
+      onMessage(next ? "Booking office ab filing files dekh sakta hai" : "Filing files booking office se hide ho gayi");
+      await onReload();
+    } else onMessage(res.error, "error");
+    setTogglingVisibility(false);
+  }
+
   function fileRow(file: CaseFileItem) {
     return (
       <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
@@ -189,7 +208,41 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
   }
 
   return (
-    <SectionCard icon={FolderOpen} title="Department files" count={files.length}>
+    <SectionCard
+      icon={FolderOpen}
+      title="Department files"
+      count={files.length}
+      actions={
+        admin.role === "admin" ? (
+          <button
+            type="button"
+            disabled={togglingVisibility}
+            onClick={toggleFilingVisibility}
+            title="On ho to booking office bhi FILING files dekh sakta hai"
+            className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+              detail.filingFilesVisibleToBooking
+                ? "bg-emerald-600 text-white"
+                : "border border-slate-200 bg-white text-slate-600"
+            }`}
+          >
+            {togglingVisibility ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : detail.filingFilesVisibleToBooking ? (
+              <Eye className="h-3.5 w-3.5" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5" />
+            )}
+            Booking ko filing files: {detail.filingFilesVisibleToBooking ? "On" : "Off"}
+          </button>
+        ) : undefined
+      }
+    >
+      {/* §W11.6: booking office ko filing files hidden hon to wazahat */}
+      {admin.role === "booking_office" && !detail.filingFilesVisibleToBooking && (
+        <p className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          Filing department ki files is case par hidden hain — admin on kare to yahan nazar aayen gi.
+        </p>
+      )}
       {loading ? (
         <SkeletonRows rows={4} />
       ) : (

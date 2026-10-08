@@ -6,7 +6,7 @@ import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import { SkeletonRows, SkeletonTiles } from "@/components/ui/Skeleton";
 import CaseCommandBar from "@/components/office/case/CaseCommandBar";
-import CaseStepper from "@/components/office/case/CaseStepper";
+import CaseStatusHeader from "@/components/office/case/CaseStatusHeader";
 import CaseWarningStrip from "@/components/office/case/CaseWarningStrip";
 import CaseOverviewTab from "@/components/office/case/CaseOverviewTab";
 import CasePaymentsTab from "@/components/office/case/CasePaymentsTab";
@@ -16,6 +16,7 @@ import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import CaseHistoryTab from "@/components/office/case/CaseHistoryTab";
 import FilingCaseView from "@/components/office/case/FilingCaseView";
 import { officeFetch } from "@/lib/office/client";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import type { CaseDetail } from "@/lib/office/types";
 
 const TABS = [
@@ -50,6 +51,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     void reload();
   }, [reload]);
 
+  // §W11.5: detail page bhi live rehta hai (15s polling + focus + office:changed).
+  useLiveRefresh(reload);
+
   // Lazy render: tab pehli dafa khulne par hi mount hota hai (files/remarks ki
   // apni fetch tab hi chalti hai); baad mein mounted rehta hai taake state bache.
   function openTab(tab: string) {
@@ -80,7 +84,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             ) : (
               <>
                 <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
-                <CaseStepper status={detail.status} />
+                <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} />
                 <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
 
                 {/* Tab bar — mobile par horizontally scrollable */}

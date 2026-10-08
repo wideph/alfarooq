@@ -58,7 +58,10 @@ export async function recomputeCaseFinancials(
     const item = await tx.case.findUnique({
       where: { id: caseId },
       include: {
-        bookingOffice: { select: { id: true, type: true } },
+        // §W11.4 — members needed for per-user ledger attribution.
+        bookingOffice: {
+          select: { id: true, type: true, members: { select: { id: true, adminId: true } } },
+        },
         payments: { select: { id: true, amount: true, status: true } },
         ledger: {
           where: { type: { in: [...COMMISSION_TYPES, "EXTRA_SHARE"] } },
@@ -67,6 +70,13 @@ export async function recomputeCaseFinancials(
       },
     });
     if (!item) throw new Error("Case nahi mila");
+
+    // §W11.4 — per-user attribution: case creator (createdByAdminId) jis office
+    // member se linked hai, us member ki id nayi commission/extra ledger entries
+    // par memberId mein jati hai. Creator member nahi hai to memberId=null.
+    // Purani entries kabhi rewrite nahi hoti — sirf nayi entries par.
+    const attributionMemberId =
+      item.bookingOffice.members.find((member) => member.adminId === item.createdByAdminId)?.id ?? null;
 
     const totals = computeTotals(item.payments, item.agreedAmount);
     const received = dec(totals.received);
@@ -100,6 +110,7 @@ export async function recomputeCaseFinancials(
         await tx.ledgerEntry.create({
           data: {
             bookingOfficeId: item.bookingOfficeId,
+            memberId: attributionMemberId,
             caseId,
             paymentId: options.paymentId || null,
             type,
@@ -139,6 +150,7 @@ export async function recomputeCaseFinancials(
           await tx.ledgerEntry.create({
             data: {
               bookingOfficeId: item.bookingOfficeId,
+              memberId: attributionMemberId,
               caseId,
               paymentId: options.paymentId || null,
               type: "EXTRA_SHARE",

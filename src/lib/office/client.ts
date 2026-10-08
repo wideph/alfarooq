@@ -1,5 +1,7 @@
 "use client";
 
+import { announceOfficeChange } from "@/lib/office/live";
+
 // Small fetch helpers shared by office pages. Every API returns { error } on
 // failure, so callers get a single string to show.
 export async function officeFetch<T>(
@@ -7,6 +9,7 @@ export async function officeFetch<T>(
   init?: RequestInit & { json?: unknown }
 ): Promise<{ ok: true; data: T } | { ok: false; error: string; status: number }> {
   const { json, ...rest } = init || {};
+  const method = (rest.method || (json !== undefined ? "POST" : "GET")).toUpperCase();
   const res = await fetch(url, {
     ...rest,
     ...(json !== undefined
@@ -17,6 +20,9 @@ export async function officeFetch<T>(
   if (!res.ok) {
     return { ok: false, error: (data && data.error) || `Request fail (${res.status})`, status: res.status };
   }
+  // §W11.5: successful non-GET mutation ke baad baqi live-refresh listeners
+  // ko signal (300ms debounce ke saath refresh hota hai).
+  if (method !== "GET") announceOfficeChange();
   return { ok: true, data: data as T };
 }
 

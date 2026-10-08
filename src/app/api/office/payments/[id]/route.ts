@@ -6,7 +6,10 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
+import { notifyRole, notifyUsers } from "@/lib/office/notifications";
+import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
+import { PAYMENT_STATUS_LABELS } from "@/lib/office/labels";
 import { deleteOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
@@ -28,10 +31,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json();
     const data: Prisma.PaymentUncheckedUpdateInput = {};
+    let newStatus: PaymentStatus | null = null;
 
     if (body.status !== undefined) {
       const status = body.status as PaymentStatus;
       if (!PAYMENT_STATUSES.includes(status)) return badRequest("Status sahi nahi hai");
+      newStatus = status;
       data.status = status;
       data.verifiedById = status === "PENDING" ? null : session.adminId;
       data.verifiedAt = status === "PENDING" ? null : new Date();
@@ -66,14 +71,36 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
 
+    // §W11.1: ATTESTATION_COMPLETE par poora payment (remaining=0, agreed>0)
+    // → WAITING_FOR_COURIER (+ courier department ko notify).
+    if (result.remaining === 0 && result.agreedAmount > 0) {
+      const caseRow = await prisma.case.findUnique({
+        where: { id: existing.caseId },
+        select: { status: true, caseNumber: true },
+      });
+      if (caseRow?.status === "ATTESTATION_COMPLETE") {
+        await prisma.case.update({
+          where: { id: existing.caseId },
+          data: { status: "WAITING_FOR_COURIER" },
+        });
+        await notifyRole("courier", {
+          type: "case.status",
+          title: `Case ${caseRow.caseNumber}: Payment complete — waiting for courier`,
+          link: `/office/cases/${existing.caseId}`,
+        });
+      }
+    }
+
     // Wave 2 (§N5/N7): the FIRST payment that turns RECEIVED activates the
     // workflow — case becomes WAITING_FOR_FILE (visible to filing). Runs AFTER
-    // the recompute (which may have moved NEW → IN_PROCESS), so the helper
-    // accepts IN_PROCESS too. Failures are logged, never thrown.
+    // the recompute. Failures are logged, never thrown.
     // AI date generation (DeepSeek, 30–240s on first run) is scheduled via
     // after() so the verify response returns instantly.
-    if (data.status === "RECEIVED" && existing.status !== "RECEIVED") {
+    if (newStatus === "RECEIVED" && existing.status !== "RECEIVED") {
       const caseId = existing.caseId;
+      // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
+      // auto-distribute (idempotent). Kabhi throw nahi karta.
+      await autoDistributeOnPaymentReceived(caseId, session);
       const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
       if (datesNeeded) {
         after(async () => {
@@ -84,6 +111,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           }
         });
       }
+    }
+
+    // §W11.8: verify decision → payment submitter + case creator.
+    if (newStatus && newStatus !== existing.status) {
+      const caseRow = await prisma.case.findUnique({
+        where: { id: existing.caseId },
+        select: { caseNumber: true, createdByAdminId: true },
+      });
+      await notifyUsers([existing.submittedById, caseRow?.createdByAdminId], {
+        type: "payment.verify",
+        title: `Payment ${PAYMENT_STATUS_LABELS[newStatus] || newStatus} — case ${caseRow?.caseNumber || ""}`,
+        link: `/office/cases/${existing.caseId}`,
+      });
     }
 
     return NextResponse.json(

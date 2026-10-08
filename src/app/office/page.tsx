@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Banknote, Briefcase, ClipboardList, Plus } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
@@ -8,6 +8,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, officeFetch } from "@/lib/office/client";
 import { CASE_STATUSES } from "@/lib/office/permissions";
 import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 
 type Dashboard = {
   statusCounts: Record<string, number>;
@@ -30,12 +31,18 @@ export default function OfficeDashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    officeFetch<Dashboard>("/api/office/dashboard").then((res) => {
-      if (res.ok) setData(res.data);
-      else setError(res.error);
-    });
+  const load = useCallback(async () => {
+    const res = await officeFetch<Dashboard>("/api/office/dashboard");
+    if (res.ok) setData(res.data);
+    else setError(res.error);
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // §W11.5: dashboard live (15s polling + focus + office:changed).
+  useLiveRefresh(load);
 
   return (
     <OfficePageFrame>

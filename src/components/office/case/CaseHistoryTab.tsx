@@ -22,6 +22,7 @@ import { formatDate, formatDateTime, formatMoney, officeFetch, todayInputDate } 
 import { LEDGER_TYPE_LABELS } from "@/lib/office/labels";
 import {
   type BonusRequestItem,
+  type CaseAuditItem,
   type CaseDetail,
   type DiscountRequestItem,
   ghostBtnClass,
@@ -264,23 +265,44 @@ function LedgerPanel({ detail, admin }: TabProps) {
 
 /* -------------------------------- Audit log -------------------------------- */
 
+// §W11.3/W11.5: audit detail payload ka hissa nahi — History tab khulne par
+// (tab lazily mount hota hai) GET /api/office/cases/[id]/audit se aata hai.
 function AuditPanel({ detail, admin }: TabProps) {
-  if (admin.role !== "admin" || detail.audit.length === 0) return null;
+  const [items, setItems] = useState<CaseAuditItem[] | null>(null);
+
+  useEffect(() => {
+    if (admin.role !== "admin") return;
+    let cancelled = false;
+    officeFetch<{ items: CaseAuditItem[] }>(`/api/office/cases/${detail.id}/audit`).then((res) => {
+      if (!cancelled) setItems(res.ok ? res.data.items : []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [admin.role, detail.id]);
+
+  if (admin.role !== "admin") return null;
 
   return (
-    <SectionCard icon={History} title="Audit log (last 20)" count={detail.audit.length}>
-      <ul className="divide-y divide-slate-100 text-xs">
-        {detail.audit.map((a) => (
-          <li key={a.id} className="py-1.5">
-            <span className="text-slate-400">{formatDateTime(a.createdAt)}</span> ·{" "}
-            <span className="font-semibold text-slate-700">{a.actorName || a.actorRole}</span> ·{" "}
-            <span className="font-mono">{a.action}</span>
-            {a.after !== null && a.after !== undefined && (
-              <span className="ml-1 break-all text-slate-500">{JSON.stringify(a.after).slice(0, 160)}</span>
-            )}
-          </li>
-        ))}
-      </ul>
+    <SectionCard icon={History} title="Audit log (last 50)" count={items?.length ?? null}>
+      {items === null ? (
+        <SkeletonRows rows={3} />
+      ) : items.length === 0 ? (
+        <EmptyState icon={History} hint="Koi audit entry nahi" />
+      ) : (
+        <ul className="divide-y divide-slate-100 text-xs">
+          {items.map((a) => (
+            <li key={a.id} className="py-1.5">
+              <span className="text-slate-400">{formatDateTime(a.createdAt)}</span> ·{" "}
+              <span className="font-semibold text-slate-700">{a.actorName || a.actorRole}</span> ·{" "}
+              <span className="font-mono">{a.action}</span>
+              {a.after !== null && a.after !== undefined && (
+                <span className="ml-1 break-all text-slate-500">{JSON.stringify(a.after).slice(0, 160)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </SectionCard>
   );
 }

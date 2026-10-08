@@ -4,6 +4,7 @@ import { hasAnyPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
+import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { evaluateCaseCompletion } from "@/lib/office/workflow";
 import { toJson } from "@/lib/office/serializers";
 
@@ -20,7 +21,7 @@ function utcToday() {
 // admin — ek hi click mein case ke TAMAM attestation steps DONE. Shart: ATTA
 // department ka stepKey=FINAL file pehle upload ho chuki ho (warna 400). Ek
 // transaction mein sab rows DONE, phir evaluateCaseCompletion (jo FINAL file
-// dekh kar status COMPLETED karti hai).
+// dekh kar status ATTESTATION_COMPLETE karti hai, §W11.1).
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
@@ -52,7 +53,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           where: { caseId: id, status: "DONE", completedDate: null },
           data: { completedDate: now },
         });
-        // §N7: saare set steps DONE + FINAL atta file → COMPLETED.
+        // §W11.1: saare set steps DONE + FINAL atta file → ATTESTATION_COMPLETE.
         await evaluateCaseCompletion(id, tx);
         const updated = await tx.case.findUnique({ where: { id }, select: { status: true } });
         const attestations = await tx.caseAttestation.findMany({
@@ -75,6 +76,14 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       },
       after: { status: result.status },
     });
+
+    // §W11.8: attestation stage complete → atta department + admins.
+    if (result.status === "ATTESTATION_COMPLETE" && item.status !== "ATTESTATION_COMPLETE") {
+      const link = `/office/cases/${id}`;
+      const title = `Case ${item.caseNumber}: attestation complete`;
+      await notifyRole("atta", { type: "attestation", title, link });
+      await notifyAdmins({ type: "attestation", title, link });
+    }
 
     return NextResponse.json(toJson({ status: result.status, attestations: result.attestations }));
   } catch (error) {

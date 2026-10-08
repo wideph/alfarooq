@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
+import { notifyUsers } from "@/lib/office/notifications";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, round2, toNumber } from "@/lib/office/money";
 import { todayPakistan, toJson } from "@/lib/office/serializers";
@@ -84,6 +85,12 @@ export async function PATCH(request: NextRequest) {
         before: existing,
         after: { status: "REJECTED" },
       });
+      // §W11.8 — decision par requester ko notification.
+      await notifyUsers([existing.createdById], {
+        type: "request.decided",
+        title: `Case ${existing.case.caseNumber}: discount request reject ho gayi`,
+        link: `/office/cases/${existing.caseId}`,
+      });
       return NextResponse.json(toJson(updated));
     }
 
@@ -163,6 +170,12 @@ export async function PATCH(request: NextRequest) {
     }, { maxWait: 10000, timeout: 30000 });
 
     const result = await recomputeCaseFinancials(existing.caseId, session);
+    // §W11.8 — decision par requester ko notification.
+    await notifyUsers([existing.createdById], {
+      type: "request.decided",
+      title: `Case ${existing.case.caseNumber}: discount request accept ho gayi`,
+      link: `/office/cases/${existing.caseId}`,
+    });
     return NextResponse.json(toJson({ request: updated, ...result }));
   } catch (error) {
     return serverError(error);

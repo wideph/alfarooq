@@ -7,7 +7,8 @@ import { caseScope, canSeeOffice } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText } from "@/lib/office/serializers";
-import { CASE_STATUSES } from "@/lib/office/permissions";
+import { CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
+import { notifyAdmins } from "@/lib/office/notifications";
 import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import {
@@ -55,8 +56,23 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
 
   const where: Prisma.CaseWhereInput = { ...caseScope(session) };
-  if (status && (CASE_STATUSES as readonly string[]).includes(status)) where.status = status;
-  if (status === "open") where.status = { notIn: ["COMPLETED", "DELIVERED", "CANCELLED"] };
+  // §W11.1: filter accepts all 13 new keys (+ legacy keys as fallback).
+  const ALL_STATUSES: readonly string[] = [...CASE_STATUSES, ...LEGACY_CASE_STATUSES];
+  if (status && ALL_STATUSES.includes(status)) where.status = status;
+  // "open" = abhi main flow mein hai (DELIVERED + musadiqa post-delivery
+  // stages aur CANCELLED ke ilawa).
+  if (status === "open") {
+    where.status = {
+      notIn: [
+        "DELIVERED",
+        "MUSADIQA_APPLIED",
+        "MUSADIQA_FEES_PAID",
+        "MUSADIQA_SENT_BY_BOARD",
+        "MUSADIQA_VERIFIED",
+        "CANCELLED",
+      ],
+    };
+  }
   if (officeId && canSeeOffice(session, officeId)) where.bookingOfficeId = officeId;
   // §N7 department queues: ?dept=filing|printing|atta|courier.
   if (dept) {
@@ -194,6 +210,8 @@ export async function POST(request: NextRequest) {
           bookingOfficeId,
           createdByAdminId: session.adminId,
           categoryId,
+          // §W11.1: naya case hamesha 1st payment pending se start hota hai.
+          status: "FIRST_PAYMENT_PENDING",
           clientName,
           rollNumber,
           registrationNumber,
@@ -223,6 +241,13 @@ export async function POST(request: NextRequest) {
       entity: "Case",
       entityId: created.id,
       after: { caseNumber: created.caseNumber, clientName, bookingOfficeId, categoryId, agreedAmount },
+    });
+
+    // §W11.8: case.create → tamam admins ko notification.
+    await notifyAdmins({
+      type: "case.create",
+      title: `New case ${created.caseNumber}`,
+      link: `/office/cases/${created.id}`,
     });
 
     return NextResponse.json(serializeCaseRow(created), { status: 201 });

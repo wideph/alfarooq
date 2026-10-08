@@ -7,7 +7,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
-import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
+import { caseStatusLabel, STATUS_STYLES } from "@/lib/office/labels";
 import { BOOKING_OFFICE_TYPE_LABELS } from "@/lib/office/permissions";
 import type { CaseDetail } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -77,7 +77,7 @@ export default function CaseCommandBar({
               </span>
             )}
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[detail.status]}`}>
-              {STATUS_LABELS[detail.status] || detail.status}
+              {caseStatusLabel(detail.status, detail.currentAttestation?.attestationTypeName)}
             </span>
             <span
               className={`inline-flex items-center gap-1 text-[11px] ${detail.isPrinted ? "font-semibold text-emerald-700" : "text-slate-400"}`}

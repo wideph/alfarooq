@@ -5,6 +5,7 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
+import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 import { evaluateCaseCompletion } from "@/lib/office/workflow";
@@ -44,8 +45,8 @@ const ATTESTATION_ORDER: Record<string, number> = { PENDING: 0, IN_PROGRESS: 1, 
 // PATCH: attestation office (office:attestation:write) updates status / dates /
 // notes (R1.2). The atta department (office:atta:write) may only move a step
 // forward PENDING → IN_PROGRESS → DONE (with completedDate). Case auto-moves:
-// any IN_PROGRESS → ATTESTATION; all set steps DONE + FINAL atta file →
-// COMPLETED (see evaluateCaseCompletion, §N7).
+// any IN_PROGRESS → ATTESTATION (+currentAttestationId); all set steps DONE +
+// FINAL atta file → ATTESTATION_COMPLETE (see evaluateCaseCompletion, §W11.1).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
@@ -107,19 +108,47 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     await prisma.caseAttestation.update({ where: { id: attestationId }, data });
 
-    // §N7: COMPLETED needs all set steps DONE + the mandatory FINAL atta file.
+    // §W11.1: IN_PROGRESS → case ATTESTATION + currentAttestationId = ye step;
+    // DONE (agar current tha) → pointer agle PENDING step par; phir
+    // evaluateCaseCompletion (sab DONE + FINAL atta file → ATTESTATION_COMPLETE).
     let nextStatus = item.status;
-    const completed = await evaluateCaseCompletion(id);
-    if (completed) {
-      nextStatus = "COMPLETED";
-    } else {
-      const all = await prisma.caseAttestation.findMany({ where: { caseId: id }, select: { status: true } });
-      if (all.some((a) => a.status === "IN_PROGRESS" || a.status === "DONE")) {
-        if (["NEW", "PAYMENT_PENDING", "IN_PROCESS", "PRINTED"].includes(item.status)) {
-          nextStatus = "ATTESTATION";
-          await prisma.case.update({ where: { id }, data: { status: "ATTESTATION" } });
-        }
+    if (data.status === "IN_PROGRESS") {
+      if (
+        [
+          "FIRST_PAYMENT_PENDING",
+          "WAITING_FOR_FILE",
+          "WAITING_FOR_PRINTING",
+          "PRINTED",
+          "ATTESTATION",
+        ].includes(item.status)
+      ) {
+        nextStatus = "ATTESTATION";
+        await prisma.case.update({
+          where: { id },
+          data: { status: "ATTESTATION", currentAttestationId: attestationId },
+        });
       }
+    } else if (data.status === "DONE" && item.currentAttestationId === attestationId) {
+      const next = await prisma.caseAttestation.findFirst({
+        where: { caseId: id, status: "PENDING" },
+        orderBy: { order: "asc" },
+        select: { id: true },
+      });
+      await prisma.case.update({
+        where: { id },
+        data: { currentAttestationId: next?.id ?? null },
+      });
+    }
+
+    const completed = await evaluateCaseCompletion(id);
+    if (completed) nextStatus = "ATTESTATION_COMPLETE";
+
+    // §W11.8: attestation DONE → atta department + admins.
+    if (data.status === "DONE") {
+      const link = `/office/cases/${id}`;
+      const title = `Case ${item.caseNumber}: attestation done`;
+      await notifyRole("atta", { type: "attestation", title, link });
+      await notifyAdmins({ type: "attestation", title, link });
     }
 
     await logOfficeAction(session, {

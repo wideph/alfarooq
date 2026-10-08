@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
+import { notifyAdmins, notifyUsers } from "@/lib/office/notifications";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, todayPakistan, toJson } from "@/lib/office/serializers";
 
@@ -84,6 +85,14 @@ export async function POST(request: NextRequest) {
       after: { bookingOfficeId, caseId, amount, reason: created.reason },
     });
 
+    // §W11.8 — nayi bonus request par admins ko notification.
+    await notifyAdmins({
+      type: "request",
+      title: `Bonus request: ${office.name}`,
+      body: created.reason || null,
+      link: caseId ? `/office/cases/${caseId}` : null,
+    });
+
     return NextResponse.json(toJson(created), { status: 201 });
   } catch (error) {
     return serverError(error);
@@ -120,6 +129,13 @@ export async function PATCH(request: NextRequest) {
         entityId: id,
         before: existing,
         after: { status: "REJECTED" },
+      });
+      // §W11.8 — decision par requester ko notification.
+      await notifyUsers([existing.createdById], {
+        type: "request.decided",
+        title: "Bonus request reject ho gayi",
+        body: existing.reason || null,
+        link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
       });
       return NextResponse.json(toJson(updated));
     }
@@ -159,6 +175,14 @@ export async function PATCH(request: NextRequest) {
       );
       return row;
     }, { maxWait: 10000, timeout: 30000 });
+
+    // §W11.8 — decision par requester ko notification.
+    await notifyUsers([existing.createdById], {
+      type: "request.decided",
+      title: "Bonus request accept ho gayi",
+      body: existing.reason || null,
+      link: existing.caseId ? `/office/cases/${existing.caseId}` : null,
+    });
 
     return NextResponse.json(toJson(updated));
   } catch (error) {

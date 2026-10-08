@@ -205,3 +205,122 @@ Statuses (extend existing):
 
 ## N11. If something is impossible
 - Create `impossible` file in repo root explaining precisely what could not be done.
+
+---
+
+# WAVE 11 (2026-10-09) — Owner FINAL polish: status flow, finance timing, notifications, live refresh, speed
+
+## W11.1 — EXACT case status flow (replaces all previous status lists)
+Order is fixed. Display labels MUST be exactly these (English short labels, one glance clear):
+
+| # | Status key | Label |
+|---|-----------|-------|
+| 1 | FIRST_PAYMENT_PENDING | 1st payment pending |
+| 2 | WAITING_FOR_FILE | Waiting for file |
+| 3 | WAITING_FOR_PRINTING | Waiting for printing |
+| 4 | PRINTED | Printed |
+| 5 | ATTESTATION | dynamic: `Attestation: <current attestation name>` via Case.currentAttestationId |
+| 6 | ATTESTATION_COMPLETE | Attestation complete — final payment pending |
+| 7 | WAITING_FOR_COURIER | Payment complete — waiting for courier |
+| 8 | DELIVERED | Delivered |
+| 9 | MUSADIQA_APPLIED | Musadiqa applied |
+| 10 | MUSADIQA_FEES_PAID | Fees paid for Musadiqa |
+| 11 | MUSADIQA_SENT_BY_BOARD | Musadiqa verification sent by board |
+| 12 | MUSADIQA_VERIFIED | Musadiqa verified |
+| — | CANCELLED | Cancelled |
+
+Legacy keys NEW / PAYMENT_PENDING / IN_PROCESS / COMPLETED were migrated in DB
+(NEW/PAYMENT_PENDING→FIRST_PAYMENT_PENDING, IN_PROCESS→WAITING_FOR_FILE,
+COMPLETED→ATTESTATION_COMPLETE). Keep legacy labels as fallback only.
+
+Auto-transitions (system):
+- Case create → FIRST_PAYMENT_PENDING.
+- First payment RECEIVED → WAITING_FOR_FILE.
+- Filing dept first file upload → WAITING_FOR_PRINTING.
+- Printing dept first file upload (or isPrinted) → PRINTED.
+- Attestation step IN_PROGRESS → status ATTESTATION + currentAttestationId=that step.
+- All set attestations DONE + final ATTA file → ATTESTATION_COMPLETE (was COMPLETED).
+- Payments fully received (remaining=0, agreed>0) while ATTESTATION_COMPLETE → WAITING_FOR_COURIER.
+- Courier slip upload → DELIVERED.
+- Musadiqa statuses: manual by admin.
+
+Admin manual change (dropdown in cases LIST row + detail page):
+- Admin may jump to ANY status; note/reason lazmi (already enforced).
+- Dropdown options per row = 12 fixed statuses + one option per attestation of that
+  case (`Attestation: <name>`), in flow order, current one marked.
+- Selecting attestation option: status=ATTESTATION, currentAttestationId=selected,
+  attestations before it → DONE (completedDate=today if null), selected → IN_PROGRESS,
+  later → PENDING.
+- Selecting ATTESTATION_COMPLETE or later → ALL attestations → DONE.
+- Selecting PRINTED or later → isPrinted=true, printedAt set.
+
+## W11.2 — Cases list UX
+- Whole row/box clickable → opens detail (router.push + prefetch on hover),
+  EXCEPT expense button and status dropdown (stopPropagation).
+- Admin sees inline status dropdown per row; change → note modal → PATCH → toast → list refresh.
+- Mobile: cards instead of table on small screens.
+
+## W11.3 — Detail page
+- Remove bulky CaseStepper; slim status header: big current status chip + next-step hint +
+  admin status dropdown (same component as list).
+- Tabs stay but compact; History tab fetches audit lazily from new GET /api/office/cases/[id]/audit.
+- Filing-visibility admin toggle (see W11.6) in Files tab header.
+- Live refresh (W11.5).
+
+## W11.4 — Finance timing
+- PROFIT_SHARE (partner) office: on EVERY payment turning RECEIVED, auto-distribute:
+  pool = received − case expenses − office expenses (floor 0); each active member gets
+  profitPercent% of pool credited (idempotent ADJUSTMENT rows); remainder (100−sum%)
+  is admin share — show in profit summary as adminShare. No manual finalize needed
+  (keep button harmless). Contract: `autoDistributeOnPaymentReceived(caseId, session)`
+  in src/lib/office/profit-share.ts; called from payment verify + recompute path.
+- FIXED_COMMISSION office: 50% commission credited on FIRST received payment, remaining
+  50% when remaining=0 (already the logic) — NEW: ledger entries carry memberId of the
+  BookingOfficeMember linked to case.createdByAdminId (per-user ledger attribution).
+  Fallback memberId=null when creator is not a member.
+
+## W11.5 — Live refresh + speed
+- Websockets not viable on serverless → polling infra:
+  - src/hooks/useLiveRefresh.ts: interval (15s, only when tab visible) + window focus +
+    custom event `office:changed` (dispatched by officeFetch after successful mutations)
+    with 300ms debounce.
+  - Apply on: cases list, case detail, office dashboard, payments page, ledger page.
+- Speed: loadCaseDetail parallel Promise.all; audit log moved to lazy endpoint;
+  nav-counts single aggregated endpoint; list route count+findMany parallel.
+
+## W11.6 — Booking office filing-file permission
+- Case.filingFilesVisibleToBooking (default false). Booking office users do NOT see
+  CaseFile rows with department=FILING unless this flag is true. All other departments'
+  files visible. Admin toggles per case (PATCH case field, admin-only). UI toggle in
+  Files tab header (admin only) + indicator for booking users.
+
+## W11.7 — Navbar badges
+- GET /api/office/nav-counts → ONE call returns role-based counts:
+  { cases, payments, requests, unreadNotifications }.
+  - cases: dept roles → their queue size; booking → own cases with unseen remarks;
+    admin → cases with unseen ADMIN remarks + set-missing warnings.
+  - payments: PENDING payments in scope.
+  - requests: pending DiscountRequest + BonusRequest (admin/cashier only).
+- OfficeNav + AdminNav show amber count bubble on Cases/Payments/ledger items; poll 30s.
+
+## W11.8 — Notification system
+- Table Notification (userId, type, title, body, link, readAt).
+- Helper src/lib/office/notifications.ts: notifyUsers(ids, n), notifyRole(role, n),
+  notifyAdmins(n). Never throws (fire-and-forget with console.error).
+- Fire points: case.create→admins; payment.submit→verify-permission users;
+  payment.verify→submitter+case creator; case.status→case creator + users of the
+  dept that owns the new stage (filing/printing/atta/courier); file.upload→admins +
+  next-stage dept users; remark.create→target dept users; attestation DONE→atta+admin;
+  discount/bonus request create→admins, decided→requester.
+- APIs: GET /api/office/notifications (own latest 20 + unread count),
+  POST /api/office/notifications/read { ids?: string[] } (default: mark all read).
+- Bell icon in OfficeNav + AdminNav: unread badge, dropdown (title/body/time), click →
+  link + mark read, "Mark all read". Poll 20s.
+
+## W11.9 — Booking navbar
+- "Links" (DepartmentLinks) dropdown: hide for all roles except super admin
+  (booking office users found it confusing).
+
+## W11.10 — Verification bar (MANDATORY before done)
+- npm run typecheck = 0 errors, npm run lint = 0, next build exit 0 against real DB.
+- Every changed flow manually traceable to this SPEC.

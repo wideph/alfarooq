@@ -129,19 +129,36 @@ export const BOOKING_OFFICE_TYPE_LABELS: Record<BookingOfficeType, string> = {
   SALARY: "Salary based",
 };
 
+// WAVE 11 (docs/office-module/06_NEW_REQUIREMENTS.md §W11.1) — EXACT case
+// status flow, in fixed order. ATTESTATION is dynamic on the UI via
+// Case.currentAttestationId.
 export const CASE_STATUSES = [
-  "NEW",
-  "PAYMENT_PENDING",
+  "FIRST_PAYMENT_PENDING",
   "WAITING_FOR_FILE",
   "WAITING_FOR_PRINTING",
-  "IN_PROCESS",
   "PRINTED",
   "ATTESTATION",
-  "COMPLETED",
+  "ATTESTATION_COMPLETE",
+  "WAITING_FOR_COURIER",
   "DELIVERED",
+  "MUSADIQA_APPLIED",
+  "MUSADIQA_FEES_PAID",
+  "MUSADIQA_SENT_BY_BOARD",
+  "MUSADIQA_VERIFIED",
   "CANCELLED",
 ] as const;
 export type CaseStatus = (typeof CASE_STATUSES)[number];
+
+// Pre-W11 keys — migrated in DB (NEW/PAYMENT_PENDING→FIRST_PAYMENT_PENDING,
+// IN_PROCESS→WAITING_FOR_FILE, COMPLETED→ATTESTATION_COMPLETE). Kept only so
+// old rows / filters still resolve to a label fallback.
+export const LEGACY_CASE_STATUSES = [
+  "NEW",
+  "PAYMENT_PENDING",
+  "IN_PROCESS",
+  "COMPLETED",
+] as const;
+export type LegacyCaseStatus = (typeof LEGACY_CASE_STATUSES)[number];
 
 export const PAYMENT_STATUSES = ["PENDING", "RECEIVED", "NOT_RECEIVED", "BOGUS"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];

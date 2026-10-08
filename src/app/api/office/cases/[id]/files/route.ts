@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
+import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { deleteOfficeFile, getOfficeFileSignedUrl, uploadDepartmentFile } from "@/lib/office/r2";
 import { cleanText, toJson } from "@/lib/office/serializers";
 import {
@@ -29,8 +30,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const item = await findAccessibleCase(session, id);
     if (!item) return notFound("Case nahi mila");
 
+    // §W11.6: booking office users ko FILING department ki files sirf tab
+    // dikhen jab admin ne is case par permission di ho.
+    const hideFilingFiles =
+      session.role === "booking_office" && !item.filingFilesVisibleToBooking;
+
     const files = await prisma.caseFile.findMany({
-      where: { caseId: id },
+      where: hideFilingFiles
+        ? { caseId: id, department: { not: "FILING" } }
+        : { caseId: id },
       orderBy: { createdAt: "asc" },
     });
     const uploaderIds = [...new Set(files.map((file) => file.uploadedById))];
@@ -60,12 +68,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 // POST multipart: file + department (FILING|PRINTING|ATTA|COURIER) + optional
-// stepKey + title. Moves the case forward in the department workflow (§N7):
+// stepKey + title. Moves the case forward in the department workflow (§W11.1):
 //   first FILING file   → WAITING_FOR_FILE → WAITING_FOR_PRINTING
 //   first PRINTING file → WAITING_FOR_PRINTING → PRINTED (+ isPrinted)
 //   ATTA step files     → optional per step; FINAL file + all set steps DONE
-//                         → COMPLETED (see evaluateCaseCompletion)
-//   COURIER file        → DELIVERED
+//                         → ATTESTATION_COMPLETE (see evaluateCaseCompletion)
+//   COURIER slip        → WAITING_FOR_COURIER → DELIVERED
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
@@ -129,7 +137,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           nextStatus = "PRINTED";
         }
       } else if (department === "COURIER") {
-        if (item.status !== "DELIVERED") {
+        // §W11.1: courier slip sirf tab DELIVERED karta hai jab case courier
+        // stage par ho (payment complete ho chuki ho).
+        if (item.status === "WAITING_FOR_COURIER") {
           caseData.status = "DELIVERED";
           nextStatus = "DELIVERED";
         }
@@ -140,11 +150,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       // ATTA uploads (step files or the mandatory FINAL file) may complete the
-      // attestation stage.
+      // attestation stage (→ ATTESTATION_COMPLETE).
       let completed = false;
       if (department === "ATTA") {
         completed = await evaluateCaseCompletion(id, tx);
-        if (completed) nextStatus = "COMPLETED";
+        if (completed) nextStatus = "ATTESTATION_COMPLETE";
       }
 
       await logOfficeAction(
@@ -160,6 +170,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       return { created, nextStatus };
     }, { maxWait: 10000, timeout: 30000 });
+
+    // §W11.8: file.upload → admins + next-stage department ke users.
+    if (result.nextStatus !== item.status) {
+      const link = `/office/cases/${id}`;
+      const title = `Case ${item.caseNumber}: ${department} file uploaded`;
+      if (result.nextStatus === "WAITING_FOR_PRINTING") {
+        await notifyRole("printing", { type: "file.upload", title, link });
+        await notifyAdmins({ type: "file.upload", title, link });
+      } else if (result.nextStatus === "PRINTED") {
+        await notifyRole("atta", { type: "file.upload", title, link });
+        await notifyAdmins({ type: "file.upload", title, link });
+      } else {
+        await notifyAdmins({ type: "file.upload", title, link });
+      }
+    }
 
     return NextResponse.json(
       toJson({

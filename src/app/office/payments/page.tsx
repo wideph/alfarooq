@@ -9,6 +9,7 @@ import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 
 type PaymentRow = {
   id: string;
@@ -69,18 +70,21 @@ export default function OfficePaymentsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [popup, setPopup] = useState<{ caseId: string; caseNumber: string; extra: number } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const res = await officeFetch<{ items: PaymentRow[] }>(
       `/api/office/payments${tab === "PENDING" ? "?status=PENDING" : ""}`
     );
     if (res.ok) setItems(res.data.items);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [tab]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // §W11.5: payments list live (silent background refresh, spinner flash nahi).
+  useLiveRefresh(useCallback(() => void load(true), [load]));
 
   async function patch(payment: PaymentRow, body: Record<string, unknown>) {
     setBusy(payment.id);

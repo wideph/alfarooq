@@ -8,6 +8,8 @@ import { caseScope, findAccessibleCase } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
+import { notifyPermission, notifyRole } from "@/lib/office/notifications";
+import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
@@ -123,10 +125,40 @@ export async function POST(request: NextRequest) {
 
     const result = await recomputeCaseFinancials(caseId, session, { paymentId: payment.id });
 
+    // §W11.8: payment submit → verify permission walon ko notification.
+    if (status === "PENDING") {
+      await notifyPermission("office:payments:verify", {
+        type: "payment.submit",
+        title: `Payment submit — case ${item.caseNumber}`,
+        body: `Rs ${amount} ki payment verify karein`,
+        link: `/office/cases/${caseId}`,
+      });
+    }
+
+    // §W11.1: direct RECEIVED payment se agar poora hisaab clear ho gaya aur
+    // case ATTESTATION_COMPLETE par hai → WAITING_FOR_COURIER.
+    if (status === "RECEIVED" && result.remaining === 0 && result.agreedAmount > 0) {
+      const caseRow = await prisma.case.findUnique({
+        where: { id: caseId },
+        select: { status: true },
+      });
+      if (caseRow?.status === "ATTESTATION_COMPLETE") {
+        await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_COURIER" } });
+        await notifyRole("courier", {
+          type: "case.status",
+          title: `Case ${item.caseNumber}: Payment complete — waiting for courier`,
+          link: `/office/cases/${caseId}`,
+        });
+      }
+    }
+
     // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
     // the department workflow when it is the case's first RECEIVED payment.
     // AI date generation is scheduled via after() so the response is instant.
     if (status === "RECEIVED") {
+      // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
+      // auto-distribute (idempotent).
+      await autoDistributeOnPaymentReceived(caseId, session);
       const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
       if (datesNeeded) {
         after(async () => {

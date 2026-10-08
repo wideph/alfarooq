@@ -68,27 +68,36 @@ export function allowedRemarkTargets(role?: string | null): RemarkTarget[] {
 
 // ?dept=filing|printing|atta|courier on GET /api/office/cases. These are plain
 // filters over the normal scope; `history` (filing only) shows cases that
-// already passed the filing stage.
+// already passed the filing stage. Status keys per §W11.1.
 export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhereInput | null {
   switch (dept) {
     case "filing":
       return history
-        ? { status: { in: ["WAITING_FOR_PRINTING", "PRINTED", "ATTESTATION", "COMPLETED", "DELIVERED"] } }
+        ? {
+            status: {
+              in: [
+                "WAITING_FOR_PRINTING",
+                "PRINTED",
+                "ATTESTATION",
+                "ATTESTATION_COMPLETE",
+                "WAITING_FOR_COURIER",
+                "DELIVERED",
+                "MUSADIQA_APPLIED",
+                "MUSADIQA_FEES_PAID",
+                "MUSADIQA_SENT_BY_BOARD",
+                "MUSADIQA_VERIFIED",
+              ],
+            },
+          }
         : { status: "WAITING_FOR_FILE" };
     case "printing":
       return { status: { in: ["WAITING_FOR_PRINTING", "PRINTED"] } };
     case "atta":
       return { status: { in: ["PRINTED", "ATTESTATION"] } };
     case "courier":
-      // Courier sees a case once attestation is complete AND courier number +
-      // address exist (payment-clear simplification per wave-4 brief), plus
-      // already-delivered cases.
-      return {
-        OR: [
-          { status: "COMPLETED", courierNumber: { not: null }, addresses: { some: {} } },
-          { status: "DELIVERED" },
-        ],
-      };
+      // §W11.1: courier stage starts when payment is complete
+      // (WAITING_FOR_COURIER) and stays visible after DELIVERED.
+      return { status: { in: ["WAITING_FOR_COURIER", "DELIVERED"] } };
     default:
       return null;
   }
@@ -97,8 +106,19 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
 // -- Warnings -----------------------------------------------------------------
 
 // Set-warning: printing marked the case printed (or it moved beyond) without a
-// selected set → booking office sees a red warning (§N7).
-export const SET_WARNING_STATUSES = ["PRINTED", "ATTESTATION", "COMPLETED", "DELIVERED"];
+// selected set → booking office sees a red warning. §W11.1: PRINTED and later,
+// except CANCELLED.
+export const SET_WARNING_STATUSES = [
+  "PRINTED",
+  "ATTESTATION",
+  "ATTESTATION_COMPLETE",
+  "WAITING_FOR_COURIER",
+  "DELIVERED",
+  "MUSADIQA_APPLIED",
+  "MUSADIQA_FEES_PAID",
+  "MUSADIQA_SENT_BY_BOARD",
+  "MUSADIQA_VERIFIED",
+];
 
 export function setMissingWarning(item: { status: string; setId: string | null }): boolean {
   return !item.setId && SET_WARNING_STATUSES.includes(item.status);
@@ -158,12 +178,42 @@ export async function serializeFilingCase(item: FilingCaseRow) {
   });
 }
 
-// -- Attestation-complete rule (§N7) -------------------------------------------
+// -- Attestation-complete rule (§W11.1) -----------------------------------------
 
-// A case becomes COMPLETED when (a) every attestation step of its set is DONE
-// (fallback when no set: every CaseAttestation of the case) AND (b) the atta
-// department uploaded the mandatory final file (department=ATTA, stepKey=FINAL).
-// Forward-only: never touches COMPLETED / DELIVERED / CANCELLED cases.
+// Status order of the W11 flow (CANCELLED sits outside the order).
+export const CASE_STATUS_ORDER: Record<string, number> = {
+  FIRST_PAYMENT_PENDING: 1,
+  WAITING_FOR_FILE: 2,
+  WAITING_FOR_PRINTING: 3,
+  PRINTED: 4,
+  ATTESTATION: 5,
+  ATTESTATION_COMPLETE: 6,
+  WAITING_FOR_COURIER: 7,
+  DELIVERED: 8,
+  MUSADIQA_APPLIED: 9,
+  MUSADIQA_FEES_PAID: 10,
+  MUSADIQA_SENT_BY_BOARD: 11,
+  MUSADIQA_VERIFIED: 12,
+};
+
+// Forward-only guard: once a case reaches ATTESTATION_COMPLETE (or beyond, or
+// CANCELLED) the completion evaluator must never move it again.
+const COMPLETION_GUARD_STATUSES = [
+  "ATTESTATION_COMPLETE",
+  "WAITING_FOR_COURIER",
+  "DELIVERED",
+  "MUSADIQA_APPLIED",
+  "MUSADIQA_FEES_PAID",
+  "MUSADIQA_SENT_BY_BOARD",
+  "MUSADIQA_VERIFIED",
+  "CANCELLED",
+];
+
+// A case becomes ATTESTATION_COMPLETE when (a) every attestation step of its
+// set is DONE (fallback when no set: every CaseAttestation of the case) AND
+// (b) the atta department uploaded the mandatory final file (department=ATTA,
+// stepKey=FINAL). Forward-only: never touches ATTESTATION_COMPLETE-or-later /
+// CANCELLED cases.
 export async function evaluateCaseCompletion(
   caseId: string,
   db: Prisma.TransactionClient | typeof prisma = prisma
@@ -176,7 +226,7 @@ export async function evaluateCaseCompletion(
     },
   });
   if (!item) return false;
-  if (["COMPLETED", "DELIVERED", "CANCELLED"].includes(item.status)) return false;
+  if (COMPLETION_GUARD_STATUSES.includes(item.status)) return false;
 
   const relevant = item.set
     ? item.attestations.filter((a) =>
@@ -191,8 +241,105 @@ export async function evaluateCaseCompletion(
   });
   if (!finalFile) return false;
 
-  await db.case.update({ where: { id: caseId }, data: { status: "COMPLETED" } });
+  await db.case.update({
+    where: { id: caseId },
+    data: { status: "ATTESTATION_COMPLETE", currentAttestationId: null },
+  });
   return true;
+}
+
+// -- §W11.1 admin jump helpers ---------------------------------------------------
+
+function utcToday(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+// Admin selects "Attestation: <name>" in the status dropdown: status becomes
+// ATTESTATION (set by the caller) and the steps realign around the selected
+// one — steps BEFORE it → DONE (completedDate = today where null), the
+// selected step → IN_PROGRESS, steps AFTER it → PENDING (completedDate
+// cleared). Also points Case.currentAttestationId at the selected step.
+// Returns the selected step name (for notifications) or null when the
+// attestation does not belong to the case.
+export async function applyAttestationJump(
+  db: Prisma.TransactionClient | typeof prisma,
+  caseId: string,
+  attestationId: string
+): Promise<{ name: string } | null> {
+  const steps = await db.caseAttestation.findMany({
+    where: { caseId },
+    orderBy: { order: "asc" },
+    include: { attestationType: { select: { name: true } } },
+  });
+  const target = steps.find((step) => step.id === attestationId);
+  if (!target) return null;
+
+  const today = utcToday();
+  // Before → DONE, with completedDate filled where missing.
+  await db.caseAttestation.updateMany({
+    where: { caseId, order: { lt: target.order }, status: { not: "DONE" } },
+    data: { status: "DONE" },
+  });
+  await db.caseAttestation.updateMany({
+    where: { caseId, order: { lt: target.order }, completedDate: null },
+    data: { completedDate: today },
+  });
+  // Selected → IN_PROGRESS.
+  await db.caseAttestation.update({
+    where: { id: target.id },
+    data: { status: "IN_PROGRESS" },
+  });
+  // Later → PENDING (completedDate cleared, matching the PATCH convention).
+  await db.caseAttestation.updateMany({
+    where: { caseId, order: { gt: target.order }, status: { not: "PENDING" } },
+    data: { status: "PENDING", completedDate: null },
+  });
+
+  await db.case.update({
+    where: { id: caseId },
+    data: { status: "ATTESTATION", currentAttestationId: target.id },
+  });
+  return { name: target.attestationType.name };
+}
+
+// Later-stage admin jumps (§W11.1) carry data side effects:
+//   ATTESTATION_COMPLETE or later → ALL attestations DONE (completedDate
+//     filled where null);
+//   PRINTED or later → isPrinted=true + printedAt set;
+// CANCELLED (order 0) gets no side effects.
+export async function applyStatusSideEffects(
+  db: Prisma.TransactionClient | typeof prisma,
+  caseId: string,
+  newStatus: string
+): Promise<void> {
+  const order = CASE_STATUS_ORDER[newStatus] ?? 0;
+  if (order === 0) return;
+
+  if (order >= CASE_STATUS_ORDER.ATTESTATION_COMPLETE) {
+    const today = utcToday();
+    await db.caseAttestation.updateMany({
+      where: { caseId, status: { not: "DONE" } },
+      data: { status: "DONE" },
+    });
+    await db.caseAttestation.updateMany({
+      where: { caseId, completedDate: null },
+      data: { completedDate: today },
+    });
+  }
+
+  if (order >= CASE_STATUS_ORDER.PRINTED) {
+    const item = await db.case.findUnique({
+      where: { id: caseId },
+      select: { isPrinted: true, printedAt: true },
+    });
+    if (item && !item.isPrinted) {
+      await db.case.update({
+        where: { id: caseId },
+        data: { isPrinted: true, printedAt: item.printedAt ?? new Date() },
+      });
+    }
+  }
 }
 
 // -- First-payment hook (§N7) ---------------------------------------------------
@@ -201,8 +348,7 @@ export async function evaluateCaseCompletion(
 // workflow: status → WAITING_FOR_FILE (visible to filing). Returns
 // `datesNeeded: true` when a set is already selected — the caller then
 // schedules the AI-heavy generateSetDates via next/server after() so the
-// request path stays fast. Call after recomputeCaseFinancials (which may have
-// moved NEW → IN_PROCESS). Never throws.
+// request path stays fast. Call after recomputeCaseFinancials. Never throws.
 export async function activateWorkflowOnFirstPayment(
   caseId: string
 ): Promise<{ datesNeeded: boolean }> {
@@ -214,7 +360,9 @@ export async function activateWorkflowOnFirstPayment(
       select: { status: true, setId: true },
     });
     if (!item) return { datesNeeded: false };
-    if (["NEW", "PAYMENT_PENDING", "IN_PROCESS"].includes(item.status)) {
+    // §W11.1: FIRST_PAYMENT_PENDING → WAITING_FOR_FILE (legacy keys included
+    // for safety with un-migrated rows).
+    if (["FIRST_PAYMENT_PENDING", "NEW", "PAYMENT_PENDING", "IN_PROCESS"].includes(item.status)) {
       await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_FILE" } });
     }
     return { datesNeeded: Boolean(item.setId) };

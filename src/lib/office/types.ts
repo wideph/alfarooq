@@ -32,6 +32,11 @@ export type CaseDetail = {
   setMissingWarning: boolean;
   hasUnseenWarning: boolean;
   isUrgent: boolean;
+  // §W11.1: dynamic ATTESTATION status — current step ka naam UI par dikhta hai.
+  currentAttestationId: string | null;
+  currentAttestation: { id: string; status: string; attestationTypeName: string } | null;
+  // §W11.6: booking office ko filing files tabhi dikhti hain jab ye flag on ho.
+  filingFilesVisibleToBooking: boolean;
   courierNumber: string | null;
   agreedAmountRemarks: string | null;
   boardAttasNumber: string | null;
@@ -72,17 +77,20 @@ export type CaseDetail = {
     remarks: string | null;
     member: { id: string; name: string } | null;
   }>;
-  audit: Array<{
-    id: string;
-    action: string;
-    actorName: string | null;
-    actorRole: string;
-    createdAt: string;
-    before: unknown;
-    after: unknown;
-  }>;
   totals: { received: number; remaining: number; extra: number; pendingCount: number; agreedAmount: number };
   needsExtraDecision: number | null;
+};
+
+// GET /api/office/cases/[id]/audit row (§W11.3 — lazy history endpoint,
+// detail payload ka hissa nahi).
+export type CaseAuditItem = {
+  id: string;
+  action: string;
+  actorName: string | null;
+  actorRole: string;
+  createdAt: string;
+  before: unknown;
+  after: unknown;
 };
 
 // Stripped payload returned to the filing department (serializeFilingCase,

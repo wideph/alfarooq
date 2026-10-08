@@ -9,6 +9,7 @@ import { formatDate, formatMoney, officeFetch, todayInputDate } from "@/lib/offi
 import { LEDGER_TYPE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { BOOKING_OFFICE_TYPE_LABELS, PAYMENT_METHODS, type BookingOfficeType } from "@/lib/office/permissions";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
+import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 
 type Office = {
   id: string;
@@ -83,18 +84,21 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
     });
   }, [isBookingOffice]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!canLedger) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const res = await officeFetch<LedgerResponse>(`/api/office/ledger${officeId ? `?officeId=${officeId}` : ""}`);
     if (res.ok) setData(res.data);
-    else setMessage(res.error, "error");
-    setLoading(false);
+    else if (!silent) setMessage(res.error, "error");
+    if (!silent) setLoading(false);
   }, [officeId, canLedger]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // §W11.5: ledger live (silent background refresh).
+  useLiveRefresh(useCallback(() => void load(true), [load]));
 
   const office = offices.find((o) => o.id === officeId) || null;
 
@@ -302,15 +306,18 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
   });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     const res = await officeFetch<Salary[]>("/api/office/salaries");
     if (res.ok) setItems(res.data);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // §W11.5: salaries live (silent background refresh).
+  useLiveRefresh(useCallback(() => void load(true), [load]));
 
   const office = offices.find((o) => o.id === form.bookingOfficeId);
 
@@ -435,15 +442,18 @@ function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string, kind?: Toa
   const [form, setForm] = useState({ amount: "", description: "", category: "", expenseDate: todayInputDate() });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     const res = await officeFetch<CompanyExpense[]>("/api/office/expenses");
     if (res.ok) setItems(res.data);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // §W11.5: company expenses live (silent background refresh).
+  useLiveRefresh(useCallback(() => void load(true), [load]));
 
   async function save() {
     setSaving(true);

@@ -24,6 +24,11 @@ export type ProfitShareSummary = {
   expenses: number;
   officeExpenses: number;
   profit: number;
+  // §W11.4 — members ke percents ka total (baqi 100 − percentSum admin ka hissa).
+  percentSum: number;
+  // §W11.4 — admin remainder: profit − member targets (floor 0). "ager kisi
+  // partner office k share holder ka total 50% banta hai to baqi 50% admin ka hai".
+  adminShare: number;
   shares: Array<{ memberId: string; name: string; percent: number; target: number; delta: number }>;
 };
 
@@ -100,12 +105,49 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
 
     await tx.case.update({ where: { id: caseId }, data: { profitFinalizedAt: new Date() } });
 
+    // §W11.4 — percent total + admin remainder (explicit in summary).
+    const percentSum = shares.reduce((acc, share) => acc.plus(dec(share.percent)), new Prisma.Decimal(0));
+    const targetSum = shares.reduce((acc, share) => acc.plus(dec(share.target)), new Prisma.Decimal(0));
+    const adminShare = Prisma.Decimal.max(profit.minus(targetSum), 0);
+
     return {
       received: toNumber(received),
       expenses: toNumber(expenses),
       officeExpenses: toNumber(officeExpenses),
       profit: toNumber(profit),
+      percentSum: toNumber(percentSum),
+      adminShare: toNumber(adminShare),
       shares,
     };
   }, { maxWait: 10000, timeout: 30000 });
+}
+
+// Wave 11 (§W11.4) — partner (PROFIT_SHARE) office: FIRST payment RECEIVED
+// hote hi pool distributable ho jata hai. Ye wrapper payment-verify path se
+// call hota hai; finalizeProfitShare idempotent hai (pehli dafa PROFIT_SHARE,
+// baad mein ADJUSTMENT rows), is liye har received payment par dobara chal
+// sakta hai. Kabhi throw nahi karta — payment flow kabhi fail nahi hona chahiye.
+export async function autoDistributeOnPaymentReceived(
+  caseId: string,
+  session: AdminSession
+): Promise<void> {
+  try {
+    const item = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: {
+        bookingOffice: { select: { type: true } },
+        payments: { where: { status: "RECEIVED" }, select: { amount: true } },
+      },
+    });
+    if (!item || item.bookingOffice.type !== "PROFIT_SHARE") return;
+    // §W11.4 — skip when received is 0 (koi asal amount nahi aaya).
+    const received = sum(item.payments.map((p) => p.amount));
+    if (received.isZero()) return;
+    const summary = await finalizeProfitShare(caseId, session);
+    console.log(
+      `[office] partner auto-distribute case=${caseId} profit=${summary.profit} admin=${summary.adminShare} shares=${summary.shares.length}`
+    );
+  } catch (error) {
+    console.error("[office] autoDistributeOnPaymentReceived fail", error);
+  }
 }

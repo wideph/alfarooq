@@ -23,6 +23,7 @@ model Admin {
   bookingOfficeId String?
   bookingOffice   BookingOffice? @relation(fields: [bookingOfficeId], references: [id], onDelete: SetNull)
   officeMember    BookingOfficeMember?
+  notifications   Notification[]
 
   @@index([bookingOfficeId])
 }
@@ -292,8 +293,17 @@ model Case {
   extraSharePercent        Decimal?  @db.Decimal(5, 2)
   extraShareCreditedAt     DateTime?
   profitFinalizedAt        DateTime?
-  // NEW | PAYMENT_PENDING | WAITING_FOR_FILE | WAITING_FOR_PRINTING | IN_PROCESS | PRINTED | ATTESTATION | COMPLETED | DELIVERED | CANCELLED
-  status                   String    @default("NEW")
+  // WAVE 11 status flow: FIRST_PAYMENT_PENDING | WAITING_FOR_FILE |
+  // WAITING_FOR_PRINTING | PRINTED | ATTESTATION (currentAttestationId) |
+  // ATTESTATION_COMPLETE | WAITING_FOR_COURIER | DELIVERED |
+  // MUSADIQA_APPLIED | MUSADIQA_FEES_PAID | MUSADIQA_SENT_BY_BOARD |
+  // MUSADIQA_VERIFIED | CANCELLED
+  status                   String    @default("FIRST_PAYMENT_PENDING")
+  // Attestation phase pointer — status=ATTESTATION ke waqt current step.
+  currentAttestationId     String?
+  // §W11.9: booking office ko filing department ki files sirf tab dikhen jab
+  // admin ne is case par permission di ho. Baqi departments ki files hamesha.
+  filingFilesVisibleToBooking Boolean @default(false)
   isPrinted                Boolean   @default(false)
   printedAt                DateTime?
   expectedPrintingDate     DateTime?
@@ -673,4 +683,22 @@ model DepartmentLink {
   order      Float    @default(0)
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
+}
+
+// Wave 11 — instant notifications (bell + unread badge). Har office event par
+// related users ko notification; 20s polling se bell live rehta hai.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      Admin     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([createdAt])
 }

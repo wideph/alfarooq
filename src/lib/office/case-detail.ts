@@ -85,38 +85,30 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
 
   const canSeeLedger =
     hasPermission(session, "office:ledger:read") || session.role === "booking_office";
-  const canSeeAudit = session.role === "admin";
 
-  const audit = canSeeAudit
-    ? await prisma.officeAuditLog.findMany({
-        where: {
-          OR: [
-            { entity: "Case", entityId: caseId },
-            { entity: "Payment", entityId: { in: item.payments.map((p) => p.id) } },
-          ],
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      })
-    : [];
-
-  const names = await adminNameMap([
-    item.createdByAdminId,
-    ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
-    ...item.expenses.map((e) => e.createdById),
-    ...item.ledger.map((l) => l.createdById),
-    ...audit.map((a) => a.actorId),
+  // §W11.5 SPEED: audit history ab lazy endpoint par hai
+  // (GET /api/office/cases/[id]/audit) — is loader mein nahi. Baqi lookups
+  // parallel Promise.all se chalti hain.
+  const remarkTarget = roleToRemarkTarget(session.role);
+  const [names, hasUnseenWarning, clientPictureUrl] = await Promise.all([
+    adminNameMap([
+      item.createdByAdminId,
+      ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
+      ...item.expenses.map((e) => e.createdById),
+      ...item.ledger.map((l) => l.createdById),
+    ]),
+    remarkTarget
+      ? prisma.caseRemarkRecipient.findFirst({
+          where: { seenAt: null, target: remarkTarget, remark: { caseId } },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    item.clientPictureKey
+      ? getOfficeFileSignedUrl(item.clientPictureKey)
+      : Promise.resolve(null),
   ]);
 
   const totals = computeTotals(item.payments, item.agreedAmount);
-
-  const remarkTarget = roleToRemarkTarget(session.role);
-  const hasUnseenWarning = remarkTarget
-    ? await prisma.caseRemarkRecipient.findFirst({
-        where: { seenAt: null, target: remarkTarget, remark: { caseId } },
-        select: { id: true },
-      })
-    : null;
 
   // BR4.4: profit share needs re-finalize when money moved after finalize.
   const lastMoneyChange = Math.max(
@@ -128,14 +120,29 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     item.profitFinalizedAt && lastMoneyChange > item.profitFinalizedAt.getTime()
   );
 
+  // §W11.1: dynamic ATTESTATION status ke liye current attestation step.
+  const currentAttestation = item.currentAttestationId
+    ? item.attestations.find((a) => a.id === item.currentAttestationId)
+    : null;
+
+  // §W11.6: is loader mein CaseFile rows kabhi include nahi hoti (files apne
+  // lazy route se aati hain jo booking role ka FILING filter khud lagata hai),
+  // is liye booking-office payload mein filing file entries kahin expose nahi
+  // hoti.
+
   return toJson({
     profitStale,
     ...item,
     setName: item.set?.name ?? null,
     setMissingWarning: setMissingWarning(item),
     hasUnseenWarning: Boolean(hasUnseenWarning),
-    clientPictureUrl: item.clientPictureKey
-      ? await getOfficeFileSignedUrl(item.clientPictureKey)
+    clientPictureUrl,
+    currentAttestation: currentAttestation
+      ? {
+          id: currentAttestation.id,
+          status: currentAttestation.status,
+          attestationTypeName: currentAttestation.attestationType.name,
+        }
       : null,
     createdByName: names[item.createdByAdminId] || null,
     payments: item.payments.map((p) => ({
@@ -149,7 +156,6 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     ledger: canSeeLedger
       ? item.ledger.map((l) => ({ ...l, createdByName: names[l.createdById] || null }))
       : [],
-    audit: audit.map((a) => ({ ...a, actorName: names[a.actorId] || null })),
     totals,
     needsExtraDecision:
       item.bookingOffice.type === "FIXED_COMMISSION" &&

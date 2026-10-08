@@ -9,8 +9,8 @@ import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { formatDate, officeFetch, toInputDate } from "@/lib/office/client";
-import { ATTESTATION_STATUS_LABELS, ATTESTATION_STATUS_STYLES, STATUS_LABELS } from "@/lib/office/labels";
-import { ATTESTATION_STATUSES, CASE_STATUSES } from "@/lib/office/permissions";
+import { ATTESTATION_STATUS_LABELS, ATTESTATION_STATUS_STYLES } from "@/lib/office/labels";
+import { ATTESTATION_STATUSES } from "@/lib/office/permissions";
 import { type CaseDetail, type CategorySetWithSteps, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 
@@ -175,7 +175,6 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
   const [types, setTypes] = useState<AttestationType[]>([]);
   const [addId, setAddId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [manualStatus, setManualStatus] = useState(detail.status);
 
   useEffect(() => {
     if (canEditList) {
@@ -184,8 +183,6 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
       });
     }
   }, [canEditList]);
-
-  useEffect(() => setManualStatus(detail.status), [detail.status]);
 
   async function call(url: string, method: string, json?: unknown, success = "Update ho gaya") {
     setBusy(true);
@@ -206,45 +203,25 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
       count={detail.attestations.length}
       actions={
         canStatus && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              disabled={busy}
-              onClick={() =>
-                call(
-                  `/api/office/cases/${detail.id}/status`,
-                  "PATCH",
-                  { isPrinted: !detail.isPrinted },
-                  detail.isPrinted ? "Printed flag hata diya" : "Case printed mark ho gaya"
-                )
-              }
-              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold ${
-                detail.isPrinted ? "border border-slate-300 text-slate-700" : "bg-indigo-600 text-white"
-              }`}
-            >
-              <Printer className="h-3.5 w-3.5" /> {detail.isPrinted ? "Unmark printed" : "Mark printed"}
-            </button>
-            <select
-              aria-label="Case status"
-              className="min-h-[40px] rounded-xl border border-slate-200 px-2 py-2 text-xs"
-              value={manualStatus}
-              onChange={(e) => setManualStatus(e.target.value)}
-            >
-              {CASE_STATUSES.map((s) => (
-                <option key={s} value={s} disabled={s === "CANCELLED" && admin.role !== "admin"}>
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
-            {manualStatus !== detail.status && (
-              <button
-                disabled={busy}
-                onClick={() => call(`/api/office/cases/${detail.id}/status`, "PATCH", { status: manualStatus }, "Case status update ho gaya")}
-                className="min-h-[40px] rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white"
-              >
-                Set status
-              </button>
-            )}
-          </div>
+          // §W11.3: case status ka control ab sirf CaseStatusHeader mein hai
+          // (admin, note lazmi) — yahan duplicate status UI nahi. Printed flag
+          // workflow shortcut yahin rehta hai.
+          <button
+            disabled={busy}
+            onClick={() =>
+              call(
+                `/api/office/cases/${detail.id}/status`,
+                "PATCH",
+                { isPrinted: !detail.isPrinted },
+                detail.isPrinted ? "Printed flag hata diya" : "Case printed mark ho gaya"
+              )
+            }
+            className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold ${
+              detail.isPrinted ? "border border-slate-300 text-slate-700" : "bg-indigo-600 text-white"
+            }`}
+          >
+            <Printer className="h-3.5 w-3.5" /> {detail.isPrinted ? "Unmark printed" : "Mark printed"}
+          </button>
         )
       }
     >
@@ -262,11 +239,24 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
         <EmptyState icon={Stamp} hint="Koi attestation required nahi — set select karein ya neeche add karein" />
       ) : (
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-          {detail.attestations.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 text-sm">
+          {detail.attestations.map((a) => {
+            // §W11.3: current attestation (Case.currentAttestationId) highlight.
+            const isCurrent = a.id === detail.currentAttestationId && detail.status === "ATTESTATION";
+            return (
+            <li
+              key={a.id}
+              className={`flex flex-wrap items-center gap-x-3 gap-y-2 p-3 text-sm ${
+                isCurrent ? "bg-violet-50 ring-2 ring-inset ring-violet-400" : ""
+              }`}
+            >
               <div className="min-w-[10rem] flex-1">
                 <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-800">
                   {a.attestationType.name}
+                  {isCurrent && (
+                    <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                      CURRENT
+                    </span>
+                  )}
                   {a.attestationType.name === "Bord" && detail.boardAttasNumber && (
                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
                       Board Attas # {detail.boardAttasNumber}
@@ -363,7 +353,8 @@ function StepsPanel({ detail, admin, onUpdated, onMessage }: Props) {
                 </button>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 

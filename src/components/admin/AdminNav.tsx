@@ -18,6 +18,7 @@ import {
   Signal,
 } from "lucide-react";
 import type { AdminPermission } from "@/lib/auth";
+import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
 
 export type { AdminPermission };
 
@@ -40,6 +41,8 @@ const navItems: Array<{
   label: string;
   icon: typeof Home;
   permissions: AdminPermission[];
+  // §W11.7: office nav-counts se amber bubble (sirf office destinations).
+  countKey?: "cases" | "payments";
 }> = [
   {
     href: "/admin",
@@ -98,12 +101,14 @@ const navItems: Array<{
     label: "Cases",
     icon: Briefcase,
     permissions: ["office:cases:read"],
+    countKey: "cases",
   },
   {
     href: "/office/payments",
     label: "Payments",
     icon: Banknote,
     permissions: ["office:payments:verify", "office:payments:submit"],
+    countKey: "payments",
   },
   {
     href: "/office/ledger",
@@ -134,6 +139,10 @@ export default function AdminNav({
 }) {
   const pathname = usePathname();
   const visibleItems = navItems.filter((item) => adminCanAny(admin, item.permissions));
+  // §W11.7/W11.8: office badges + bell sirf un users ke liye jo office
+  // dekh sakte hain (warna nav-counts/notifications 403 dete).
+  const officeUser = adminCanAny(admin, ["office:cases:read"]);
+  const counts = useOfficeNavCounts(officeUser);
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
@@ -162,12 +171,14 @@ export default function AdminNav({
                 >
                   <Icon className="h-4 w-4" />
                   <span className="hidden md:inline">{item.label}</span>
+                  {officeUser && <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />}
                 </Link>
               );
             })}
           </nav>
 
           <div className="ml-1 flex shrink-0 items-center gap-1">
+            {officeUser && <NotificationBell />}
             <Link
               href="/"
               title="Website"

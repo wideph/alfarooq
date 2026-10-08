@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
+import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 
 const navItems: Array<{
@@ -25,14 +26,17 @@ const navItems: Array<{
   label: string;
   icon: typeof Home;
   permissions: AdminPermission[];
+  // §W11.7: amber count bubble — nav-counts ke kis field se.
+  countKey?: "cases" | "payments";
 }> = [
   { href: "/office", label: "Dashboard", icon: LayoutDashboard, permissions: ["office:cases:read"] },
-  { href: "/office/cases", label: "Cases", icon: Briefcase, permissions: ["office:cases:read"] },
+  { href: "/office/cases", label: "Cases", icon: Briefcase, permissions: ["office:cases:read"], countKey: "cases" },
   {
     href: "/office/payments",
     label: "Payments",
     icon: Banknote,
     permissions: ["office:payments:verify", "office:payments:submit"],
+    countKey: "payments",
   },
   {
     href: "/office/ledger",
@@ -54,6 +58,7 @@ export default function OfficeNav({
   const pathname = usePathname();
   const visibleItems = navItems.filter((item) => adminCanAny(admin, item.permissions));
   const isSuperAdmin = admin?.role === "admin";
+  const counts = useOfficeNavCounts();
 
   // §N9 — department access links, kisi bhi office user ke liye. Lazy: sirf
   // pehli dafa dropdown khulne par fetch hota hai (har page load par nahi).
@@ -108,10 +113,14 @@ export default function OfficeNav({
                 >
                   <Icon className="h-4 w-4" />
                   <span className="hidden md:inline">{item.label}</span>
+                  <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />
                 </Link>
               );
             })}
 
+            {/* §W11.9: Department Links sirf super admin ke liye — baqi roles
+                ko ye dropdown confusing lagta tha. */}
+            {isSuperAdmin && (
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -163,9 +172,11 @@ export default function OfficeNav({
                 </>
               )}
             </div>
+            )}
           </nav>
 
           <div className="ml-1 flex shrink-0 items-center gap-1">
+            <NotificationBell />
             {isSuperAdmin && (
               <Link
                 href="/admin"
