@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Link2, Loader2, Save, Trash2 } from "lucide-react";
 import { officeFetch } from "@/lib/office/client";
+import type { ToastKind } from "@/components/Toast";
 
 // Admin panel for the DepartmentLink table (§N9 — 06_NEW_REQUIREMENTS.md).
 // Siraf link record yahan hota hai; DNS owner khud Vercel men add karta hai.
@@ -53,7 +54,7 @@ const emptyForm = {
 export default function DepartmentLinksPanel({
   onMessage,
 }: {
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [rows, setRows] = useState<LinkRow[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -81,7 +82,7 @@ export default function DepartmentLinksPanel({
       method: form.id ? "PATCH" : "POST",
       json: form.id ? { id: form.id, ...payload } : payload,
     });
-    onMessage(res.ok ? (form.id ? "Link update ho gaya" : "Link add ho gaya") : res.error);
+    onMessage(res.ok ? (form.id ? "Link update ho gaya" : "Link add ho gaya") : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm(emptyForm);
       await load();
@@ -94,7 +95,7 @@ export default function DepartmentLinksPanel({
     const res = await officeFetch(`/api/office/setup/department-links?id=${row.id}`, {
       method: "DELETE",
     });
-    onMessage(res.ok ? "Delete ho gaya" : res.error);
+    onMessage(res.ok ? "Delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       if (form.id === row.id) setForm(emptyForm);
       await load();
@@ -111,7 +112,8 @@ export default function DepartmentLinksPanel({
         ? row.isActive
           ? "Link band kar diya gaya"
           : "Link active ho gaya"
-        : res.error
+        : res.error,
+      res.ok ? "success" : "error"
     );
     if (res.ok) await load();
   }

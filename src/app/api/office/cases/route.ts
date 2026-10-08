@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
         },
         include: caseListInclude,
       });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     await logOfficeAction(session, {
       action: "case.create",

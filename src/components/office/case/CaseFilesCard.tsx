@@ -12,6 +12,7 @@ import {
   inputClass,
   primaryBtnClass,
 } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (filing
 // files dekhe + printed proof), ATTA (per set-step optional + FINAL lazmi),
@@ -56,7 +57,7 @@ export default function CaseFilesCard({
   };
   admin: AdminNavUser;
   onReload: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
   departments?: Department[];
 }) {
   const [files, setFiles] = useState<CaseFileItem[]>([]);
@@ -101,14 +102,14 @@ export default function CaseFilesCard({
       onMessage("File upload ho gayi");
       await load();
       await onReload(); // status aage barh sakta hai (workflow)
-    } else onMessage(data.error || "File upload nahi ho saki");
+    } else onMessage(data.error || "File upload nahi ho saki", "error");
     setBusy(false);
   }
 
   async function remove(file: CaseFileItem) {
     if (!confirm("File delete karein?")) return;
     const res = await officeFetch(`/api/office/cases/${detail.id}/files?id=${file.id}`, { method: "DELETE" });
-    onMessage(res.ok ? "File delete ho gayi" : res.error);
+    onMessage(res.ok ? "File delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 

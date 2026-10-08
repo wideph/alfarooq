@@ -6,6 +6,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { officeFetch } from "@/lib/office/client";
 import { type CaseDetail, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // R1.3 — multiple contact numbers and delivery addresses, any stage.
 export default function CaseContacts({
@@ -17,7 +18,7 @@ export default function CaseContacts({
   detail: CaseDetail;
   admin: AdminNavUser;
   onReload: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canEdit = adminCanAny(admin, ["office:cases:write"]);
   const [phone, setPhone] = useState("");
@@ -42,13 +43,13 @@ export default function CaseContacts({
         setAddressLabel("");
       }
       await onReload();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
   async function remove(kind: "contacts" | "addresses", id: string) {
     const res = await officeFetch(`/api/office/cases/${detail.id}/${kind}?${kind === "contacts" ? "contactId" : "addressId"}=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Remove ho gaya" : res.error);
+    onMessage(res.ok ? "Remove ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await onReload();
   }
 

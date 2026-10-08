@@ -6,6 +6,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDateTime, formatMoney, officeFetch } from "@/lib/office/client";
 import { type DiscountRequestItem, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N8 — booking office sirf discount REQUEST kar sakta hai; admin /
 // cashier decide karte hain (commission / admin profit / partial se minus).
@@ -18,7 +19,7 @@ export default function CaseDiscountCard({
   caseId: string;
   admin: AdminNavUser;
   onReload: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canRequest = adminCanAny(admin, ["office:cases:write"]);
   const canDecide = admin.role === "admin" || adminCanAny(admin, ["office:payments:verify"]);
@@ -50,7 +51,7 @@ export default function CaseDiscountCard({
       onMessage("Discount request bhej di gayi — admin / cashier decide karein ge");
       setForm({ amount: "", reason: "" });
       await load();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -73,7 +74,7 @@ export default function CaseDiscountCard({
       setPartialAmount("");
       await load();
       await onReload();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

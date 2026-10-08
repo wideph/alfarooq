@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
-import { createOfficeUser, validateOfficeUser } from "@/lib/office/office-users";
+import { createOfficeUser, hashOfficeUserPassword, validateOfficeUser } from "@/lib/office/office-users";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -20,9 +20,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const validated = validateOfficeUser(await request.json());
     if ("error" in validated) return badRequest(validated.error);
 
+    // bcrypt hashing transaction ke bahar — tx sirf DB work rakhe.
+    const hashed = await hashOfficeUserPassword(validated.data);
+
     const admin = await prisma.$transaction(async (tx) => {
-      return createOfficeUser(tx, session, id, validated.data);
-    });
+      return createOfficeUser(tx, session, id, hashed);
+    }, { maxWait: 10000, timeout: 30000 });
 
     return NextResponse.json(
       {

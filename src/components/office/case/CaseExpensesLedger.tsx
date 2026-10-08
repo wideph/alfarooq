@@ -7,6 +7,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatDateTime, formatMoney, officeFetch, todayInputDate } from "@/lib/office/client";
 import { LEDGER_TYPE_LABELS } from "@/lib/office/labels";
 import { type CaseDetail, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // Case expenses (BR4.2/BR6), this case's ledger rows, and (super admin) audit.
 export default function CaseExpensesLedger({
@@ -18,7 +19,7 @@ export default function CaseExpensesLedger({
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canExpenses = adminCanAny(admin, ["office:expenses:write"]);
   const canSeeExpenses = canExpenses || adminCanAny(admin, ["office:ledger:read", "office:finance:read"]);
@@ -33,7 +34,7 @@ export default function CaseExpensesLedger({
       onUpdated(res.data);
       onMessage("Expense add ho gaya");
       setForm({ amount: "", description: "", expenseDate: todayInputDate() });
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -43,7 +44,7 @@ export default function CaseExpensesLedger({
     if (res.ok) {
       onUpdated(res.data);
       onMessage("Expense delete ho gaya");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
   }
 
   const expenseTotal = detail.expenses.reduce((acc, e) => acc + e.amount, 0);

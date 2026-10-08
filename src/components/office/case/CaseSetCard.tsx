@@ -7,6 +7,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, officeFetch } from "@/lib/office/client";
 import { ATTESTATION_STATUS_LABELS, ATTESTATION_STATUS_STYLES } from "@/lib/office/labels";
 import { type CaseDetail, type CategorySetWithSteps, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N5/N7 — category set selection + generated step dates.
 // office:cases:write set select karta hai (dimmed sets r-number ke mutabiq
@@ -21,7 +22,7 @@ export default function CaseSetCard({
   detail: CaseDetail;
   admin: AdminNavUser;
   onReload: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canSelect = adminCanAny(admin, ["office:cases:write"]);
   const canGenerate =
@@ -57,7 +58,7 @@ export default function CaseSetCard({
       if (res.data.dates?.pendingReasons?.length) setPendingReasons(res.data.dates.pendingReasons);
       else setPendingReasons([]);
       await onReload();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -72,10 +73,11 @@ export default function CaseSetCard({
       onMessage(
         res.data.status === "ok"
           ? `Dates generate ho gayi${res.data.boardAttasNumber ? ` — Board Attas # ${res.data.boardAttasNumber}` : ""}`
-          : "Kuch dates pending hain — wajah neeche dekhein"
+          : "Kuch dates pending hain — wajah neeche dekhein",
+        res.data.status === "ok" ? "success" : "info"
       );
       await onReload();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

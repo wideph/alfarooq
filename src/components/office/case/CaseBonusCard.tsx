@@ -6,6 +6,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDateTime, formatMoney, officeFetch } from "@/lib/office/client";
 import { type BonusRequestItem, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N8 — booking office bonus REQUEST karta hai (case se linked);
 // admin / cashier accept karte waqt decide karte hain ke bonus commission se
@@ -19,7 +20,7 @@ export default function CaseBonusCard({
   caseId: string;
   admin: AdminNavUser;
   onReload: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const isBookingOffice = admin.role === "booking_office";
   const canDecide = admin.role === "admin" || adminCanAny(admin, ["office:payments:verify"]);
@@ -51,7 +52,7 @@ export default function CaseBonusCard({
       onMessage("Bonus request bhej di gayi — admin / cashier decide karein ge");
       setForm({ amount: "", reason: "" });
       await load();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -67,7 +68,7 @@ export default function CaseBonusCard({
       setDeciding(null);
       await load();
       await onReload();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

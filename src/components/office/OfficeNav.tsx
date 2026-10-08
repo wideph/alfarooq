@@ -55,18 +55,26 @@ export default function OfficeNav({
   const visibleItems = navItems.filter((item) => adminCanAny(admin, item.permissions));
   const isSuperAdmin = admin?.role === "admin";
 
-  // §N9 — department access links, kisi bhi office user ke liye.
+  // §N9 — department access links, kisi bhi office user ke liye. Lazy: sirf
+  // pehli dafa dropdown khulne par fetch hota hai (har page load par nahi).
   const [linksOpen, setLinksOpen] = useState(false);
-  const [departmentLinks, setDepartmentLinks] = useState<
-    Array<{ id: string; label: string; url: string }>
-  >([]);
+  const [departmentLinks, setDepartmentLinks] = useState<Array<{ id: string; label: string; url: string }> | null>(null);
 
   useEffect(() => {
+    if (!linksOpen || departmentLinks !== null) return;
+    let cancelled = false;
     fetch("/api/office/setup/department-links")
       .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setDepartmentLinks(Array.isArray(data) ? data : []))
-      .catch(() => setDepartmentLinks([]));
-  }, []);
+      .then((data) => {
+        if (!cancelled) setDepartmentLinks(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDepartmentLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linksOpen, departmentLinks]);
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
@@ -130,7 +138,9 @@ export default function OfficeNav({
                     <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Department Links
                     </p>
-                    {departmentLinks.length === 0 ? (
+                    {departmentLinks === null ? (
+                      <p className="px-3 py-3 text-sm text-slate-400">Load ho raha hai...</p>
+                    ) : departmentLinks.length === 0 ? (
                       <p className="px-3 py-3 text-sm text-slate-400">
                         Koi active link nahi — admin se hasil karein
                       </p>

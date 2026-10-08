@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bot, Loader2, RefreshCw, Save, Search, Sparkles, Trash2 } from "lucide-react";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 
 type CourseOption = { id: string; title: string };
 type TrainingEntry = {
@@ -60,7 +61,9 @@ export default function BotAdminPanel({
   const [loadingTraining, setLoadingTraining] = useState(false);
   const [loadingChats, setLoadingChats] = useState(false);
   const [learning, setLearning] = useState(false);
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
   const [testQuestion, setTestQuestion] = useState("");
   const [testResult, setTestResult] = useState("");
   const [testing, setTesting] = useState(false);
@@ -115,7 +118,7 @@ export default function BotAdminPanel({
       setMessage("Bot training save ho gayi.");
       await loadTraining();
     } else {
-      setMessage("Bot training save nahi ho saki.");
+      setMessage("Bot training save nahi ho saki.", "error");
     }
   }
 
@@ -139,7 +142,7 @@ export default function BotAdminPanel({
     if (res.ok) {
       setMessage(action === "approve" ? "AI answer approve ho gaya." : "AI answer reject ho gaya.");
       await loadTraining();
-    } else setMessage("Review update nahi ho saka.");
+    } else setMessage("Review update nahi ho saka.", "error");
   }
 
   async function testBot() {
@@ -197,7 +200,7 @@ export default function BotAdminPanel({
       );
       await loadTraining();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Bot learning fail");
+      setMessage(error instanceof Error ? error.message : "Bot learning fail", "error");
     } finally {
       setLearning(false);
     }
@@ -235,7 +238,7 @@ export default function BotAdminPanel({
 
       {open && (
         <div className="p-5 sm:p-6 space-y-6">
-          {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
+          <Toast toast={toast} onClose={() => setToast(null)} />
 
           {canTrainingRead && (
           <section className="space-y-4">

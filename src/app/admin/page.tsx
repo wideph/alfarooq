@@ -18,6 +18,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import AdminNav, { type AdminPermission } from "@/components/admin/AdminNav";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import {
   clearCachedAdminSession,
   getCachedAdminSession,
@@ -119,7 +120,9 @@ export default function AdminDashboard() {
   const [qaForm, setQaForm] = useState({ question: "", answer: "", order: 1 });
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
   const [userAnswerForm, setUserAnswerForm] = useState<Record<string, string>>({});
   const [userAnswerOrderForm, setUserAnswerOrderForm] = useState<Record<string, string>>({});
   const [userAnswerModeForm, setUserAnswerModeForm] = useState<Record<string, "publish" | "training">>({});
@@ -317,7 +320,7 @@ export default function AdminDashboard() {
       !answeredUserMediaFile &&
       !(editingAnsweredUser.answerMediaFilename && !removeAnsweredUserMedia)
     ) {
-      setMessage("Answer text ya media file zaroori hai");
+      setMessage("Answer text ya media file zaroori hai", "error");
       return;
     }
 
@@ -382,7 +385,7 @@ export default function AdminDashboard() {
       setCourseForm({ title: "", description: "", isPublished: true, order: nextPreference(courses) });
       loadCourses();
     } else {
-      setMessage("Error: Course save nahi ho saka");
+      setMessage("Course save nahi ho saka", "error");
     }
     setSaving(false);
   }
@@ -431,7 +434,7 @@ export default function AdminDashboard() {
       patchCourseCount(selectedCourse, "samples", 1);
     } else {
       const data = await res.json();
-      setMessage(`Error: ${data.error}`);
+      setMessage(data.error || "Upload fail ho gaya", "error");
     }
     setUploading(false);
   }
@@ -462,7 +465,7 @@ export default function AdminDashboard() {
     if (!selectedCourse) return;
     if (!qaForm.question.trim()) return;
     if (!qaForm.answer.trim() && !qaMediaFile && !(editingQuestion?.answerMediaFilename && !removeQaMedia)) {
-      setMessage("Answer text ya media file zaroori hai");
+      setMessage("Answer text ya media file zaroori hai", "error");
       return;
     }
 
@@ -590,14 +593,7 @@ export default function AdminDashboard() {
       <AdminNav admin={admin} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {message && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm flex items-center justify-between">
-            {message}
-            <button onClick={() => setMessage("")}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        <Toast toast={toast} onClose={() => setToast(null)} />
 
         {hasAny([
           "courses:read",

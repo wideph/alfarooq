@@ -564,7 +564,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       }
     }
     return attasNumber;
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return {
     status: pendingReasons.size ? "pending" : "ok",

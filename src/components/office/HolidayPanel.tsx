@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarOff, Loader2, Save, Trash2 } from "lucide-react";
 import { formatDate, officeFetch, toInputDate } from "@/lib/office/client";
+import type { ToastKind } from "@/components/Toast";
 
 // Admin panel for the HolidayClosure table (§N6). The set-date engine treats
 // these dates as non-working for the given scope. Scopes are mirrored from
@@ -37,7 +38,7 @@ const ghostBtn = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm 
 
 const emptyForm = { id: "", date: "", scope: "PAKISTAN" as string, reason: "" };
 
-export default function HolidayPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export default function HolidayPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [rows, setRows] = useState<HolidayRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -59,7 +60,7 @@ export default function HolidayPanel({ onMessage }: { onMessage: (message: strin
         ? { id: form.id, date: form.date, scope: form.scope, reason: form.reason }
         : { date: form.date, scope: form.scope, reason: form.reason },
     });
-    onMessage(res.ok ? (form.id ? "Chhuti update ho gayi" : "Chhuti add ho gayi") : res.error);
+    onMessage(res.ok ? (form.id ? "Chhuti update ho gayi" : "Chhuti add ho gayi") : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm(emptyForm);
       await load();
@@ -70,7 +71,7 @@ export default function HolidayPanel({ onMessage }: { onMessage: (message: strin
   async function remove(row: HolidayRow) {
     if (!confirm(`Chhuti delete karein? (${formatDate(row.date)} — ${row.scope})`)) return;
     const res = await officeFetch(`/api/office/setup/holidays?id=${row.id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Delete ho gaya" : res.error);
+    onMessage(res.ok ? "Delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       if (form.id === row.id) setForm(emptyForm);
       await load();

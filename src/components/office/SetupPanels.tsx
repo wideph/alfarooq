@@ -15,6 +15,7 @@ import {
   type BookingOfficeType,
   type OfficeRole,
 } from "@/lib/office/permissions";
+import type { ToastKind } from "@/components/Toast";
 
 type Category = { id: string; name: string; defaultAmount: number | null; order: number; isActive: boolean };
 type AttestationType = { id: string; name: string; order: number; isActive: boolean };
@@ -67,7 +68,7 @@ function Panel({
 
 // ---------------------------------------------------------------- Categories
 
-export function CategoriesPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export function CategoriesPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<Category[]>([]);
   const [form, setForm] = useState({ id: "", name: "", defaultAmount: "", order: "1", isActive: true });
   const [saving, setSaving] = useState(false);
@@ -87,7 +88,7 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string) =>
       method: form.id ? "PUT" : "POST",
       json: form,
     });
-    onMessage(res.ok ? "Category save ho gayi" : res.error);
+    onMessage(res.ok ? "Category save ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm({ id: "", name: "", defaultAmount: "", order: String(items.length + 2), isActive: true });
       await load();
@@ -98,7 +99,7 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string) =>
   async function remove(id: string) {
     if (!confirm("Category delete karein?")) return;
     const res = await officeFetch(`/api/office/setup/categories?id=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Category delete ho gayi" : res.error);
+    onMessage(res.ok ? "Category delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 
@@ -194,7 +195,7 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string) =>
 
 // ---------------------------------------------------------- Attestation types
 
-export function AttestationTypesPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export function AttestationTypesPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<AttestationType[]>([]);
   const [form, setForm] = useState({ id: "", name: "", order: "1", isActive: true });
   const [saving, setSaving] = useState(false);
@@ -214,7 +215,7 @@ export function AttestationTypesPanel({ onMessage }: { onMessage: (message: stri
       method: form.id ? "PUT" : "POST",
       json: form,
     });
-    onMessage(res.ok ? "Attestation type save ho gaya" : res.error);
+    onMessage(res.ok ? "Attestation type save ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm({ id: "", name: "", order: String(items.length + 2), isActive: true });
       await load();
@@ -225,7 +226,7 @@ export function AttestationTypesPanel({ onMessage }: { onMessage: (message: stri
   async function remove(id: string) {
     if (!confirm("Attestation type delete karein?")) return;
     const res = await officeFetch(`/api/office/setup/attestation-types?id=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Delete ho gaya" : res.error);
+    onMessage(res.ok ? "Delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 
@@ -390,7 +391,7 @@ function UserDraftFields({
   );
 }
 
-export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [offices, setOffices] = useState<Office[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState(emptyOffice);
@@ -434,7 +435,8 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
           : users.length > 0
             ? `Office ban gaya — ${users.length} user bhi add ho gaye`
             : "Office ban gaya"
-        : res.error
+        : res.error,
+      res.ok ? "success" : "error"
     );
     if (res.ok) {
       setForm(emptyOffice);
@@ -448,7 +450,7 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
   async function removeOffice(id: string) {
     if (!confirm("Booking office delete karein?")) return;
     const res = await officeFetch(`/api/office/setup/booking-offices?id=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Office delete ho gaya" : res.error);
+    onMessage(res.ok ? "Office delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       if (selectedId === id) setSelectedId(null);
       await load();
@@ -652,7 +654,7 @@ function OfficeUsersEditor({
 }: {
   office: Office;
   onChanged: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(emptyUserDraft());
   const [adding, setAdding] = useState(false);
@@ -672,7 +674,7 @@ function OfficeUsersEditor({
         role: draft.role,
       },
     });
-    onMessage(res.ok ? "User add ho gaya" : res.error);
+    onMessage(res.ok ? "User add ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setDraft(emptyUserDraft());
       await onChanged();
@@ -734,7 +736,7 @@ function MembersEditor({
 }: {
   office: Office;
   onChanged: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [name, setName] = useState("");
   const [percent, setPercent] = useState("");
@@ -751,7 +753,7 @@ function MembersEditor({
       method: "POST",
       json: { name, ...(isProfitShare ? { profitPercent: percent || "0" } : {}) },
     });
-    onMessage(res.ok ? "Member add ho gaya" : res.error);
+    onMessage(res.ok ? "Member add ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setName("");
       setPercent("");
@@ -767,7 +769,7 @@ function MembersEditor({
       method: "PUT",
       json: { id: member.id, name: edit.name, ...(isProfitShare ? { profitPercent: edit.profitPercent } : {}) },
     });
-    onMessage(res.ok ? "Member update ho gaya" : res.error);
+    onMessage(res.ok ? "Member update ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setEdits((prev) => {
         const next = { ...prev };
@@ -783,7 +785,7 @@ function MembersEditor({
       method: "PUT",
       json: { id: member.id, isActive: !member.isActive },
     });
-    onMessage(res.ok ? "Member update ho gaya" : res.error);
+    onMessage(res.ok ? "Member update ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await onChanged();
   }
 
@@ -792,7 +794,7 @@ function MembersEditor({
     const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/members?id=${member.id}`, {
       method: "DELETE",
     });
-    onMessage(res.ok ? "Member delete ho gaya" : res.error);
+    onMessage(res.ok ? "Member delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await onChanged();
   }
 
@@ -894,7 +896,7 @@ function CommissionGrid({
   office: Office;
   categories: Category[];
   onChanged: () => Promise<void>;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -914,7 +916,7 @@ function CommissionGrid({
       method: "PUT",
       json: { items },
     });
-    onMessage(res.ok ? "Commission grid save ho gaya" : res.error);
+    onMessage(res.ok ? "Commission grid save ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await onChanged();
     setSaving(false);
   }

@@ -4,7 +4,7 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { toJson, cleanText } from "@/lib/office/serializers";
 import { BOOKING_OFFICE_TYPES, type BookingOfficeType } from "@/lib/office/permissions";
-import { createOfficeUser, validateOfficeUser, type OfficeUserInput } from "@/lib/office/office-users";
+import { createOfficeUser, hashOfficeUserPassword, validateOfficeUser, type OfficeUserInput } from "@/lib/office/office-users";
 
 const officeInclude = {
   members: { orderBy: { createdAt: "asc" as const } },
@@ -73,6 +73,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // bcrypt hashing transaction se pehle — tx sirf DB work rakhe.
+    const hashedUsers = await Promise.all(users.map(hashOfficeUserPassword));
+
     const officeId = await prisma.$transaction(async (tx) => {
       const office = await tx.bookingOffice.create({ data: parsed.data });
 
@@ -93,12 +96,12 @@ export async function POST(request: NextRequest) {
         tx
       );
 
-      for (const user of users) {
+      for (const user of hashedUsers) {
         await createOfficeUser(tx, session, office.id, user);
       }
 
       return office.id;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     const fresh = await prisma.bookingOffice.findUnique({
       where: { id: officeId },

@@ -12,6 +12,7 @@ import {
   isOfficeRole,
   type BookingOfficeType,
 } from "@/lib/office/permissions";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 
 const WEBSITE_PERMISSIONS = [
   { key: "settings", label: "Website settings", read: "settings:read", write: "settings:write" },
@@ -73,7 +74,9 @@ export default function SubAdminPanel({
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
 
   async function loadAdmins() {
     setLoading(true);
@@ -149,7 +152,7 @@ export default function SubAdminPanel({
       await loadAdmins();
     } else {
       const data = await res.json().catch(() => ({}));
-      setMessage(data.error || "User save nahi ho saka.");
+      setMessage(data.error || "User save nahi ho saka.", "error");
     }
     setSaving(false);
   }
@@ -163,7 +166,7 @@ export default function SubAdminPanel({
       await loadAdmins();
     } else {
       const data = await res.json().catch(() => ({}));
-      setMessage(data.error || "Delete nahi ho saka.");
+      setMessage(data.error || "Delete nahi ho saka.", "error");
     }
   }
 
@@ -184,7 +187,7 @@ export default function SubAdminPanel({
 
       {open && (
         <div className="p-5 sm:p-6 space-y-5">
-          {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
+          <Toast toast={toast} onClose={() => setToast(null)} />
 
           {canWrite && (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">

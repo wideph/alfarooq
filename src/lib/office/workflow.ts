@@ -2,7 +2,6 @@ import type { NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AdminPermission, AdminSession } from "@/lib/auth";
-import { generateSetDates } from "@/lib/office/date-engine";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 
@@ -199,24 +198,29 @@ export async function evaluateCaseCompletion(
 // -- First-payment hook (§N7) ---------------------------------------------------
 
 // After the FIRST payment turns RECEIVED the case enters the department
-// workflow: status → WAITING_FOR_FILE (visible to filing) and, when a set is
-// already selected, its dates are generated. Call after recomputeCaseFinancials
-// (which may have moved NEW → IN_PROCESS). Never throws.
-export async function activateWorkflowOnFirstPayment(caseId: string): Promise<void> {
+// workflow: status → WAITING_FOR_FILE (visible to filing). Returns
+// `datesNeeded: true` when a set is already selected — the caller then
+// schedules the AI-heavy generateSetDates via next/server after() so the
+// request path stays fast. Call after recomputeCaseFinancials (which may have
+// moved NEW → IN_PROCESS). Never throws.
+export async function activateWorkflowOnFirstPayment(
+  caseId: string
+): Promise<{ datesNeeded: boolean }> {
   try {
     const receivedCount = await prisma.payment.count({ where: { caseId, status: "RECEIVED" } });
-    if (receivedCount !== 1) return;
+    if (receivedCount !== 1) return { datesNeeded: false };
     const item = await prisma.case.findUnique({
       where: { id: caseId },
       select: { status: true, setId: true },
     });
-    if (!item) return;
+    if (!item) return { datesNeeded: false };
     if (["NEW", "PAYMENT_PENDING", "IN_PROCESS"].includes(item.status)) {
       await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_FILE" } });
     }
-    if (item.setId) await generateSetDates(caseId);
+    return { datesNeeded: Boolean(item.setId) };
   } catch (error) {
     console.error("[office] first-payment hook fail", error);
+    return { datesNeeded: false };
   }
 }
 

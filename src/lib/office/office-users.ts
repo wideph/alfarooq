@@ -13,6 +13,17 @@ export type OfficeUserInput = {
   role: OfficeRole;
 };
 
+// bcrypt hashing is pure CPU work — it runs OUTSIDE the interactive
+// transaction (see hashOfficeUserPassword) so tx time stays pure DB work.
+export type OfficeUserHashedInput = Omit<OfficeUserInput, "password"> & {
+  passwordHash: string;
+};
+
+export async function hashOfficeUserPassword(input: OfficeUserInput): Promise<OfficeUserHashedInput> {
+  const { password, ...rest } = input;
+  return { ...rest, passwordHash: await bcrypt.hash(password, 10) };
+}
+
 // Mirrors the validation in src/app/api/admin/users/route.ts, but for ALL
 // office roles (docs 06_NEW_REQUIREMENTS.md N2).
 export function validateOfficeUser(raw: unknown): { data: OfficeUserInput } | { error: string } {
@@ -39,7 +50,7 @@ export async function createOfficeUser(
   tx: Db,
   session: AdminSession,
   bookingOfficeId: string,
-  input: OfficeUserInput
+  input: OfficeUserHashedInput
 ) {
   const taken = await tx.admin.findUnique({ where: { email: input.email } });
   if (taken) throw new Error(`Email "${input.email}" pehle se registered hai`);
@@ -48,7 +59,7 @@ export async function createOfficeUser(
     data: {
       name: input.name,
       email: input.email,
-      password: await bcrypt.hash(input.password, 10),
+      password: input.passwordHash,
       role: input.role,
       bookingOfficeId,
       permissions: JSON.stringify(ROLE_PRESETS[input.role]),

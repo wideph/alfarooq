@@ -2,8 +2,9 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, X } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import CaseHeader from "@/components/office/case/CaseHeader";
 import CaseInfoCard from "@/components/office/case/CaseInfoCard";
 import CaseMoneyCard from "@/components/office/case/CaseMoneyCard";
@@ -24,7 +25,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
 
   const reload = useCallback(async () => {
     const res = await officeFetch<CaseDetail>(`/api/office/cases/${id}`);
@@ -49,14 +52,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
               <ArrowLeft className="w-4 h-4" /> All cases
             </Link>
 
-            {message && (
-              <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-                {message}
-                <button onClick={() => setMessage("")}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <Toast toast={toast} onClose={() => setToast(null)} />
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
             {!detail ? (

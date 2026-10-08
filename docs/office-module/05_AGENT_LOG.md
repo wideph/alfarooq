@@ -612,3 +612,69 @@ Verification (ENV RULE — repo node_modules fuse FS par unstable hai):
 Next step for the next agent:
 - Live DB par owner-flow smoke test: super admin login → admin nav se
   Cases/Setup click → header ka continuity check.
+
+## [2026-10-08 19:38] Agent: Kimi (coder, subagent) — Wave 8: owner fixes (tx timeout + panel speed + toast popups)
+
+Task: teen owner complaints — (P1) booking-office create par Prisma interactive
+transaction "Transaction not found / old closed transaction" error, (P2) admin
+panel bohot slow (AI date generation request path mein), (P3) har success/info
+message popup toast ho (auto-close, hover pause, close button).
+
+Done:
+- P1 root cause: `prisma.$transaction(async (tx) => ...)` ka default 5s
+  `timeout` remote DB (ap-southeast-1) + bcrypt hashing + multiple writes ke
+  sath khatam ho jata tha — tx mid-flight close, phir `findUnique` "transaction
+  not found". FIX: tamam 11 interactive transactions (bonus-requests,
+  discount-requests, office-expenses x2, cases POST, cases/[id]/files POST,
+  setup/booking-offices POST, booking-offices/[id]/users POST, commission.ts,
+  date-engine.ts persist phase, profit-share.ts) ko `{ maxWait: 10000,
+  timeout: 30000 }` options diye. Array-style `$transaction([...])`
+  (commissions/route.ts) untouched.
+- P1 bcrypt: `createOfficeUser` (src/lib/office/office-users.ts) ab pre-hashed
+  password leta hai — naya `hashOfficeUserPassword` helper + dono callers
+  (booking-offices route `Promise.all(users.map(...))` tx se PEHLE,
+  booking-offices/[id]/users route) hashing transaction ke bahar karte hain.
+  Tx time ab pure DB work.
+- P2a: `activateWorkflowOnFirstPayment` (workflow.ts) ab sirf fast status
+  update karta hai aur `{ datesNeeded }` return karta hai; AI-heavy
+  `generateSetDates` dono payment routes (payments/route.ts POST direct
+  RECEIVED, payments/[id]/route.ts PATCH verify) mein
+  `after(async () => { try { await generateSetDates(caseId) } catch ... })`
+  se background mein schedule hota hai — response foran return. Fast DB work
+  (evaluateCaseCompletion, attestations route) awaited hi rakha.
+- P2b: cases/[id]/set/route.ts pehle se sirf RECEIVED payment hone par
+  generation await karta tha — acceptable per brief, no change.
+- P2c: /admin/login page ka `/api/office/setup/department-links` fetch (logged-
+  out par 401) hata diya — sirf static hint "Department links admin se hasil
+  karein". OfficeNav links dropdown ab LAZY fetch karta hai sirf pehli dafa
+  dropdown khulne par, state mein cache (har page load par nahi).
+- P2d: dashboard route (groupBy + 3 parallel queries) aur cases list
+  (`unseenWarningCaseIds` pehle se ek batched `in: caseIds` query) mein N+1
+  nahi mila — verified, no change.
+- P3: naya `src/components/Toast.tsx` — fixed top-right z-[100] popup,
+  4s auto-dismiss, hover par timer PAUSE (remaining-time logic), hover hatne
+  par resume, close button, thin progress bar; kinds success (emerald) /
+  error (red) / info (slate). Naya `src/hooks/useToast.tsx` (toast, showToast,
+  clearToast, ToastElement).
+- P3 sweep: inline emerald banner pattern (`{message && (<div...>)}`) HATA kar
+  Toast popup lagaya — admin/page.tsx, admin/settings/page.tsx (+
+  SiteSettingsPanel), SubAdminPanel, VisitorTrackingPanel, BotAdminPanel,
+  office setup page (+ SetupPanels, WorkingDayPanel, HolidayPanel,
+  DatePoolPanel, DepartmentLinksPanel), office ledger page (+ Salaries/
+  CompanyExpenses panels), office payments page, office cases/[id] page,
+  FilingCaseView. `onMessage` prop types widened: `(message, kind?: ToastKind)`.
+  API failure messages ab `kind="error"` toasts hain; existing `setMessage`
+  call sites kept (wrapper same name). Logic unchanged — sirf display.
+Files touched: upar listed sab + docs/office-module/05_AGENT_LOG.md (this entry).
+Verification (ENV RULE — repo node_modules fuse FS par npm install NAHI):
+- Fresh copy /tmp/fix1 (rsync repo sans node_modules/.git), `npm install
+  --no-audit --no-fund --ignore-scripts` OK, `npx prisma generate` OK,
+  `npm run typecheck` EXIT 0 (0 errors, baseline bhi green tha),
+  ESLint (project .eslintrc.json, next/core-web-vitals + next/typescript)
+  tamam ~35 touched files par clean (0 warnings/errors). NOT committed.
+Next step for the next agent:
+- Live par smoke test: office create with users (tx timeout fix), payment
+  RECEIVED verify (response instant, dates background mein), toast hover
+  pause behavior. Vercel par `after()` fluid-compute ke sath kaam karta hai —
+  self-hosted dev server par bhi chale ga, lekin background completion ki
+  guarantee sirf Vercel par hai.

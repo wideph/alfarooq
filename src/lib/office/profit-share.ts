@@ -107,5 +107,5 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
       profit: toNumber(profit),
       shares,
     };
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 }

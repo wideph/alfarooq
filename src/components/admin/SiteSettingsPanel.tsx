@@ -12,6 +12,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { useSiteSettings } from "@/hooks/useSiteSettings";
+import type { ToastKind } from "@/components/Toast";
 
 interface SiteSettingsForm {
   siteName: string;
@@ -29,7 +30,7 @@ interface SiteSettingsForm {
 }
 
 interface SiteSettingsPanelProps {
-  onMessage: (msg: string) => void;
+  onMessage: (msg: string, kind?: ToastKind) => void;
   defaultOpen?: boolean;
   canWrite?: boolean;
 }
@@ -150,7 +151,7 @@ export default function SiteSettingsPanel({
       setClearBotApiKey(false);
       onMessage("Website settings save ho gayi!");
     } else {
-      onMessage("Settings save nahi ho saki");
+      onMessage("Settings save nahi ho saki", "error");
     }
     setSaving(false);
   }

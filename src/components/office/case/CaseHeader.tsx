@@ -9,6 +9,7 @@ import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import { BOOKING_OFFICE_TYPE_LABELS } from "@/lib/office/permissions";
 import { type CaseDetail, inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 export default function CaseHeader({
   detail,
@@ -19,7 +20,7 @@ export default function CaseHeader({
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canVerify = adminCanAny(admin, ["office:payments:verify"]);
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
@@ -38,7 +39,7 @@ export default function CaseHeader({
     if (res.ok) {
       onUpdated(res.data);
       onMessage(res.data.isUrgent ? "Case urgent mark ho gaya" : "Urgent badge hata diya");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -50,7 +51,7 @@ export default function CaseHeader({
     if (res.ok) {
       onUpdated(res.data);
       onMessage(`Extra share ${percent}% set ho gaya`);
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setPopup(false);
   }
 
@@ -64,7 +65,7 @@ export default function CaseHeader({
       onUpdated(res.data);
       onMessage("Remaining amount accept ho gaya; agreed amount update hui");
       setEditRemaining("");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -74,7 +75,7 @@ export default function CaseHeader({
     if (res.ok) {
       onUpdated(res.data);
       onMessage("Profit share calculate ho gaya");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

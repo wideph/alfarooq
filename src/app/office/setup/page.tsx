@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import {
   AttestationTypesPanel,
   BookingOfficesPanel,
@@ -14,7 +14,9 @@ import WorkingDayPanel from "@/components/office/WorkingDayPanel";
 import DepartmentLinksPanel from "@/components/office/DepartmentLinksPanel";
 
 export default function OfficeSetupPage() {
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
 
   return (
     <OfficePageFrame requiredAny={["office:setup:write"]}>
@@ -25,14 +27,7 @@ export default function OfficeSetupPage() {
             Booking offices, un ke users / roles, categories aur attestation types yahan manage karein.
           </p>
         </div>
-        {message && (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-            {message}
-            <button onClick={() => setMessage("")}>
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        <Toast toast={toast} onClose={() => setToast(null)} />
         <BookingOfficesPanel onMessage={setMessage} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <CategoriesPanel onMessage={setMessage} />

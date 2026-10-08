@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, Loader2, Save, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, Save } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
@@ -37,7 +38,9 @@ export default function OfficePaymentsPage() {
   const [tab, setTab] = useState<"PENDING" | "ALL">("PENDING");
   const [items, setItems] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
   const [edits, setEdits] = useState<Record<string, { paymentDate: string; amount: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [popup, setPopup] = useState<{ caseId: string; caseNumber: string; extra: number } | null>(null);
@@ -70,7 +73,7 @@ export default function OfficePaymentsPage() {
       }
       await load();
     } else {
-      setMessage(res.error);
+      setMessage(res.error, "error");
     }
     setBusy(null);
   }
@@ -81,7 +84,7 @@ export default function OfficePaymentsPage() {
       method: "PATCH",
       json: { extraSharePercent: percent },
     });
-    setMessage(res.ok ? `${popup.caseNumber}: extra share ${percent}% set ho gaya` : res.error);
+    setMessage(res.ok ? `${popup.caseNumber}: extra share ${percent}% set ho gaya` : res.error, res.ok ? "success" : "error");
     setPopup(null);
   }
 
@@ -106,14 +109,7 @@ export default function OfficePaymentsPage() {
               </div>
             </div>
 
-            {message && (
-              <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-                {message}
-                <button onClick={() => setMessage("")}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <Toast toast={toast} onClose={() => setToast(null)} />
 
             <div className="space-y-3">
               {loading ? (

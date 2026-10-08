@@ -157,7 +157,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
 
       return { created, nextStatus };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return NextResponse.json(
       toJson({

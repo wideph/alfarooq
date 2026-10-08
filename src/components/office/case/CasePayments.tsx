@@ -9,6 +9,7 @@ import { formatDate, formatMoney, officeFetch, todayInputDate, toInputDate } fro
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
 import { PAYMENT_METHODS } from "@/lib/office/permissions";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 type VerifyResult = { needsExtraDecision: number | null };
 
@@ -23,7 +24,7 @@ export default function CasePayments({
   admin: AdminNavUser;
   onReload: () => Promise<void>;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canSubmit = adminCanAny(admin, ["office:payments:submit"]);
   const canVerify = adminCanAny(admin, ["office:payments:verify"]);
@@ -57,7 +58,7 @@ export default function CasePayments({
       setSlip(null);
       await onReload();
       if (data.needsExtraDecision) setPopupExtra(data.needsExtraDecision);
-    } else onMessage(data.error || "Payment submit nahi ho saki");
+    } else onMessage(data.error || "Payment submit nahi ho saki", "error");
     setSaving(false);
   }
 
@@ -73,7 +74,7 @@ export default function CasePayments({
       });
       await onReload();
       if (res.data.needsExtraDecision) setPopupExtra(res.data.needsExtraDecision);
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(null);
   }
 
@@ -81,7 +82,7 @@ export default function CasePayments({
     if (!confirm("Payment delete karein?")) return;
     setBusy(id);
     const res = await officeFetch(`/api/office/payments/${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Payment delete ho gayi" : res.error);
+    onMessage(res.ok ? "Payment delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await onReload();
     setBusy(null);
   }
@@ -94,7 +95,7 @@ export default function CasePayments({
     if (res.ok) {
       onUpdated(res.data);
       onMessage(`Extra share ${percent}% set ho gaya`);
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setPopupExtra(null);
   }
 

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Save, Trash2, X } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, todayInputDate } from "@/lib/office/client";
 import { LEDGER_TYPE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { BOOKING_OFFICE_TYPE_LABELS, PAYMENT_METHODS, type BookingOfficeType } from "@/lib/office/permissions";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 
 type Office = {
   id: string;
@@ -67,7 +68,9 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
   const [officeId, setOfficeId] = useState("");
   const [data, setData] = useState<LedgerResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
   const [payout, setPayout] = useState({ memberId: "", amount: "", entryDate: todayInputDate(), method: "CASH", remarks: "" });
   const [saving, setSaving] = useState(false);
 
@@ -85,7 +88,7 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
     setLoading(true);
     const res = await officeFetch<LedgerResponse>(`/api/office/ledger${officeId ? `?officeId=${officeId}` : ""}`);
     if (res.ok) setData(res.data);
-    else setMessage(res.error);
+    else setMessage(res.error, "error");
     setLoading(false);
   }, [officeId, canLedger]);
 
@@ -99,7 +102,7 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
     if (!officeId) return;
     setSaving(true);
     const res = await officeFetch("/api/office/ledger", { method: "POST", json: { ...payout, bookingOfficeId: officeId } });
-    setMessage(res.ok ? "Payout record ho gaya" : res.error);
+    setMessage(res.ok ? "Payout record ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setPayout({ memberId: "", amount: "", entryDate: todayInputDate(), method: "CASH", remarks: "" });
       await load();
@@ -110,7 +113,7 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
   async function deleteEntry(entry: Entry) {
     if (!confirm("Payout entry delete karein?")) return;
     const res = await officeFetch(`/api/office/ledger?id=${entry.id}`, { method: "DELETE" });
-    setMessage(res.ok ? "Entry delete ho gayi" : res.error);
+    setMessage(res.ok ? "Entry delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 
@@ -125,14 +128,7 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
         </div>
       </div>
 
-      {message && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          {message}
-          <button onClick={() => setMessage("")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {tab === "LEDGER" && canLedger && (
         <>
@@ -283,7 +279,7 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
   );
 }
 
-function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (m: string) => void }) {
+function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (m: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<Salary[]>([]);
   const [form, setForm] = useState({
     bookingOfficeId: "",
@@ -309,7 +305,7 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
   async function save() {
     setSaving(true);
     const res = await officeFetch("/api/office/salaries", { method: "POST", json: form });
-    onMessage(res.ok ? "Salary entry save ho gayi" : res.error);
+    onMessage(res.ok ? "Salary entry save ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm({ ...form, amount: "", remarks: "" });
       await load();
@@ -320,7 +316,7 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
   async function remove(id: string) {
     if (!confirm("Salary entry delete karein?")) return;
     const res = await officeFetch(`/api/office/salaries?id=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Delete ho gayi" : res.error);
+    onMessage(res.ok ? "Delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 
@@ -399,7 +395,7 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
   );
 }
 
-function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string) => void }) {
+function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<CompanyExpense[]>([]);
   const [form, setForm] = useState({ amount: "", description: "", category: "", expenseDate: todayInputDate() });
   const [saving, setSaving] = useState(false);
@@ -416,7 +412,7 @@ function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string) => void })
   async function save() {
     setSaving(true);
     const res = await officeFetch("/api/office/expenses", { method: "POST", json: form });
-    onMessage(res.ok ? "Expense save ho gaya" : res.error);
+    onMessage(res.ok ? "Expense save ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setForm({ ...form, amount: "", description: "" });
       await load();
@@ -427,7 +423,7 @@ function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string) => void })
   async function remove(id: string) {
     if (!confirm("Expense delete karein?")) return;
     const res = await officeFetch(`/api/office/expenses?id=${id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Delete ho gaya" : res.error);
+    onMessage(res.ok ? "Delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 

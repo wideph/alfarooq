@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Loader2, Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import { formatDate, officeFetch } from "@/lib/office/client";
+import type { ToastKind } from "@/components/Toast";
 
 // Admin panel for the WorkingDatePool table (§N6) — e.g. the 2019 pool used
 // for random Bord-date picks. The API enforces: max `limit` entries per year,
@@ -19,7 +20,7 @@ const input =
 const primaryBtn =
   "inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50";
 
-export default function DatePoolPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export default function DatePoolPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [year, setYear] = useState(2019);
   const [data, setData] = useState<PoolData | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -50,7 +51,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
           : "Pool full hai ya koi working date nahi mili"
       );
     } else {
-      onMessage(res.error);
+      onMessage(res.error, "error");
     }
     setSuggesting(false);
   }
@@ -61,7 +62,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
       method: "POST",
       json: { year, date },
     });
-    onMessage(res.ok ? "Date add ho gayi" : res.error);
+    onMessage(res.ok ? "Date add ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setSuggestions((prev) => prev.filter((item) => item !== date));
       await load(year);
@@ -79,7 +80,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
         json: { year, date },
       });
       if (!res.ok) {
-        onMessage(`${added} dates add ho gayi, phir error: ${res.error}`);
+        onMessage(`${added} dates add ho gayi, phir error: ${res.error}`, "error");
         break;
       }
       added += 1;
@@ -98,7 +99,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
       method: "POST",
       json: { year, date: manualDate },
     });
-    onMessage(res.ok ? "Date add ho gayi" : res.error);
+    onMessage(res.ok ? "Date add ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setManualDate("");
       await load(year);
@@ -109,7 +110,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
   async function remove(row: PoolRow) {
     if (!confirm(`Pool se ye date delete karein? (${formatDate(row.date)})`)) return;
     const res = await officeFetch(`/api/office/setup/date-pool?id=${row.id}`, { method: "DELETE" });
-    onMessage(res.ok ? "Delete ho gaya" : res.error);
+    onMessage(res.ok ? "Delete ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load(year);
   }
 

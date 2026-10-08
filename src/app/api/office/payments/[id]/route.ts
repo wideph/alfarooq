@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -9,6 +9,7 @@ import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
 import { deleteOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
+import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -64,12 +65,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
 
     // Wave 2 (§N5/N7): the FIRST payment that turns RECEIVED activates the
-    // workflow — case becomes WAITING_FOR_FILE (visible to filing) and, if a
-    // set is selected, its dates are generated. Runs AFTER the recompute (which
-    // may have moved NEW → IN_PROCESS), so the helper accepts IN_PROCESS too.
-    // Failures are logged, never thrown.
+    // workflow — case becomes WAITING_FOR_FILE (visible to filing). Runs AFTER
+    // the recompute (which may have moved NEW → IN_PROCESS), so the helper
+    // accepts IN_PROCESS too. Failures are logged, never thrown.
+    // AI date generation (DeepSeek, 30–240s on first run) is scheduled via
+    // after() so the verify response returns instantly.
     if (data.status === "RECEIVED" && existing.status !== "RECEIVED") {
-      await activateWorkflowOnFirstPayment(existing.caseId);
+      const caseId = existing.caseId;
+      const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
+      if (datesNeeded) {
+        after(async () => {
+          try {
+            await generateSetDates(caseId);
+          } catch (error) {
+            console.error("[office] generateSetDates fail", error);
+          }
+        });
+      }
     }
 
     return NextResponse.json(

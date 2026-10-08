@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
@@ -10,6 +10,7 @@ import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
+import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const maxDuration = 60;
@@ -122,8 +123,18 @@ export async function POST(request: NextRequest) {
 
     // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
     // the department workflow when it is the case's first RECEIVED payment.
+    // AI date generation is scheduled via after() so the response is instant.
     if (status === "RECEIVED") {
-      await activateWorkflowOnFirstPayment(caseId);
+      const { datesNeeded } = await activateWorkflowOnFirstPayment(caseId);
+      if (datesNeeded) {
+        after(async () => {
+          try {
+            await generateSetDates(caseId);
+          } catch (error) {
+            console.error("[office] generateSetDates fail", error);
+          }
+        });
+      }
     }
 
     return NextResponse.json(

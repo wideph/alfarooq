@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarCheck, Loader2, Save, Search, Trash2 } from "lucide-react";
 import { formatDate, officeFetch, todayInputDate } from "@/lib/office/client";
+import type { ToastKind } from "@/components/Toast";
 
 type Row = {
   id: string;
@@ -24,7 +25,7 @@ const SOURCE_STYLES: Record<Row["source"], string> = {
 
 // Super admin view of the Pakistan working-day cache used for expected
 // printing dates (BR7). Lets them test a date and override AI/fallback results.
-export default function WorkingDayPanel({ onMessage }: { onMessage: (message: string) => void }) {
+export default function WorkingDayPanel({ onMessage }: { onMessage: (message: string, kind?: ToastKind) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [testDate, setTestDate] = useState(todayInputDate());
   const [testing, setTesting] = useState(false);
@@ -51,7 +52,7 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
       );
       await load();
     } else {
-      onMessage(res.error);
+      onMessage(res.error, "error");
     }
     setTesting(false);
   }
@@ -62,7 +63,7 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
       method: "PUT",
       json: override,
     });
-    onMessage(res.ok ? `Override save ho gaya (${res.data.refreshedCases} open cases refresh)` : res.error);
+    onMessage(res.ok ? `Override save ho gaya (${res.data.refreshedCases} open cases refresh)` : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setOverride({ candidateDate: "", workingDate: "", reason: "" });
       await load();
@@ -75,7 +76,7 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
     const res = await officeFetch(`/api/office/working-day?date=${row.candidateDate.slice(0, 10)}`, {
       method: "DELETE",
     });
-    onMessage(res.ok ? "Row delete ho gayi" : res.error);
+    onMessage(res.ok ? "Row delete ho gayi" : res.error, res.ok ? "success" : "error");
     if (res.ok) await load();
   }
 

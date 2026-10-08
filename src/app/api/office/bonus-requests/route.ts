@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
         tx
       );
       return row;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return NextResponse.json(toJson(updated));
   } catch (error) {

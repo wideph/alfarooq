@@ -7,6 +7,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDateTime, officeFetch } from "@/lib/office/client";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 import { type CaseRemarkItem, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N7 — targeted department remarks. Visibility API handle karti hai;
 // yahan list + create (role ke mutabiq limited targets) + "Mark seen" (warning
@@ -51,7 +52,7 @@ export default function CaseRemarksCard({
 }: {
   caseId: string;
   admin: AdminNavUser;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
   onChanged?: () => Promise<void>;
 }) {
   const canWrite = adminCanAny(admin, ["office:remarks:write"]);
@@ -94,7 +95,7 @@ export default function CaseRemarksCard({
       setText("");
       setTargets([]);
       await load();
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

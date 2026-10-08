@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { canonicalizeVisitorUrl } from "@/lib/visitor-client";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 
 type VisitorStatus = { value: string; label: string; eventName: string };
 type Visitor = {
@@ -123,7 +124,9 @@ export default function VisitorTrackingPanel({
   const [fromDateTime, setFromDateTime] = useState("");
   const [toDateTime, setToDateTime] = useState("");
   const [savingId, setSavingId] = useState("");
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
 
   async function loadVisitors(search = query, overrides: FilterOverrides = {}) {
     setLoading(true);
@@ -203,7 +206,7 @@ export default function VisitorTrackingPanel({
       );
       void loadVisitors();
     } else {
-      setMessage("Visitor status update nahi ho saka.");
+      setMessage("Visitor status update nahi ho saka.", "error");
     }
     setSavingId("");
   }
@@ -415,7 +418,7 @@ export default function VisitorTrackingPanel({
             </div>
           )}
 
-          {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
+          <Toast toast={toast} onClose={() => setToast(null)} />
 
           {loading ? (
             <div className="flex justify-center py-8">

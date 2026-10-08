@@ -8,6 +8,7 @@ import { formatDate, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_LABELS, ATTESTATION_STATUS_STYLES, STATUS_LABELS } from "@/lib/office/labels";
 import { ATTESTATION_STATUSES, CASE_STATUSES } from "@/lib/office/permissions";
 import { type CaseDetail, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 type AttestationType = { id: string; name: string; isActive: boolean };
 
@@ -22,7 +23,7 @@ export default function CaseAttestations({
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canEditList = adminCanAny(admin, ["office:cases:write"]);
   const canStatus = adminCanAny(admin, ["office:attestation:write"]);
@@ -49,7 +50,7 @@ export default function CaseAttestations({
     if (res.ok) {
       onUpdated(res.data);
       onMessage(success);
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

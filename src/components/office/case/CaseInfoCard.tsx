@@ -7,6 +7,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
 import { officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 type Category = { id: string; name: string; isActive: boolean };
 
@@ -19,7 +20,7 @@ export default function CaseInfoCard({
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canEdit = adminCanAny(admin, ["office:cases:write"]);
   const [editing, setEditing] = useState(false);
@@ -49,7 +50,7 @@ export default function CaseInfoCard({
 
   async function save() {
     if (!hasRorReg) {
-      onMessage("r-number ya reg-number lazmi hai (in men se aik lazmi hai)");
+      onMessage("r-number ya reg-number lazmi hai (in men se aik lazmi hai)", "error");
       return;
     }
     setSaving(true);
@@ -65,14 +66,14 @@ export default function CaseInfoCard({
         onMessage("Case update ho gaya");
         setEditing(false);
         setPicture(null);
-      } else onMessage(data.error || "Update nahi ho saka");
+      } else onMessage(data.error || "Update nahi ho saka", "error");
     } else {
       const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}`, { method: "PATCH", json: form });
       if (res.ok) {
         onUpdated(res.data);
         onMessage("Case update ho gaya");
         setEditing(false);
-      } else onMessage(res.error);
+      } else onMessage(res.error, "error");
     }
     setSaving(false);
   }

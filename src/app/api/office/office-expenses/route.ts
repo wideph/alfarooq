@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         tx
       );
       return created;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return NextResponse.json(toJson(expense), { status: 201 });
   } catch (error) {
@@ -155,7 +155,7 @@ export async function DELETE(request: NextRequest) {
       { action: "office_expense.delete", entity: "OfficeExpense", entityId: id, before: existing },
       tx
     );
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   return NextResponse.json({ success: true });
 }

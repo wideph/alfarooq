@@ -6,6 +6,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, inputClass, primaryBtnClass } from "@/lib/office/types";
+import type { ToastKind } from "@/components/Toast";
 
 // Commission (type 1) controls + booking office "remaining" claim (BR2, BR3.2, BR3.6).
 export default function CaseMoneyCard({
@@ -17,7 +18,7 @@ export default function CaseMoneyCard({
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
   const canClaim = adminCanAny(admin, ["office:cases:write", "office:payments:submit"]);
@@ -37,7 +38,7 @@ export default function CaseMoneyCard({
       onUpdated(res.data);
       onMessage(success);
       setReason("");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -51,7 +52,7 @@ export default function CaseMoneyCard({
     if (res.ok) {
       onUpdated(res.data);
       onMessage("Agreed amount remarks save ho gaye");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 
@@ -64,7 +65,7 @@ export default function CaseMoneyCard({
     if (res.ok) {
       onUpdated(res.data);
       onMessage("Remaining amount cashier ko bhej di gayi");
-    } else onMessage(res.error);
+    } else onMessage(res.error, "error");
     setBusy(false);
   }
 

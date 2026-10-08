@@ -172,7 +172,7 @@ export async function recomputeCaseFinancials(
     }
 
     return { ...totals, needsExtraDecision, status };
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
   // Working-day lookup may call the AI, so it stays outside the transaction.
   await refreshExpectedPrintingDate(caseId);

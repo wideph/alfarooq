@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Image as ImageIcon, Loader2, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, Loader2 } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
+import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
 import CaseFilesCard from "@/components/office/case/CaseFilesCard";
 import CaseRemarksCard from "@/components/office/case/CaseRemarksCard";
@@ -18,7 +19,9 @@ import type { FilingCaseDetail } from "@/lib/office/types";
 export default function FilingCaseView({ id, admin }: { id: string; admin: AdminNavUser }) {
   const [detail, setDetail] = useState<FilingCaseDetail | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") =>
+    setToast(m ? { message: m, kind } : null);
   const [viewPicture, setViewPicture] = useState(false);
 
   const reload = useCallback(async () => {
@@ -37,14 +40,7 @@ export default function FilingCaseView({ id, admin }: { id: string; admin: Admin
         <ArrowLeft className="w-4 h-4" /> Filing queue
       </Link>
 
-      {message && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          {message}
-          <button onClick={() => setMessage("")}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
       {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
       {!detail ? (

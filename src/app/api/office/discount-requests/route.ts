@@ -158,7 +158,7 @@ export async function PATCH(request: NextRequest) {
       );
 
       return row;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     const result = await recomputeCaseFinancials(existing.caseId, session);
     return NextResponse.json(toJson({ request: updated, ...result }));
