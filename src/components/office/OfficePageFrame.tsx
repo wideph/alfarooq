@@ -3,7 +3,11 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { adminCanAny, type AdminNavUser, type AdminPermission } from "@/components/admin/AdminNav";
+import AdminNav, {
+  adminCanAny,
+  type AdminNavUser,
+  type AdminPermission,
+} from "@/components/admin/AdminNav";
 import OfficeNav from "@/components/office/OfficeNav";
 import {
   clearCachedAdminSession,
@@ -61,9 +65,18 @@ export default function OfficePageFrame({
 
   const allowed = requiredAny.length === 0 || adminCanAny(admin, requiredAny);
 
+  // N1 — super admin ko /office/* pages par wahi AdminNav dikhe jo admin panel
+  // par hai, taake office ek alag setup mehsoos na ho. Office-role users ke
+  // liye OfficeNav (apna brand + department links) waisa hi rahega.
+  const isSuperAdmin = admin.role === "admin";
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <OfficeNav admin={admin} onLogout={handleLogout} />
+      {isSuperAdmin ? (
+        <AdminNav admin={admin} onLogout={handleLogout} />
+      ) : (
+        <OfficeNav admin={admin} onLogout={handleLogout} />
+      )}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {allowed ? (
           typeof children === "function" ? children(admin) : children

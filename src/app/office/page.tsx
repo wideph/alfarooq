@@ -110,7 +110,14 @@ export default function OfficeDashboardPage() {
                 <div className="p-4 border-b border-slate-100 font-bold text-slate-900">Recent cases</div>
                 <div className="divide-y divide-slate-100">
                   {data.recentCases.length === 0 && (
-                    <p className="p-6 text-center text-sm text-slate-400">Abhi koi case nahi hai</p>
+                    <div className="p-8 text-center">
+                      <Briefcase className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                      <p className="text-sm font-medium text-slate-500">Abhi koi case nahi hai</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Naya case banane ke liye oopar &quot;New case&quot; par click karein — case yahan
+                        nazar aayega.
+                      </p>
+                    </div>
                   )}
                   {data.recentCases.map((item) => (
                     <Link

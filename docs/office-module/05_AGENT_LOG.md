@@ -501,3 +501,114 @@ Done (all waves, typecheck+lint green in /tmp/final clean env, prisma validate g
 - Integration fix by orchestrator: generate-dates route now allows atta/payments:verify; BotChatWidget lint warning fixed.
 Verification: `npm run typecheck` exit 0, `npm run lint` exit 0, `npx prisma validate` valid. `next build` NOT run (needs real DATABASE_URL at prerender — pre-existing).
 Next step (owner): on real DB run `npx prisma migrate deploy` + `npm run db:seed:office`, fill 2019 pool via Setup panel, smoke-test full chain. See repo-root `impossible` file for limitations.
+
+## [2026-10-08 10:04] Agent: Claude (subagent, AI-first date engine mission) — Wave 2026-10: N5/N6 AI-FIRST rework (docs 06)
+
+Task: owner ka asli mutalba — date engine AI-FIRST ho: AI research ker ke DECIDE
+kare (Pakistan working day, city closure, embassy closure, Saudi working day,
+city choice), har verdict record ho (admin edit/delete ker saky), aur 2019 ki 30
+working dates AI research ker ke pool mein bhare.
+
+Done:
+- NEW `src/lib/office/ai-dates.ts` — AI research layer (callBotJson + DeepSeek
+  key from SiteSettings, same pattern as working-day.ts):
+  `aiVerdict(dateISO, question)` with questions PAKISTAN / CITY
+  (Islamabad/Quetta/Gujrat/Lahore closure due to incident/preparation/strike/
+  local holiday) / EMBASSY (embassies in Islamabad closed/suspended) / SAUDI
+  (Fri+Sat weekend + Founding Day 22 Feb, Eids, National Day 23 Sep);
+  `aiChooseMoofaCity` (AI returns {city, reason}, priority Islamabad → Gujrat →
+  Lahore, admin table cross-check, skipped cities recorded as closures);
+  `aiResearchWorkingDates(year, count, excludeDates)` batch researcher with
+  validation (right year, Mon–Fri, not excluded, not a known PAKISTAN closure).
+  CACHING: AI closures upsert into HolidayClosure (reason prefixed "AI:" —
+  admin Holidays panel mein show hoti hain, edit/delete-able; admin rows bina
+  "AI:" prefix ke MANUAL hain aur kabhi overwrite nahi hote); Pakistan verdicts
+  WorkingDayCache mein (source "AI"; MANUAL rows win). Ek AI call 14-din ka
+  closure scan karta hai aur poora window cache ho jata hai. Fallback SIRF jab
+  key missing / call fail / invalid JSON → deterministic weekend + table rule
+  (console.warn ke sath).
+- `src/lib/office/date-engine.ts` AI-FIRST: har step formula (BORD dono
+  families, UV/QR idcc, SPECIAL_MOOFA city via AI, SAUD_MBC Islamabad+embassy+
+  Tue–Fri, MOOFA_SAUD Saudi Sun–Wed, BMFQ_VER/MOH_ATTA/CPLS_ATTA/APAC_ATTA/
+  NEVTCC) ab har candidate day ko ai-dates se validate karta hai (scopes
+  parallel Promise.all — ek window ≈ ek AI round-trip). Purane pure functions
+  (loadClosures/isBlockedDay/firstWorkingDayWith) fallback layer ke tor par
+  rakhe gaye. generateSetDates signature/contract waisa hi (pending reasons,
+  transaction persist, board attas sirf aik dafa). 2019 random pick se PEHLE agar
+  pool < 30 → aiResearchWorkingDates se auto-fill + WorkingDatePool upsert.
+- `src/app/api/office/setup/date-pool/route.ts`: GET ?suggest=1 ab AI-first
+  (source:"AI" suggestions), fail par purana deterministic scan fallback.
+- NEW `scripts/ai-fill-date-pool.ts` (args: year, target) — live DB par CHALAYA:
+  `npx tsx scripts/ai-fill-date-pool.ts 2019 30` → **Pool 2019: 30/30**, tamam
+  30 entries AI-researched (note "AI: normal working <weekday>"), saari Mon–Fri,
+  months mein spread, koi known holiday nahi. Exit 0. Koi date manually nahi
+  dali gayi.
+- Live AI E2E (real DB + real DeepSeek): PK verdicts 2019-08-14 / 2019-06-05
+  MANUAL seed table se sahi closed; 2019-05-27 PAKISTAN/CITY/EMBASSY scans
+  source "AI"; Saudi 2019-09-23 = AI ne closed kaha (National Day) aur
+  HolidayClosure mein AI row upsert ki (ye date seed table mein nahi thi);
+  city choice 2019-05-27 → ISLAMABAD (source AI). Formula chain live:
+  SPECIAL_MOOFA 2019-05-07 ISB → SAUD_MBC 2019-05-09 (Thu) → MOOFA_SAUD
+  13-05-19 (Mon) → BORD(QR) 2026-10-08+5 → 2026-10-13. AI cache ab: 3 AI
+  HolidayClosure rows + 37 WorkingDayCache rows.
+Verification: `npm run typecheck` exit 0 (clean copy /tmp/aiwork — repo
+node_modules is fuse FS par stub hai, ENV RULE ke mutabiq; rsync se latest repo
+state incl. doosre agent ke files).
+Half-done / caveats:
+- deepseek-v4-pro reasoning model hai: latency 30–240s per call, aur kabhi
+  kabhi 90s timeout ya empty-content (reasoning ne poora token budget kha jata
+  hai) — us waqt FALLBACK chalta hai + console.warn. Pehli dafa uncached dates
+  par generateSetDates minutes le sakta hai: generate-dates / set / payments
+  routes mein `maxDuration` export NAHI hai (default ~10–60s platform ke hisab
+  se) — **agla agent/owner in routes par `export const maxDuration = 300`
+  add kare** warna pehli AI generation time out ho sakti hai (cache bharne ke
+  baad instant).
+- City-choice direct {city,reason} call is model par flaky hai; middle layer
+  per-city AI scans se city derive karta hai (phir bhi AI, cached) — table sirf
+  aakhri fallback.
+Files touched:
+- src/lib/office/ai-dates.ts (NEW), src/lib/office/date-engine.ts (rework),
+  src/app/api/office/setup/date-pool/route.ts (AI suggest), scripts/ai-fill-date-pool.ts (NEW),
+  docs/office-module/05_AGENT_LOG.md (this entry).
+Next step for the next agent:
+- `export const maxDuration = 300` on generate-dates / set / payments routes;
+  phir live DB par poora set-generation smoke test (case + payment + set).
+
+## [2026-10-08 18:07] Agent: Kimi (UI coder, subagent) — Wave 7: owner complaint fix (06 N1 continuity + N2/N3 review)
+
+Task: owner complaint "admin k UI meri requirements k mutabiq nahi hua" — /office/*
+pages super admin ko alag-setup jaisi OfficeNav header ke sath dikh rahe thay.
+
+Done:
+- N1 FIX: `OfficePageFrame` ab `admin.role === "admin"` par wahi `AdminNav`
+  render karta hai jo admin panel par hai (same logout handler reuse), taake
+  office options click karne par ek continuous admin panel mehsoos ho.
+  Office-role users (booking/cashier/filing/printing/atta/courier) ke liye
+  `OfficeNav` (apna brand + department links dropdown) bilkul waisa hi.
+  AdminNav mein office items pehle se direct mojood hain (Wave-2), isliye
+  koi secondary tab row zaroori nahi.
+- N1 review: AdminNav ke office items `overflow-x-auto` nav ke andar hain —
+  mobile par layout nahi tootta (item 2 of brief, no change needed).
+- N2 review: `/office/setup` create card multiple inline user rows (naam,
+  email, password show/hide, role dropdown — tamam 7 roles incl. filing/
+  printing/atta/courier) ek hi submit mein bhejta hai; API `POST
+  booking-offices` `users[]` ko ek transaction mein banata hai (verified,
+  touched nahi). Mojooda office mein `OfficeUsersEditor` se user add hota
+  hai. Sab pehle se sahi implemented — koi gap nahi mila.
+- N3 review: `BotChatWidget` (`if (!enabled || hidden) return null` —
+  hidden = /admin ya /office) aur `FloatingHomeButton` dono /admin + /office
+  par render nahi hote. `SubmitQuestionModal` sirf CoursePageView ka
+  confirmation modal hai (koi floating trigger nahi). Verified, no change.
+- Polish: `/office` dashboard "Recent cases" empty state — icon + Roman-Urdu
+  hint ("Naya case banane ke liye oopar 'New case' par click karein").
+Files touched:
+- src/components/office/OfficePageFrame.tsx (AdminNav for super admin),
+  src/app/office/page.tsx (empty state polish),
+  docs/office-module/05_AGENT_LOG.md (this entry).
+Verification (ENV RULE — repo node_modules fuse FS par unstable hai):
+- Fresh copy /tmp/w7 (repo sans node_modules), `npm install` OK,
+  `npx prisma generate` OK, `npm run typecheck` EXIT 0 (0 errors),
+  `npx next lint` dono touched files par clean. NOT committed.
+Next step for the next agent:
+- Live DB par owner-flow smoke test: super admin login → admin nav se
+  Cases/Setup click → header ka continuity check.

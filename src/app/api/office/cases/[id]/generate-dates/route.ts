@@ -45,3 +45,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     return serverError(error);
   }
 }
+
+// AI date research can take minutes on first (uncached) generation — allow long runs on Vercel.
+export const maxDuration = 300;

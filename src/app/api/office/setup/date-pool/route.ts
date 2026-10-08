@@ -4,6 +4,7 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { addDays, cleanText, formatDateOnly, parseDateOnly, toJson } from "@/lib/office/serializers";
 import { isPakistanWorkingDay } from "@/lib/office/date-engine";
+import { aiResearchWorkingDates } from "@/lib/office/ai-dates";
 
 // Admin-managed working-date pool (§N6) — e.g. the 2019 pool used for random
 // Bord-date picks. The pool holds at most POOL_LIMIT entries per year; the
@@ -23,6 +24,22 @@ export async function GET(request: NextRequest) {
         select: { date: true },
       });
       const used = new Set(existing.map((row) => formatDateOnly(row.date)));
+      const needed = POOL_LIMIT - existing.length;
+      if (needed <= 0) {
+        return NextResponse.json({ year, count: existing.length, limit: POOL_LIMIT, suggestions: [] });
+      }
+      // AI-first (owner's brief): the AI researches the year's working dates.
+      // Only when it returns nothing do we fall back to the deterministic scan.
+      const researched = await aiResearchWorkingDates(year, needed, [...used]);
+      if (researched.length > 0) {
+        return NextResponse.json({
+          year,
+          count: existing.length,
+          limit: POOL_LIMIT,
+          source: "AI",
+          suggestions: researched.map((item) => formatDateOnly(item.date)),
+        });
+      }
       const suggestions: string[] = [];
       let cursor = new Date(Date.UTC(year, 0, 1));
       const end = new Date(Date.UTC(year + 1, 0, 1));
@@ -32,7 +49,7 @@ export async function GET(request: NextRequest) {
         }
         cursor = addDays(cursor, 1);
       }
-      return NextResponse.json({ year, count: existing.length, limit: POOL_LIMIT, suggestions });
+      return NextResponse.json({ year, count: existing.length, limit: POOL_LIMIT, source: "FALLBACK", suggestions });
     }
 
     const rows = await prisma.workingDatePool.findMany({
@@ -106,3 +123,6 @@ export async function DELETE(request: NextRequest) {
     return serverError(error);
   }
 }
+
+// AI date research can take minutes on first (uncached) generation — allow long runs on Vercel.
+export const maxDuration = 300;
