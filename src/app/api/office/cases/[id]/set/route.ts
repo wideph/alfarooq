@@ -6,6 +6,8 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { isSetDimmed, DIMMED_REASON } from "@/lib/office/rnumber";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // Booking office (or admin): select the attestation set of a case. Dimmed sets

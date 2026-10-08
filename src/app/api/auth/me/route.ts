@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getFreshAdminSession } from "@/lib/auth";
 
+export const preferredRegion = ["sin1"];
+
 export async function GET() {
   const session = await getFreshAdminSession();
   if (!session) {

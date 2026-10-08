@@ -6,6 +6,8 @@ import { generateSetDates } from "@/lib/office/date-engine";
 import { toJson } from "@/lib/office/serializers";
 import { getFreshAdminSession, hasPermission } from "@/lib/auth";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // Admin / cashier / attestation office / atta department: (re)generate the set

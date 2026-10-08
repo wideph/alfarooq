@@ -91,7 +91,8 @@ falling on **Tue/Wed/Thu/Fri** (and Islamabad not marked closed / embassy-closur
 holiday table). Hijri (Islamic) date also computed (tabular calendar) and shown.
 
 Moofa Saud date: 4 days after Saud MBC → first **Saudi Arabia working day**
-(Saudi weekend = Fri+Sat) falling on **Sun/Mon/Tue/Wed**; stored/displayed as `dd-mm-yy`.
+(Saudi weekend = Fri+Sat) falling on **Mon/Tue/Wed** (Sunday removed per owner, 2026-10-08);
+stored/displayed as `dd-mm-yy`.
 
 Set (ii) formulas (QR code idcc variant):
 - Bord date = first available working day **5 days after first payment date**; must not

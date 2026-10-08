@@ -6,6 +6,8 @@ import { totalLiabilities } from "@/lib/office/ledger";
 import { toNumber } from "@/lib/office/money";
 import { addDays, formatDateOnly, parseDateOnly, todayPakistan } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // docs/office-module/03_BUSINESS_RULES.md BR6 — super admin income report.
 // GET ?preset=today|daily|week|weekly|month  or  ?from=YYYY-MM-DD&to=YYYY-MM-DD
 //

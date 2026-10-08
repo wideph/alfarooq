@@ -3,6 +3,8 @@ import { cleanupExpiredBotConversations, remainingSeconds } from "@/lib/bot";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const preferredRegion = ["sin1"];
+
 async function ensureBotPermission(permission: "botChats:read" | "botChats:write") {
   try {
     await requirePermission(permission);

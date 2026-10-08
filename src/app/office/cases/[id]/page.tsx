@@ -1,31 +1,42 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { CreditCard, FolderOpen, History, LayoutGrid, MessageSquare, Stamp } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
-import CaseHeader from "@/components/office/case/CaseHeader";
-import CaseInfoCard from "@/components/office/case/CaseInfoCard";
-import CaseMoneyCard from "@/components/office/case/CaseMoneyCard";
-import CaseSetCard from "@/components/office/case/CaseSetCard";
-import CaseFilesCard from "@/components/office/case/CaseFilesCard";
-import CasePayments from "@/components/office/case/CasePayments";
-import CaseAttestations from "@/components/office/case/CaseAttestations";
-import CaseRemarksCard from "@/components/office/case/CaseRemarksCard";
-import CaseDiscountCard from "@/components/office/case/CaseDiscountCard";
-import CaseBonusCard from "@/components/office/case/CaseBonusCard";
-import CaseContacts from "@/components/office/case/CaseContacts";
-import CaseExpensesLedger from "@/components/office/case/CaseExpensesLedger";
+import { SkeletonRows, SkeletonTiles } from "@/components/ui/Skeleton";
+import CaseCommandBar from "@/components/office/case/CaseCommandBar";
+import CaseStepper from "@/components/office/case/CaseStepper";
+import CaseWarningStrip from "@/components/office/case/CaseWarningStrip";
+import CaseOverviewTab from "@/components/office/case/CaseOverviewTab";
+import CasePaymentsTab from "@/components/office/case/CasePaymentsTab";
+import CaseAttestationsTab from "@/components/office/case/CaseAttestationsTab";
+import CaseFilesTab from "@/components/office/case/CaseFilesTab";
+import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
+import CaseHistoryTab from "@/components/office/case/CaseHistoryTab";
 import FilingCaseView from "@/components/office/case/FilingCaseView";
 import { officeFetch } from "@/lib/office/client";
 import type { CaseDetail } from "@/lib/office/types";
+
+const TABS = [
+  { key: "overview", label: "Overview", icon: LayoutGrid },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "attestations", label: "Attestations & Dates", icon: Stamp },
+  { key: "files", label: "Files", icon: FolderOpen },
+  { key: "remarks", label: "Remarks", icon: MessageSquare },
+  { key: "history", label: "History / Finance", icon: History },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
 
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<ToastData | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set(["overview"]));
+  const [pendingReasons, setPendingReasons] = useState<string[]>([]);
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
 
@@ -39,56 +50,123 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     void reload();
   }, [reload]);
 
+  // Lazy render: tab pehli dafa khulne par hi mount hota hai (files/remarks ki
+  // apni fetch tab hi chalti hai); baad mein mounted rehta hai taake state bache.
+  function openTab(tab: string) {
+    const key = tab as TabKey;
+    setActiveTab(key);
+    setVisited((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  }
+
   return (
     <OfficePageFrame>
       {(admin) =>
-        // §N7: filing department ko sirf limited card set milta hai (API ka
-        // payload bhi stripped hai) — koi payment/money card nahi.
+        // §N7: filing department ko sirf limited view milta hai (API ka
+        // payload bhi stripped hai) — koi payment/money section nahi.
         admin.role === "filing" ? (
           <FilingCaseView id={id} admin={admin} />
         ) : (
           <div className="space-y-4">
-            <Link href="/office/cases" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-              <ArrowLeft className="w-4 h-4" /> All cases
-            </Link>
-
             <Toast toast={toast} onClose={() => setToast(null)} />
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
             {!detail ? (
               !error && (
-                <div className="flex justify-center py-16">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+                <div className="space-y-4 pt-4">
+                  <SkeletonTiles tiles={4} />
+                  <SkeletonRows rows={6} />
                 </div>
               )
             ) : (
               <>
-                <CaseHeader detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <CaseInfoCard
-                    key={detail.id + detail.clientName + detail.agreedAmount + (detail.courierNumber || "")}
-                    detail={detail}
-                    admin={admin}
-                    onUpdated={setDetail}
-                    onMessage={setMessage}
-                  />
-                  <CaseMoneyCard
-                    key={`${detail.commissionAmount}-${detail.extraSharePercent}-${detail.claimedRemaining}-${detail.agreedAmountRemarks || ""}`}
-                    detail={detail}
-                    admin={admin}
-                    onUpdated={setDetail}
-                    onMessage={setMessage}
-                  />
+                <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
+                <CaseStepper status={detail.status} />
+                <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
+
+                {/* Tab bar — mobile par horizontally scrollable */}
+                <div
+                  role="tablist"
+                  aria-label="Case sections"
+                  className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+                >
+                  {TABS.map((tab) => {
+                    const active = tab.key === activeTab;
+                    const Icon = tab.icon;
+                    const unseenDot = tab.key === "remarks" && detail.hasUnseenWarning;
+                    return (
+                      <button
+                        key={tab.key}
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => openTab(tab.key)}
+                        className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                          active
+                            ? "bg-primary-600 text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {tab.label}
+                        {unseenDot && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400" />}
+                      </button>
+                    );
+                  })}
                 </div>
-                <CaseSetCard detail={detail} admin={admin} onReload={reload} onMessage={setMessage} />
-                <CaseFilesCard detail={detail} admin={admin} onReload={reload} onMessage={setMessage} />
-                <CasePayments detail={detail} admin={admin} onReload={reload} onUpdated={setDetail} onMessage={setMessage} />
-                <CaseAttestations detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
-                <CaseRemarksCard caseId={detail.id} admin={admin} onMessage={setMessage} onChanged={reload} />
-                <CaseDiscountCard caseId={detail.id} admin={admin} onReload={reload} onMessage={setMessage} />
-                <CaseBonusCard caseId={detail.id} admin={admin} onReload={reload} onMessage={setMessage} />
-                <CaseContacts detail={detail} admin={admin} onReload={reload} onMessage={setMessage} />
-                <CaseExpensesLedger detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
+
+                <div>
+                  {visited.has("overview") && (
+                    <div role="tabpanel" hidden={activeTab !== "overview"}>
+                      <CaseOverviewTab
+                        key={detail.id + detail.clientName + detail.agreedAmount + (detail.courierNumber || "") + (detail.agreedAmountRemarks || "")}
+                        detail={detail}
+                        admin={admin}
+                        onUpdated={setDetail}
+                        onReload={reload}
+                        onMessage={setMessage}
+                      />
+                    </div>
+                  )}
+                  {visited.has("payments") && (
+                    <div role="tabpanel" hidden={activeTab !== "payments"}>
+                      <CasePaymentsTab
+                        key={`${detail.commissionAmount}-${detail.extraSharePercent}-${detail.claimedRemaining}-${detail.claimedRemainingStatus}`}
+                        detail={detail}
+                        admin={admin}
+                        onUpdated={setDetail}
+                        onReload={reload}
+                        onMessage={setMessage}
+                      />
+                    </div>
+                  )}
+                  {visited.has("attestations") && (
+                    <div role="tabpanel" hidden={activeTab !== "attestations"}>
+                      <CaseAttestationsTab
+                        detail={detail}
+                        admin={admin}
+                        onUpdated={setDetail}
+                        onReload={reload}
+                        onMessage={setMessage}
+                        pendingReasons={pendingReasons}
+                        setPendingReasons={setPendingReasons}
+                      />
+                    </div>
+                  )}
+                  {visited.has("files") && (
+                    <div role="tabpanel" hidden={activeTab !== "files"}>
+                      <CaseFilesTab detail={detail} admin={admin} onReload={reload} onMessage={setMessage} />
+                    </div>
+                  )}
+                  {visited.has("remarks") && (
+                    <div role="tabpanel" hidden={activeTab !== "remarks"}>
+                      <CaseRemarksTab caseId={detail.id} admin={admin} onMessage={setMessage} onChanged={reload} />
+                    </div>
+                  )}
+                  {visited.has("history") && (
+                    <div role="tabpanel" hidden={activeTab !== "history"}>
+                      <CaseHistoryTab detail={detail} admin={admin} onUpdated={setDetail} onReload={reload} onMessage={setMessage} />
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>

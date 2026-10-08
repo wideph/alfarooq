@@ -6,6 +6,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, todayPakistan, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 const BONUS_DEDUCT_OPTIONS = ["COMMISSION", "PROFIT"] as const;
 
 function canDecide(session: AdminSession) {

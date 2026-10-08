@@ -5,6 +5,8 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { cleanText, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // Department access links (§N9 — 06_NEW_REQUIREMENTS.md): label + URL per
 // department, shown on login/setup pages. DNS is handled manually by the owner;
 // this table only stores + displays the links.

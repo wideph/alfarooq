@@ -7,6 +7,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // Company-level expenses (rent, utilities, etc.) — BR6 "otherExp".
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");

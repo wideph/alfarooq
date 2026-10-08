@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { formatDate, formatMoney, officeFetch, todayInputDate } from "@/lib/office/client";
 import { BOOKING_OFFICE_TYPE_LABELS, type BookingOfficeType } from "@/lib/office/permissions";
@@ -58,7 +57,7 @@ export default function OfficeFinancePage() {
             <button
               key={p}
               onClick={() => setPreset(p)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${preset === p ? "bg-primary-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}
+              className={`rounded-xl px-4 py-2.5 min-h-[40px] text-sm font-semibold ${preset === p ? "bg-primary-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}
             >
               {p === "today" ? "Aaj" : p === "week" ? "Is hafte" : p === "month" ? "Is mahine" : "Custom"}
             </button>
@@ -68,7 +67,7 @@ export default function OfficeFinancePage() {
               <input type="date" className={input} value={from} onChange={(e) => setFrom(e.target.value)} />
               <span className="text-slate-400">to</span>
               <input type="date" className={input} value={to} onChange={(e) => setTo(e.target.value)} />
-              <button onClick={load} className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white">
+              <button onClick={load} className="rounded-xl bg-primary-600 px-4 py-2.5 min-h-[40px] text-sm font-semibold text-white">
                 Show
               </button>
             </>
@@ -78,9 +77,7 @@ export default function OfficeFinancePage() {
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-          </div>
+          <FinanceSkeleton />
         ) : report ? (
           <>
             <p className="text-sm text-slate-500">
@@ -170,6 +167,43 @@ export default function OfficeFinancePage() {
         ) : null}
       </div>
     </OfficePageFrame>
+  );
+}
+
+function FinanceSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-label="Report load ho rahi hai">
+      <div className="h-4 w-56 rounded bg-slate-200" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="h-3 w-3/4 rounded bg-slate-200" />
+            <div className="mt-2 h-5 w-1/2 rounded bg-slate-100" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="h-4 w-2/3 rounded bg-slate-200" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {[0, 1].map((t) => (
+          <div key={t} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-4">
+              <div className="h-4 w-28 rounded bg-slate-200" />
+            </div>
+            <div className="divide-y divide-slate-100">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-3 py-3">
+                  <div className="h-3.5 w-20 rounded bg-slate-200" />
+                  <div className="h-3.5 flex-1 rounded bg-slate-100" />
+                  <div className="h-3.5 w-14 rounded bg-slate-200" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -12,6 +12,8 @@ import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // Cashier / super admin: status (RECEIVED / NOT_RECEIVED / BOGUS / PENDING),

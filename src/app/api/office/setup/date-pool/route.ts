@@ -6,6 +6,8 @@ import { addDays, cleanText, formatDateOnly, parseDateOnly, toJson } from "@/lib
 import { isPakistanWorkingDay } from "@/lib/office/date-engine";
 import { aiResearchWorkingDates } from "@/lib/office/ai-dates";
 
+export const preferredRegion = ["sin1"];
+
 // Admin-managed working-date pool (§N6) — e.g. the 2019 pool used for random
 // Bord-date picks. The pool holds at most POOL_LIMIT entries per year; the
 // suggest endpoint proposes the next working dates not yet in the pool.

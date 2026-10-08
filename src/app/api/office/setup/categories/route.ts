@@ -5,6 +5,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { toJson, cleanText } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 export async function GET() {
   const { denied } = await guardOffice("office:cases:read");
   if (denied) return denied;

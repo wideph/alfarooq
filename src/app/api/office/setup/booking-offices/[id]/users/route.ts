@@ -4,6 +4,8 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { createOfficeUser, hashOfficeUserPassword, validateOfficeUser } from "@/lib/office/office-users";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // N2: mojooda booking office mein baad mein bhi naya user/role add ho sakta hai

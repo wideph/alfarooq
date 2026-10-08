@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { eventNameForVisitorStatus, sendVisitorSignal, VISITOR_STATUS_OPTIONS } from "@/lib/ad-signals";
 import { requirePermission } from "@/lib/auth";
 
+export const preferredRegion = ["sin1"];
+
 type VisitorWhere = Prisma.VisitorWhereInput;
 
 async function ensureVisitorPermission(permission: "visitors:read" | "visitors:write") {

@@ -9,6 +9,8 @@ import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/office/permissions";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // GET ?officeId=&memberId=&from=&to=&page=
 // Cashier / super admin (office:ledger:read) see every office; a booking
 // office login sees only its own office account.

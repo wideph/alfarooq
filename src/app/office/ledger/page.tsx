@@ -201,8 +201,18 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+              <div className="animate-pulse divide-y divide-slate-100" aria-label="Ledger load ho raha hai">
+                <div className="bg-slate-50 px-3 py-2">
+                  <div className="h-3 w-1/2 rounded bg-slate-200" />
+                </div>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 px-3 py-3">
+                    <div className="h-3.5 w-20 rounded bg-slate-200" />
+                    <div className="h-3.5 flex-1 rounded bg-slate-100" />
+                    <div className="h-3.5 w-16 rounded bg-slate-100" />
+                    <div className="h-3.5 w-14 rounded bg-slate-200" />
+                  </div>
+                ))}
               </div>
             ) : (
               <table className="min-w-full text-sm">
@@ -273,7 +283,7 @@ function LedgerBody({ admin }: { admin: AdminNavUser }) {
 
 function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${active ? "bg-white shadow text-slate-900" : "text-slate-500"}`}>
+    <button onClick={onClick} className={`rounded-lg px-3 py-2 min-h-[40px] text-sm font-semibold ${active ? "bg-white shadow text-slate-900" : "text-slate-500"}`}>
       {label}
     </button>
   );
@@ -281,6 +291,7 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
 
 function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (m: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<Salary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     bookingOfficeId: "",
     memberId: "",
@@ -294,6 +305,7 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
   const load = useCallback(async () => {
     const res = await officeFetch<Salary[]>("/api/office/salaries");
     if (res.ok) setItems(res.data);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -352,6 +364,9 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
         </button>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {loading ? (
+          <TableSkeleton rows={4} />
+        ) : (
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
@@ -390,19 +405,40 @@ function SalariesPanel({ offices, onMessage }: { offices: Office[]; onMessage: (
             ))}
           </tbody>
         </table>
+        )}
       </div>
+    </div>
+  );
+}
+
+function TableSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="animate-pulse divide-y divide-slate-100" aria-label="Load ho raha hai">
+      <div className="bg-slate-50 px-3 py-2">
+        <div className="h-3 w-1/2 rounded bg-slate-200" />
+      </div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 px-3 py-3">
+          <div className="h-3.5 w-20 rounded bg-slate-200" />
+          <div className="h-3.5 flex-1 rounded bg-slate-100" />
+          <div className="h-3.5 w-16 rounded bg-slate-100" />
+          <div className="h-3.5 w-14 rounded bg-slate-200" />
+        </div>
+      ))}
     </div>
   );
 }
 
 function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string, kind?: ToastKind) => void }) {
   const [items, setItems] = useState<CompanyExpense[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ amount: "", description: "", category: "", expenseDate: todayInputDate() });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const res = await officeFetch<CompanyExpense[]>("/api/office/expenses");
     if (res.ok) setItems(res.data);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -442,6 +478,9 @@ function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string, kind?: Toa
         </button>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {loading ? (
+          <TableSkeleton rows={4} />
+        ) : (
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
@@ -475,6 +514,7 @@ function CompanyExpensesPanel({ onMessage }: { onMessage: (m: string, kind?: Toa
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

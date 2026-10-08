@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createSession, parsePermissions } from "@/lib/auth";
 import { ensureAdminFromEnv } from "@/lib/ensure-admin";
 
+export const preferredRegion = ["sin1"];
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();

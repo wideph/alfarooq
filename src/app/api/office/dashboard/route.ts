@@ -4,6 +4,8 @@ import { guardOffice } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
 import { toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // Role-aware counts for /office. Booking office users only see their own
 // office; cashier/attestation/super admin see everything.
 export async function GET() {

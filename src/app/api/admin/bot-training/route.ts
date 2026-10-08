@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const preferredRegion = ["sin1"];
+
 const trainingSelect = {
   id: true,
   courseId: true,

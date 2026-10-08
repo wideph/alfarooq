@@ -13,7 +13,9 @@ import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
-export const maxDuration = 60;
+export const preferredRegion = ["sin1"];
+
+export const maxDuration = 300;
 
 // GET ?status=PENDING&caseId=&page= — cashier queue / lists, scoped by role.
 export async function GET(request: NextRequest) {

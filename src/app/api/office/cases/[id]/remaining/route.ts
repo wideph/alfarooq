@@ -8,6 +8,8 @@ import { loadCaseDetail } from "@/lib/office/case-detail";
 import { computeTotals, recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount } from "@/lib/office/money";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // BR2. Two actions on one route:

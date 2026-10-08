@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { runBotLearning } from "@/lib/bot-learning";
 
+export const preferredRegion = ["sin1"];
+
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {

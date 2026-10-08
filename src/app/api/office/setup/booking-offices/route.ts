@@ -6,6 +6,8 @@ import { toJson, cleanText } from "@/lib/office/serializers";
 import { BOOKING_OFFICE_TYPES, type BookingOfficeType } from "@/lib/office/permissions";
 import { createOfficeUser, hashOfficeUserPassword, validateOfficeUser, type OfficeUserInput } from "@/lib/office/office-users";
 
+export const preferredRegion = ["sin1"];
+
 const officeInclude = {
   members: { orderBy: { createdAt: "asc" as const } },
   commissions: { include: { category: { select: { id: true, name: true } } } },

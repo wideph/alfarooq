@@ -4,6 +4,8 @@ import { guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // Slips live in a private R2 bucket. Anyone who can see the case gets a

@@ -4,6 +4,8 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { toJson, cleanText } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 export async function GET() {
   const { denied } = await guardOffice("office:cases:read");
   if (denied) return denied;

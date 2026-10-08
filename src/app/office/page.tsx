@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Banknote, Briefcase, ClipboardList, Loader2, Plus } from "lucide-react";
+import { Banknote, Briefcase, ClipboardList, Plus } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, officeFetch } from "@/lib/office/client";
@@ -43,18 +43,18 @@ export default function OfficeDashboardPage() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-slate-900">Dashboard</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               {adminCanAny(admin, ["office:cases:write"]) && (
                 <Link
                   href="/office/cases/new"
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white"
                 >
                   <Plus className="w-4 h-4" /> New case
                 </Link>
               )}
               <Link
                 href="/office/cases"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
               >
                 <Briefcase className="w-4 h-4" /> All cases
               </Link>
@@ -64,9 +64,7 @@ export default function OfficeDashboardPage() {
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 
           {!data ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-            </div>
+            <DashboardSkeleton />
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -151,6 +149,45 @@ export default function OfficeDashboardPage() {
         </div>
       )}
     </OfficePageFrame>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse" aria-label="Dashboard load ho raha hai">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="h-3 w-2/3 rounded bg-slate-200" />
+            <div className="mt-3 h-7 w-1/3 rounded bg-slate-200" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 h-4 w-40 rounded bg-slate-200" />
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-6 w-24 rounded-full bg-slate-200" />
+          ))}
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-4">
+          <div className="h-4 w-32 rounded bg-slate-200" />
+        </div>
+        <div className="divide-y divide-slate-100">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 p-4">
+              <div className="space-y-2">
+                <div className="h-4 w-44 rounded bg-slate-200" />
+                <div className="h-3 w-32 rounded bg-slate-100" />
+              </div>
+              <div className="h-5 w-16 rounded-full bg-slate-200" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

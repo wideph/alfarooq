@@ -9,6 +9,8 @@ import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permi
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 import { evaluateCaseCompletion } from "@/lib/office/workflow";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // POST: booking office adds a required attestation to the case.

@@ -7,6 +7,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // BR5 — salaries for SALARY offices' staff (company expense).
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");

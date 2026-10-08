@@ -155,17 +155,43 @@ export async function requireAdmin(): Promise<AdminSession> {
   return session;
 }
 
+// JWTs older than this fall back to a fresh DB check so revoked/deactivated
+// admins are kicked out within 15 minutes without paying a DB round trip on
+// every API call (DB is cross-region from Vercel, ~200ms+ per query).
+const FRESH_SESSION_MAX_AGE_MS = 15 * 60 * 1000;
+
 export async function requirePermission(
   permission: AdminPermission
 ): Promise<AdminSession> {
-  const session = await getFreshAdminSession();
+  // Fast path: validate straight from the signed JWT (no DB query).
+  // The login route embeds role, permissions and bookingOfficeId in the token.
+  const session = await getSession();
   if (!session) {
     throw new Error("Unauthorized");
   }
-  if (!hasPermission(session, permission)) {
+
+  const iat = (session as AdminSession & { iat?: number }).iat;
+  const isFresh =
+    typeof iat === "number" &&
+    Date.now() - iat * 1000 < FRESH_SESSION_MAX_AGE_MS;
+
+  if (isFresh) {
+    if (!hasPermission(session, permission)) {
+      throw new Error("Forbidden");
+    }
+    return session;
+  }
+
+  // Stale token (or missing iat): re-check the admin row once so a
+  // deactivated/revoked account is rejected instead of riding the JWT.
+  const freshSession = await getFreshAdminSession();
+  if (!freshSession) {
+    throw new Error("Unauthorized");
+  }
+  if (!hasPermission(freshSession, permission)) {
     throw new Error("Forbidden");
   }
-  return session;
+  return freshSession;
 }
 
 export async function getFreshAdminSession(): Promise<AdminSession | null> {

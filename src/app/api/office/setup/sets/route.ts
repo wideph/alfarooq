@@ -4,6 +4,8 @@ import { guardOffice, serverError } from "@/lib/office/guard";
 import { toJson } from "@/lib/office/serializers";
 import { dimmedSetNames } from "@/lib/office/rnumber";
 
+export const preferredRegion = ["sin1"];
+
 // Sets of a category with their ordered steps. When ?rollNumber= is given, each
 // set also carries {dimmed, reason} per the r-number suffix rules (§N5).
 export async function GET(request: NextRequest) {

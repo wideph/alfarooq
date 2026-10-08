@@ -3,12 +3,13 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet } from "lucide-react";
+import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet, X } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
-import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
+import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import { CASE_STATUSES } from "@/lib/office/permissions";
+import { useToast } from "@/hooks/useToast";
 import type { AdminPermission } from "@/components/admin/AdminNav";
 
 // §N7 department queues (?dept=). Tab sirf tab dikhta hai jab user ke paas us
@@ -64,6 +65,51 @@ function CasesList() {
   const dept = searchParams.get("dept") || "";
   const history = searchParams.get("history") === "1";
   const page = Number(searchParams.get("page")) || 1;
+
+  // F5: cases list se hi expense entry (admin / office:expenses:write) —
+  // detail page kholne ki zaroorat nahi. Toast popup se success/error.
+  const { showToast, ToastElement } = useToast();
+  const [expenseCase, setExpenseCase] = useState<CaseRow | null>(null);
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({ amount: "", description: "", expenseDate: toInputDate(new Date()) });
+
+  function openExpenseModal(item: CaseRow) {
+    setExpenseForm({ amount: "", description: "", expenseDate: toInputDate(new Date()) });
+    setExpenseCase(item);
+  }
+
+  async function submitExpense() {
+    if (!expenseCase) return;
+    const amount = expenseForm.amount.trim();
+    if (!amount || Number(amount) <= 0) {
+      showToast("Amount sahi nahi hai", "error");
+      return;
+    }
+    if (!expenseForm.description.trim()) {
+      showToast("Expense ki tafseel likhein", "error");
+      return;
+    }
+    if (!expenseForm.expenseDate) {
+      showToast("Expense date zaroori hai", "error");
+      return;
+    }
+    setExpenseSaving(true);
+    const res = await officeFetch(`/api/office/cases/${expenseCase.id}/expenses`, {
+      method: "POST",
+      json: {
+        amount,
+        description: expenseForm.description.trim(),
+        expenseDate: expenseForm.expenseDate,
+      },
+    });
+    setExpenseSaving(false);
+    if (res.ok) {
+      showToast("Expense add ho gaya", "success");
+      setExpenseCase(null);
+    } else {
+      showToast(res.error, "error");
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -263,13 +309,14 @@ function CasesList() {
                           {item.createdAt ? formatDate(item.createdAt) : ""}
                           {item.setName ? ` · Set: ${item.setName}` : ""}
                         </p>
-                        {(admin.role === "admin" || admin.role === "cashier") && (
-                          <Link
-                            href={`/office/cases/${item.id}#expenses`}
+                        {(admin.role === "admin" || adminCanAny(admin, ["office:expenses:write"])) && (
+                          <button
+                            type="button"
+                            onClick={() => openExpenseModal(item)}
                             className="mt-1 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-primary-300 hover:text-primary-700"
                           >
                             <Wallet className="w-3 h-3" /> Expense
-                          </Link>
+                          </button>
                         )}
                       </td>
                       <td className="px-3 py-3 align-top">
@@ -348,6 +395,85 @@ function CasesList() {
               </button>
             </div>
           )}
+
+          {expenseCase && (
+            <div
+              className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4"
+              onClick={() => !expenseSaving && setExpenseCase(null)}
+            >
+              <div
+                className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Expense add karein</h3>
+                    <p className="text-xs text-slate-500">
+                      Case {expenseCase.caseNumber}
+                      {expenseCase.clientName ? ` · ${expenseCase.clientName}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpenseCase(null)}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    aria-label="Band karein"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Amount (Rs) *</label>
+                  <input
+                    className={`${input} w-full`}
+                    inputMode="decimal"
+                    placeholder="Maslan: 500"
+                    value={expenseForm.amount}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Tafseel *</label>
+                  <input
+                    className={`${input} w-full`}
+                    placeholder="Expense ki tafseel likhein"
+                    value={expenseForm.description}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Expense date *</label>
+                  <input
+                    type="date"
+                    className={`${input} w-full`}
+                    value={expenseForm.expenseDate}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={expenseSaving}
+                    onClick={() => setExpenseCase(null)}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={expenseSaving}
+                    onClick={submitExpense}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {expenseSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Save expense
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ToastElement}
         </div>
       )}
     </OfficePageFrame>

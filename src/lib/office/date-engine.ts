@@ -257,9 +257,10 @@ export async function saudMbcDate(specialMoofaDate: Date, db: Db = prisma): Prom
   );
 }
 
-// Moofa Saud: Saud MBC + 4 → first Saudi working day on Sun/Mon/Tue/Wed.
+// Moofa Saud: Saud MBC + 4 → first Saudi working day on Mon/Tue/Wed
+// (Sunday HATA diya gaya — sirf Monday, Tuesday, Wednesday allowed).
 export async function moofaSaudDate(saudMbc: Date, db: Db = prisma): Promise<Date> {
-  return firstWorkingDayAfterOffset(saudMbc, 4, { country: "SA", allowedWeekdays: [0, 1, 2, 3] }, db);
+  return firstWorkingDayAfterOffset(saudMbc, 4, { country: "SA", allowedWeekdays: [1, 2, 3] }, db);
 }
 
 export function formatDdMmYy(date: Date): string {

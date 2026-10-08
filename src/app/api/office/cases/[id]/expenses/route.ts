@@ -7,6 +7,8 @@ import { loadCaseDetail } from "@/lib/office/case-detail";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // Case-level expenses (BR4.2 profit calc, BR6 income report).

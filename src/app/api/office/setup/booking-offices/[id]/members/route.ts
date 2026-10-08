@@ -5,6 +5,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parsePercent } from "@/lib/office/money";
 import { toJson, cleanText } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {

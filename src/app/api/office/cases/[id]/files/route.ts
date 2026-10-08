@@ -13,7 +13,9 @@ import {
   type CaseDepartment,
 } from "@/lib/office/workflow";
 
-export const maxDuration = 60;
+export const preferredRegion = ["sin1"];
+
+export const maxDuration = 300;
 
 type RouteParams = { params: Promise<{ id: string }> };
 

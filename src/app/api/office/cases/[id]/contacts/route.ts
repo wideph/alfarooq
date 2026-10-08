@@ -5,6 +5,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { cleanText } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // R1.3: booking office can add multiple contact numbers at any stage.

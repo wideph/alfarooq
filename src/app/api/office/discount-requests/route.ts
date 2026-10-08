@@ -7,6 +7,8 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, round2, toNumber } from "@/lib/office/money";
 import { todayPakistan, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 const DEDUCT_OPTIONS = ["COMMISSION", "PROFIT", "PARTIAL"] as const;
 
 function canDecide(session: AdminSession) {

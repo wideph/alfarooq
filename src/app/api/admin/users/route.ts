@@ -10,6 +10,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isOfficeRole } from "@/lib/office/permissions";
 
+export const preferredRegion = ["sin1"];
+
 const ASSIGNABLE_ROLES = ["sub_admin", "cashier", "attestation", "booking_office"] as const;
 type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 

@@ -7,6 +7,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 // Office-level general expenses (OfficeExpense) — docs/office-module/06_NEW_REQUIREMENTS.md §N8.
 // Accounting per booking office type (LedgerEntry written in the SAME transaction):
 //   FIXED_COMMISSION → EXPENSE DEBIT on the office ledger (memberId when given) so it

@@ -678,3 +678,212 @@ Next step for the next agent:
   pause behavior. Vercel par `after()` fluid-compute ke sath kaam karta hai —
   self-hosted dev server par bhi chale ga, lekin background completion ki
   guarantee sirf Vercel par hai.
+
+
+---
+
+## 2026-10 (functional fixes wave — office module owner brief F1–F6)
+
+Scope: sirf owned files — src/app/api/office/**, src/lib/office/date-engine.ts,
+src/lib/office/workflow.ts (koi change nahi), src/app/office/cases/page.tsx,
+src/app/office/cases/new/page.tsx, ye log. Commit NAHI kiya.
+
+Done:
+- F1 admin status change: `cases/[id]/status/route.ts` — role==="admin" ab
+  PATCH se case ko KISI bhi valid CASE_STATUSES par set kar sakta hai (CANCELLED
+  bhi), lekin note/remarks wajah LAZMI hai (warna 400 "Status change ki wajah
+  (note/remarks) lazmi hai"); note OfficeAuditLog ke `after.note` mein store
+  hota hai. Baqi roles ka behavior unchanged (CANCELLED ab bhi admin-only,
+  attestation office forward flow wesa hi).
+- F2 complete-all: NAYA endpoint
+  `POST /api/office/cases/[id]/attestations/complete-all`
+  (`attestations/complete-all/route.ts`). Guard: office:cases:read session +
+  office:atta:write YA office:attestation:write (admin role dono cover).
+  Pehle ATTA department ka stepKey="FINAL" CaseFile check — na ho to 400
+  "Pehle final file upload karein". Phir ek transaction ({maxWait:10000,
+  timeout:30000}) mein tamam CaseAttestation rows status=DONE (completedDate
+  sirf jahan null), phir evaluateCaseCompletion(id, tx) jo FINAL file dekh kar
+  status=COMPLETED karta hai. Audit: action "case.attestations.complete-all".
+  Response: `{ status, attestations }` (attestations with attestationType).
+- F3 Moofa Saud Sunday HATA DIYA: date-engine.ts `moofaSaudDate` ab sirf
+  Mon/Tue/Wed allow karta hai (`allowedWeekdays: [1, 2, 3]` — pehle
+  [0,1,2,3] Sun..Wed tha). Comment bhi update. Baqi engine identical.
+- F4 category lazmi: cases POST mein categoryId ab REQUIRED — 400 "Category
+  select karna lazmi hai"; phir exists + isActive validate ("Category nahi
+  mili ya inactive hai"). new/page.tsx: label "Category *", `required`,
+  amber border jab khali, aur submit se pehle client-side check (same Roman-
+  Urdu message).
+- F5 expense modal on cases LIST: page.tsx ka Expense quick action ab detail
+  page link ki jagah inline MODAL kholta hai — amount, description,
+  expenseDate (default aaj) → POST existing `/api/office/cases/[id]/expenses`
+  (JSON {amount, description, expenseDate}); success/error Toast popup
+  (`useToast` + `components/Toast.tsx` reuse). Visibility sirf role==="admin"
+  ya office:expenses:write permission (cashier preset mein hai — covered).
+- F6 performance: `export const preferredRegion = ["sin1"];` tamam 38 office
+  API route files mein (imports ke turant baad) — DB Supabase ap-southeast-1
+  ke qareeb. maxDuration=300: files (60→300, video/pdf upload) aur
+  payments/route.ts (60→300); set/generate-dates/payments-[id]/date-pool
+  pehle se 300 the. Cases list API trim: GET ab local slim include use karta
+  hai — attestations ka sirf {id,status,completedDate,type.name} select,
+  payments ke sirf totals wale 4 scalar fields, expenses/ledger kabhi nahi;
+  response rows se raw `payments` array hata diya (totals computed rehta hai;
+  list page sirf totals/badges use karta hai — CaseRow shape compatible,
+  `payments` type pehle bhi optional nahi tha lekin list page use nahi karta
+  tha). POST create response unchanged (caseListInclude).
+Files touched: cases/route.ts, cases/[id]/status/route.ts,
+  cases/[id]/attestations/complete-all/route.ts (new),
+  cases/[id]/files/route.ts, payments/route.ts, + preferredRegion insert in
+  remaining 33 office route files, src/lib/office/date-engine.ts,
+  src/app/office/cases/page.tsx, src/app/office/cases/new/page.tsx, ye log.
+Verification (ENV RULE — repo par npm install NAHI):
+- Fresh copy /tmp/func (rsync sans node_modules/.git/.next), npm install
+  --no-audit --no-fund --ignore-scripts OK, npx prisma generate OK,
+  `npm run typecheck` EXIT 0 (0 errors). Note: dusre agent ka payments
+  page.tsx mid-edit ek transient VerifyResult error dikhaya tha — unka fix
+  aane ke baad re-sync karke dobara typecheck green. NOT committed.
+Next step for the next agent:
+- Live smoke: admin status change with note (audit log mein note), atta
+  complete-all button flow (FINAL file ke baghair 400), list-page expense
+  modal (admin + cashier), moofaSaud regenerated dates Mon–Wed only.
+
+## [2026-10-08 20:05] Agent: Kimi (perf engineer, subagent) — Wave 9: admin panel speed (region pinning + JWT fast auth + session cache + mobile/skeleton pass)
+
+Task: owner complaint "har button/option par click karen to bahot time wasting
+kerta hai" — DB Supabase pooler ap-southeast-1, Vercel functions US-East → har
+DB round trip ~200ms+ aur har request/page par multiple. Missions P1–P5 (sirf
+apni owned files; api/office/** aur office cases doosre agents ke paas).
+
+Done:
+- P1 region pinning: `export const preferredRegion = ["sin1"];` tamam 8 owned
+  route files mein (api/auth/login, logout, me + api/admin/bot-conversations,
+  bot-training, bot-training/learn, users, visitors) — ab function Singapore
+  ke qareeb chalegi, DB latency ~200ms+ → single-digit ms expected.
+- P2 per-request DB hit khatam: `requirePermission` (src/lib/auth.ts) ab JWT
+  session (getSession) se validate karta hai BINA prisma query ke — login
+  route pehle se role/permissions/bookingOfficeId JWT mein embed karta tha
+  (verify kiya). Safety valve: JWT `iat` 15 minute se purana ho (ya iat
+  missing) to ek dafa fresh DB lookup (getFreshAdminSession) — isActive=false
+  ya permissions revoke par 401/403 pehle jaisa hi. Caller behavior identical
+  (same throw "Unauthorized"/"Forbidden", admin role bypass unchanged).
+  `getFreshAdminSession` /api/auth/me ke liye waise hi (DB hit allowed).
+  Impact: har admin/office API call par ~1 DB round trip (200ms+) bacha.
+- P3 client waterfalls: `src/lib/admin-session-client.ts` mein module-level
+  60s TTL cache + in-flight dedup PEHLE SE maujood tha (verify kiya);
+  logout invalidation (clearCachedAdminSession) admin/page.tsx,
+  AdminPageFrame, OfficePageFrame sab mein wired hai — koi page /api/auth/me
+  minute mein ek se zyada fetch nahi karta. No change needed.
+- P4 mobile-friendly pass (owned pages): office dashboard header buttons ab
+  mobile par full-width stacked (`flex-col sm:flex-row`); admin/page.tsx ke
+  Q&A action rows (Publish Answer/Delete, Update/Cancel, Add Question/Cancel)
+  aur course modal footer mobile par full-width stack; payments verify buttons
+  + ledger/finance tab & preset buttons min 40px touch target. Grids/tables
+  pehle se stack + overflow-x-auto the (verified); AdminNav/OfficeNav 360px
+  par icon-only + overflow-x-auto theek (verified, no change).
+- P5 loading feel: blank/spinner areas ko animate-pulse skeletons se replace —
+  office dashboard (4 stat cards + status pills + recent-case rows),
+  ledger main table (skeleton rows), Salaries aur CompanyExpenses panels
+  (naya loading state + skeleton rows — pehle fetch ke doran ghalat "Koi
+  entry nahi" flash hota tha), finance report (stat grid + dono table
+  skeletons), payments queue (3 skeleton cards). OfficePageFrame loading par
+  AdminPageFrame jaisa nav skeleton. Logic/permissions outcomes zero change.
+Files touched: src/lib/auth.ts, src/app/api/auth/{login,logout,me}/route.ts,
+  src/app/api/admin/{bot-conversations,bot-training,bot-training/learn,users,
+  visitors}/route.ts, src/app/admin/page.tsx, src/app/office/page.tsx,
+  src/app/office/ledger/page.tsx, src/app/office/finance/page.tsx,
+  src/app/office/payments/page.tsx, src/components/office/OfficePageFrame.tsx,
+  docs/office-module/05_AGENT_LOG.md (this entry).
+Verification (ENV RULE — repo mein npm install NAHI):
+- /tmp/perf fresh rsync (sans node_modules/.git) + `npm install --no-audit
+  --no-fund --ignore-scripts` OK, `npx prisma generate` OK,
+  `npm run typecheck` EXIT 0 (0 errors), ESLint tamam 21 touched files par
+  clean (0 warnings/errors). NOT committed.
+Next step for the next agent:
+- Deploy ke baad Vercel function logs mein region confirm karein (sin1) aur
+  admin panel TTFB compare karein. 15-min stale-JWT fallback ka smoke test:
+  kisi sub-admin ko deactivate kar ke ~15 min baad uske API calls 401 hone
+  chahiye (pehle foran nahi — documented trade-off).
+## [2026-10-08 21:30] Agent: Kimi (senior UI/UX engineer, subagent) — Wave 10: case detail page WORLD-CLASS redesign (owner: "bahot gatya UI, bahot complicated")
+
+Task: owner verdict — case detail page endless stacked cards, complicated.
+Goal: kamal ka UI, thori space mein maximum kaam, 100% functionality survive.
+Owned files only (page.tsx + components/office/case/** + new components/ui/**);
+koi API / lib / nav file touch nahi. ExtraAmountPopup import path same, file
+unedited.
+
+New structure (page.tsx rewrite):
+- Sticky top command bar (CaseCommandBar): back button, case number + URGENT
+  badge + colored status pill + printed chip, client name, category / set /
+  board-attas chips; right: role-aware actions (urgent toggle, extra-amount
+  decide button + ExtraAmountPopup).
+- CaseStepper: New → Payment → File → Printing → Attestation → Completed →
+  Delivered, case.status se derived, done = emerald check, current = primary
+  ring; vertical on mobile; CANCELLED par red notice.
+- CaseWarningStrip (sirf jab warning ho): set-missing red banner (+ deep-link
+  button attestations tab), unseen-remarks amber banner (detail.hasUnseenWarning,
+  + remarks tab deep-link), generate-dates pendingReasons amber box (state page
+  par lift ki — pehle CaseSetCard local thi).
+- Tabbed body (6 tabs, lazy-mount + keep-mounted so internal state bache):
+  Overview (client info + edit + picture viewer, money stat tiles + agreed
+  remarks, contacts/addresses compact inline add), Payments (claimed-remaining
+  accept/edit strip, add-payment form + verify queue + slip links, commission
+  change + extra-share % + remaining claim), Attestations & Dates (set picker
+  dimmed logic, generate-dates, merged steps table: status select / sched+done
+  dates / atta forward buttons / remove-PENDING / add-attestation, printed
+  toggle + manual case status, expected-printing tile), Files (per-department
+  collapsible sections, upload rows, ATTA per-step + prominent FINAL uploader,
+  in-app CaseFileViewer, NAYA green "Saari attestations complete karein" button
+  — confirm dialog → POST /api/office/cases/[id]/attestations/complete-all,
+  error par API ka toast, success par reload; visible atta/attestation:write/
+  admin), Remarks (chat-style bubbles, targets chips, mark-seen), History /
+  Finance (profit finalize alert, expenses editor id="expenses" anchor same,
+  ledger table desktop + card list mobile, audit log admin, discount + bonus
+  request/decide modals).
+- FilingCaseView bhi same design language mein (sticky mini command bar +
+  SectionCards + skeleton) — limited payload waisa hi.
+- New presentational primitives: src/components/ui/SectionCard.tsx (icon +
+  title + count badge + actions), StatTile.tsx, EmptyState.tsx (Roman-Urdu
+  hints), Skeleton.tsx (SkeletonRows/SkeletonTiles — spinner ki jagah).
+- Mobile-first: tab bar horizontally scrollable, min 40px touch targets,
+  tables → flex/card lists, grids stack. Palette same (white cards, slate
+  borders, primary-600, emerald/red/amber semantics), Lucide only, no emoji.
+
+Functionality survival (checklist — sab verified grep + line-by-line port):
+urgent toggle, extra-amount decide popup (header + payments flow dono),
+remaining accept/edit + booking claim, commission change w/ reason + extra
+share % + half/final credited info + commission==0 hint, profit-share finalize
+alert, case info edit (multipart picture PATCH, categories lazy fetch, r/reg
+lazmi validation), agreed-amount remarks, contacts/addresses add/remove,
+payments add (multipart + slip) + verify received/not-received/bogus + date/
+amount inline edit + delete rules + needsExtraDecision popup, set select
+(dimmed + reason) + generate-dates + pendingReasons, printed toggle + manual
+status (CANCELLED admin-only), per-attestation status/dates/notes display +
+atta forward-only buttons + remove PENDING + add attestation, board attas
+chips, expected printing date, files 4 departments (printing sees filing
+files, courier sees printing+atta in viewer) + upload + FINAL + delete rules,
+remarks list/create/mark-seen, expenses add/remove + total, ledger entries,
+audit log, discount request/decide (COMMISSION/PROFIT/PARTIAL), bonus
+request/decide. Tamam toast messages Roman-Urdu verbatim. Single detail fetch
+jaisa pehle; files/remarks/discount/bonus fetches tab first-open par (lazy),
+koi naya waterfall nahi.
+Deleted (logic upar tabs mein port): CaseHeader, CaseInfoCard, CaseMoneyCard,
+CasePayments, CaseAttestations, CaseSetCard, CaseFilesCard, CaseRemarksCard,
+CaseContacts, CaseExpensesLedger, CaseDiscountCard, CaseBonusCard.
+CaseFileViewer unchanged.
+
+Files touched: src/app/office/cases/[id]/page.tsx,
+  src/components/office/case/{CaseCommandBar,CaseStepper,CaseWarningStrip,
+  CaseOverviewTab,CasePaymentsTab,CaseAttestationsTab,CaseFilesTab,
+  CaseRemarksTab,CaseHistoryTab,FilingCaseView}.tsx (new/rewritten),
+  12 purane card files delete, src/components/ui/{SectionCard,StatTile,
+  EmptyState,Skeleton}.tsx (new), docs/office-module/05_AGENT_LOG.md (this entry).
+Verification (ENV RULE — repo mein npm install NAHI):
+- /tmp/redesign fresh rsync (sans node_modules/.git) + `npm install --no-audit
+  --no-fund --ignore-scripts` OK, `npx prisma generate` OK,
+  `npm run typecheck` EXIT 0, ESLint (legacy .eslintrc.json) page + case/** +
+  ui/** par EXIT 0 (0 errors, 0 warnings). NOT committed.
+Next step for the next agent:
+- Browser smoke test har role se (booking/cashier/attestation/atta/courier/
+  filing): tab switches, stepper mapping (IN_PROCESS/PRINTED → Printing/
+  Attestation), complete-all button (API route dusre agent ki — FINAL file
+  missing par error toast, success par COMPLETED), mobile 360px par tab scroll
+  + command bar wrap.

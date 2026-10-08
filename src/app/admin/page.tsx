@@ -890,19 +890,19 @@ export default function AdminDashboard() {
                                   <option value="training">Only bot training</option>
                                 </select>
                                 <p className="text-xs text-slate-400">Optional: Answer mein PDF ya image attach karein</p>
-                                <div className="flex gap-2 mt-2">
+                                <div className="flex flex-col sm:flex-row gap-2 mt-2">
                                   <button
                                     onClick={() => answerUserQuestion(q.id)}
                                     disabled={
                                       (!userAnswerForm[q.id]?.trim() && !userAnswerMediaFile) || saving
                                     }
-                                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                    className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
                                   >
                                     <Save className="w-3.5 h-3.5" /> Publish Answer
                                   </button>
                                   <button
                                     onClick={() => deleteUserQuestion(q.id)}
-                                    className="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"
+                                    className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"
                                   >
                                     Delete
                                   </button>
@@ -987,7 +987,7 @@ export default function AdminDashboard() {
                                     Current media remove karein
                                   </button>
                                 )}
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                   <button
                                     onClick={updateAnsweredUserQuestion}
                                     disabled={
@@ -997,7 +997,7 @@ export default function AdminDashboard() {
                                         !(editingAnsweredUser.answerMediaFilename && !removeAnsweredUserMedia)) ||
                                       saving
                                     }
-                                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1"
+                                    className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-1"
                                   >
                                     <Save className="w-3.5 h-3.5" /> Update
                                   </button>
@@ -1008,7 +1008,7 @@ export default function AdminDashboard() {
                                     setAnsweredUserMediaFile(null);
                                     setRemoveAnsweredUserMedia(false);
                                   }}
-                                    className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm"
+                                    className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-lg border border-slate-200 text-slate-600 text-sm"
                                   >
                                     Cancel
                                   </button>
@@ -1149,7 +1149,7 @@ export default function AdminDashboard() {
                         </button>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <button
                         onClick={saveQuestion}
                         disabled={
@@ -1159,7 +1159,7 @@ export default function AdminDashboard() {
                             !(editingQuestion?.answerMediaFilename && !removeQaMedia)) ||
                           saving
                         }
-                        className="px-6 py-2.5 rounded-xl bg-accent-600 text-white font-medium hover:bg-accent-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-accent-600 text-white font-medium hover:bg-accent-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                       >
                         {saving ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -1180,7 +1180,7 @@ export default function AdminDashboard() {
                             setQaMediaFile(null);
                             setRemoveQaMedia(false);
                           }}
-                          className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
                         >
                           Cancel
                         </button>
@@ -1315,20 +1315,20 @@ export default function AdminDashboard() {
                 </span>
               </label>
             </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 p-5 border-t border-slate-100">
               <button
                 onClick={() => {
                   setShowCourseForm(false);
                   setEditingCourse(null);
                 }}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 onClick={saveCourse}
                 disabled={!courseForm.title.trim() || !courseForm.description.trim() || saving}
-                className="px-5 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save

@@ -81,6 +81,11 @@ export default function NewCasePage() {
       setError("r-number ya reg-number lazmi hai (in men se aik lazmi hai)");
       return;
     }
+    // F4: category lazmi hai — submit se pehle client-side check.
+    if (!form.categoryId) {
+      setError("Category select karna lazmi hai");
+      return;
+    }
     setSaving(true);
     // Multipart (client picture ki waja se) — parseCaseInput array fields ko
     // JSON strings ki soorat mein accept karta hai.
@@ -138,9 +143,14 @@ export default function NewCasePage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Category</label>
-                <select className={input} value={form.categoryId} onChange={(e) => pickCategory(e.target.value)}>
-                  <option value="">—</option>
+                <label className="block text-xs text-slate-500 mb-1">Category *</label>
+                <select
+                  required
+                  className={`${input} ${form.categoryId ? "" : "border-amber-300"}`}
+                  value={form.categoryId}
+                  onChange={(e) => pickCategory(e.target.value)}
+                >
+                  <option value="">Select karein…</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

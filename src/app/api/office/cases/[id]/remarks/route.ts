@@ -11,6 +11,8 @@ import {
   type RemarkTarget,
 } from "@/lib/office/workflow";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 async function creatorNames(ids: string[]) {

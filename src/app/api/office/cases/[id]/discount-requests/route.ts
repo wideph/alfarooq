@@ -6,6 +6,8 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, toJson } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // GET: discount requests of a case (anyone who can see the case).

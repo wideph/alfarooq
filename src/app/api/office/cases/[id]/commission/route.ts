@@ -8,6 +8,8 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount, parsePercent } from "@/lib/office/money";
 import { cleanText } from "@/lib/office/serializers";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // BR3.2 (reduce commission) and BR3.6 (extra-amount share %). Cashier / super admin.

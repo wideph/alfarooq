@@ -5,6 +5,8 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { finalizeProfitShare } from "@/lib/office/profit-share";
 
+export const preferredRegion = ["sin1"];
+
 type RouteParams = { params: Promise<{ id: string }> };
 
 // BR4.3 / 4.4 — finalize or re-finalize profit share for a PROFIT_SHARE case.

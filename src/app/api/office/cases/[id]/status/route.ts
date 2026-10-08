@@ -5,6 +5,9 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { CASE_STATUSES, type CaseStatus } from "@/lib/office/permissions";
+import { cleanText } from "@/lib/office/serializers";
+
+export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -18,6 +21,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!item) return notFound("Case nahi mila");
     const body = await request.json();
     const data: { status?: string; isPrinted?: boolean; printedAt?: Date | null } = {};
+    // Super admin (F1) kisi bhi CASE_STATUSES par ja sakta hai — lekin wajah
+    // (note/remarks) lazmi hai; ye note OfficeAuditLog ke after.note mein
+    // store hota hai. Baqi roles ke rules neechy wese hi hain.
+    let adminNote: string | null = null;
 
     if (body.isPrinted !== undefined) {
       const isPrinted = Boolean(body.isPrinted);
@@ -29,7 +36,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.status !== undefined) {
       const status = body.status as CaseStatus;
       if (!CASE_STATUSES.includes(status)) return badRequest("Status sahi nahi hai");
-      if (status === "CANCELLED" && session.role !== "admin") return forbidden("Case sirf super admin cancel kar sakta hai");
+      if (session.role === "admin") {
+        adminNote = cleanText(body.note ?? body.remarks, 500);
+        if (!adminNote) return badRequest("Status change ki wajah (note/remarks) lazmi hai");
+      } else if (status === "CANCELLED") {
+        return forbidden("Case sirf super admin cancel kar sakta hai");
+      }
       data.status = status;
       if (status === "PRINTED" && !item.isPrinted) {
         data.isPrinted = true;
@@ -45,7 +57,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       entity: "Case",
       entityId: id,
       before: { status: item.status, isPrinted: item.isPrinted },
-      after: data,
+      after: { ...data, ...(adminNote ? { note: adminNote } : {}) },
     });
     return NextResponse.json(await loadCaseDetail(session, id));
   } catch (error) {

@@ -8,6 +8,8 @@ import {
   resolvePakistanWorkingDay,
 } from "@/lib/office/working-day";
 
+export const preferredRegion = ["sin1"];
+
 export const maxDuration = 30;
 
 // GET: cached working-day rows (newest first) for the setup panel.

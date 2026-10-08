@@ -18,7 +18,29 @@ import {
   unseenWarningCaseIds,
 } from "@/lib/office/workflow";
 
+export const preferredRegion = ["sin1"];
+
 const PAGE_SIZE = 50;
+
+// F6: list rows ke liye sirf zaroori fields — attestations ka slim select
+// (list page ke badges sirf id/status/completedDate/type-name use karte hain),
+// payments ke sirf totals wale scalar fields. expenses/ledger kabhi include
+// nahi hote. Payload mein raw payments nahi bhejte (totals kaafi hai).
+const caseListRowInclude = {
+  bookingOffice: { select: { id: true, name: true, type: true } },
+  category: { select: { id: true, name: true } },
+  set: { select: { id: true, name: true } },
+  attestations: {
+    orderBy: { order: "asc" as const },
+    select: {
+      id: true,
+      status: true,
+      completedDate: true,
+      attestationType: { select: { name: true } },
+    },
+  },
+  payments: { select: { id: true, amount: true, status: true, paymentDate: true } },
+} satisfies Prisma.CaseInclude;
 
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
@@ -57,7 +79,7 @@ export async function GET(request: NextRequest) {
       orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: caseListInclude,
+      include: caseListRowInclude,
     }),
     prisma.case.count({ where }),
   ]);
@@ -74,7 +96,12 @@ export async function GET(request: NextRequest) {
   );
 
   return NextResponse.json({
-    items: items.map((item) => serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) })),
+    items: items.map((item) => {
+      const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
+      // F6: raw payment rows list payload mein nahi — totals pehle se computed.
+      delete row.payments;
+      return row;
+    }),
     total,
     page,
     pageSize: PAGE_SIZE,
@@ -106,11 +133,11 @@ export async function POST(request: NextRequest) {
     const registrationNumber = cleanText(body.registrationNumber, 80);
     if (!rollNumber && !registrationNumber) return badRequest("r-number ya reg-number lazmi hai");
 
-    const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
-    if (categoryId) {
-      const category = await prisma.caseCategory.findUnique({ where: { id: categoryId } });
-      if (!category || !category.isActive) return badRequest("Category nahi mili");
-    }
+    // Category ab LAZMI hai (F4) — select karna zaroori, aur active honi chahiye.
+    const categoryId = typeof body.categoryId === "string" ? body.categoryId.trim() : "";
+    if (!categoryId) return badRequest("Category select karna lazmi hai");
+    const category = await prisma.caseCategory.findUnique({ where: { id: categoryId } });
+    if (!category || !category.isActive) return badRequest("Category nahi mili ya inactive hai");
 
     const agreedAmount =
       body.agreedAmount === undefined || body.agreedAmount === "" ? null : parseAmount(body.agreedAmount);

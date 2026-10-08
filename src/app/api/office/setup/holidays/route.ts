@@ -5,6 +5,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 import { HOLIDAY_SCOPES, type HolidayScope } from "@/lib/office/date-engine";
 
+export const preferredRegion = ["sin1"];
+
 // Admin-managed holiday / closure table (§N6). Scopes:
 // PAKISTAN | ISLAMABAD | QUETTA | GUJRAT | LAHORE | EMBASSIES_ISB | SAUDI
 
