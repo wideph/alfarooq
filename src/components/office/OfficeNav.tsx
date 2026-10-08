@@ -1,13 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Banknote,
   BookOpenCheck,
   Briefcase,
+  ExternalLink,
   Home,
   LayoutDashboard,
+  Link2,
   LogOut,
   PieChart,
   Settings2,
@@ -52,6 +55,19 @@ export default function OfficeNav({
   const visibleItems = navItems.filter((item) => adminCanAny(admin, item.permissions));
   const isSuperAdmin = admin?.role === "admin";
 
+  // §N9 — department access links, kisi bhi office user ke liye.
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [departmentLinks, setDepartmentLinks] = useState<
+    Array<{ id: string; label: string; url: string }>
+  >([]);
+
+  useEffect(() => {
+    fetch("/api/office/setup/department-links")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDepartmentLinks(Array.isArray(data) ? data : []))
+      .catch(() => setDepartmentLinks([]));
+  }, []);
+
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -87,6 +103,56 @@ export default function OfficeNav({
                 </Link>
               );
             })}
+
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                title="Links"
+                onClick={() => setLinksOpen((open) => !open)}
+                className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
+                  linksOpen
+                    ? "bg-primary-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <Link2 className="h-4 w-4" />
+                <span className="hidden md:inline">Links</span>
+              </button>
+              {linksOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close links menu"
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setLinksOpen(false)}
+                  />
+                  <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                    <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Department Links
+                    </p>
+                    {departmentLinks.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-slate-400">
+                        Koi active link nahi — admin se hasil karein
+                      </p>
+                    ) : (
+                      departmentLinks.map((link) => (
+                        <a
+                          key={link.id}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setLinksOpen(false)}
+                          className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="truncate">{link.label}</span>
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </nav>
 
           <div className="ml-1 flex shrink-0 items-center gap-1">

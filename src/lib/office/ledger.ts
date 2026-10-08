@@ -35,6 +35,22 @@ export async function memberBalances(officeId: string) {
   return Object.fromEntries(Object.entries(balances).map(([id, value]) => [id, toNumber(value)]));
 }
 
+// Single member balance (Σ CREDIT − Σ DEBIT), optionally scoped to one office.
+// Used by GET /api/office/ledger?memberId= for the per-user ledger (§N9).
+export async function memberBalance(memberId: string, officeId?: string) {
+  const rows = await prisma.ledgerEntry.groupBy({
+    by: ["direction"],
+    where: { memberId, ...(officeId ? { bookingOfficeId: officeId } : {}) },
+    _sum: { amount: true },
+  });
+  let total = new Prisma.Decimal(0);
+  for (const row of rows) {
+    const amount = row._sum.amount || new Prisma.Decimal(0);
+    total = row.direction === "CREDIT" ? total.plus(amount) : total.minus(amount);
+  }
+  return toNumber(total);
+}
+
 export async function totalLiabilities() {
   const rows = await prisma.ledgerEntry.groupBy({ by: ["direction"], _sum: { amount: true } });
   let total = new Prisma.Decimal(0);

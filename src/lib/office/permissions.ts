@@ -2,7 +2,15 @@ import type { AdminPermission } from "@/lib/auth";
 
 // Keep this file free of server-only imports: it is used by client components too.
 
-export const OFFICE_ROLES = ["cashier", "attestation", "booking_office"] as const;
+export const OFFICE_ROLES = [
+  "cashier",
+  "attestation",
+  "booking_office",
+  "filing",
+  "printing",
+  "atta",
+  "courier",
+] as const;
 export type OfficeRole = (typeof OFFICE_ROLES)[number];
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -11,6 +19,10 @@ export const ROLE_LABELS: Record<string, string> = {
   cashier: "Cashier",
   attestation: "Attestation office",
   booking_office: "Booking office",
+  filing: "Filing department",
+  printing: "Printing department",
+  atta: "Atta department",
+  courier: "Courier department",
 };
 
 export function isOfficeRole(role?: string | null): role is OfficeRole {
@@ -28,7 +40,16 @@ export const ROLE_PRESETS: Record<OfficeRole, AdminPermission[]> = {
     "office:expenses:write",
   ],
   attestation: ["office:cases:read", "office:attestation:write"],
-  booking_office: ["office:cases:read", "office:cases:write", "office:payments:submit"],
+  booking_office: [
+    "office:cases:read",
+    "office:cases:write",
+    "office:payments:submit",
+    "office:remarks:write",
+  ],
+  filing: ["office:cases:read", "office:filing:write", "office:remarks:write"],
+  printing: ["office:cases:read", "office:printing:write", "office:remarks:write"],
+  atta: ["office:cases:read", "office:atta:write", "office:remarks:write"],
+  courier: ["office:cases:read", "office:courier:write", "office:remarks:write"],
 };
 
 export const OFFICE_PERMISSION_GROUPS: Array<{
@@ -42,6 +63,18 @@ export const OFFICE_PERMISSION_GROUPS: Array<{
     permissions: [
       { value: "office:cases:read", label: "Cases dekhein" },
       { value: "office:cases:write", label: "Cases add / edit" },
+      { value: "office:cases:read-all", label: "Tamam offices ke cases dekhein" },
+    ],
+  },
+  {
+    key: "departments",
+    label: "Departments",
+    permissions: [
+      { value: "office:filing:write", label: "Filing department (files upload)" },
+      { value: "office:printing:write", label: "Printing department (printed proof)" },
+      { value: "office:atta:write", label: "Atta department (set steps complete)" },
+      { value: "office:courier:write", label: "Courier department (courier slip)" },
+      { value: "office:remarks:write", label: "Departments ko remarks bhejein" },
     ],
   },
   {
@@ -99,6 +132,8 @@ export const BOOKING_OFFICE_TYPE_LABELS: Record<BookingOfficeType, string> = {
 export const CASE_STATUSES = [
   "NEW",
   "PAYMENT_PENDING",
+  "WAITING_FOR_FILE",
+  "WAITING_FOR_PRINTING",
   "IN_PROCESS",
   "PRINTED",
   "ATTESTATION",

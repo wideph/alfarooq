@@ -32,7 +32,8 @@ export default function BotChatWidget() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [botName, setBotName] = useState("Asad");
-  const bottomClass = pathname !== "/" && !pathname.startsWith("/admin") ? "bottom-28 sm:bottom-32" : "bottom-5";
+  const hidden = pathname.startsWith("/admin") || pathname.startsWith("/office");
+  const bottomClass = pathname !== "/" && !hidden ? "bottom-28 sm:bottom-32" : "bottom-5";
   const visitorKeyRef = useRef<string | null>(null);
   const panelEndRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -44,7 +45,7 @@ export default function BotChatWidget() {
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname.startsWith("/admin")) return;
+    if (hidden) return;
 
     fetch("/api/bot/config")
       .then((res) => res.json())
@@ -53,7 +54,7 @@ export default function BotChatWidget() {
         setCourses(Array.isArray(data.courses) ? data.courses : []);
       })
       .catch(() => {});
-  }, [pathname]);
+  }, [pathname, hidden]);
 
   useEffect(() => {
     if (pathCourseId) setSelectedCourseId(pathCourseId);
@@ -135,7 +136,7 @@ export default function BotChatWidget() {
     }
   }
 
-  if (!enabled || pathname.startsWith("/admin")) return null;
+  if (!enabled || hidden) return null;
 
   return (
     <>

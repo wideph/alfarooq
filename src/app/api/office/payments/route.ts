@@ -9,6 +9,7 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
 import { uploadOfficeFile } from "@/lib/office/r2";
+import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const maxDuration = 60;
@@ -118,6 +119,12 @@ export async function POST(request: NextRequest) {
     });
 
     const result = await recomputeCaseFinancials(caseId, session, { paymentId: payment.id });
+
+    // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
+    // the department workflow when it is the case's first RECEIVED payment.
+    if (status === "RECEIVED") {
+      await activateWorkflowOnFirstPayment(caseId);
+    }
 
     return NextResponse.json(
       toJson({ payment: { ...payment, hasSlip: Boolean(slipKey), slipKey: undefined }, ...result }),

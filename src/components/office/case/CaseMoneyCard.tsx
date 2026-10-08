@@ -21,7 +21,9 @@ export default function CaseMoneyCard({
 }) {
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
   const canClaim = adminCanAny(admin, ["office:cases:write", "office:payments:submit"]);
+  const canEditCase = adminCanAny(admin, ["office:cases:write"]);
   const [commission, setCommission] = useState(String(detail.commissionAmount));
+  const [agreedRemarks, setAgreedRemarks] = useState(detail.agreedAmountRemarks || "");
   const [reason, setReason] = useState("");
   const [extraPercent, setExtraPercent] = useState(detail.extraSharePercent === null ? "" : String(detail.extraSharePercent));
   const [claim, setClaim] = useState(detail.claimedRemaining === null ? "" : String(detail.claimedRemaining));
@@ -35,6 +37,20 @@ export default function CaseMoneyCard({
       onUpdated(res.data);
       onMessage(success);
       setReason("");
+    } else onMessage(res.error);
+    setBusy(false);
+  }
+
+  // §N7: agreed amount ke sath remarks (maslan installments ki tafseel).
+  async function saveAgreedRemarks() {
+    setBusy(true);
+    const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}`, {
+      method: "PATCH",
+      json: { agreedAmountRemarks: agreedRemarks },
+    });
+    if (res.ok) {
+      onUpdated(res.data);
+      onMessage("Agreed amount remarks save ho gaye");
     } else onMessage(res.error);
     setBusy(false);
   }
@@ -55,6 +71,34 @@ export default function CaseMoneyCard({
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
       <h3 className="font-bold text-slate-900">Commission & remaining</h3>
+
+      <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase text-slate-400">Agreed amount</p>
+            <p className="text-lg font-bold text-slate-900">{formatMoney(detail.agreedAmount)}</p>
+          </div>
+        </div>
+        {canEditCase ? (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              className={inputClass}
+              placeholder="Agreed amount remarks (maslan: 2 installments)"
+              value={agreedRemarks}
+              onChange={(e) => setAgreedRemarks(e.target.value)}
+            />
+            <button
+              disabled={busy || agreedRemarks === (detail.agreedAmountRemarks || "")}
+              onClick={saveAgreedRemarks}
+              className={primaryBtnClass}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Remarks save
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Remarks: {detail.agreedAmountRemarks || "—"}</p>
+        )}
+      </div>
 
       {isFixed ? (
         <div className="space-y-2 text-sm">

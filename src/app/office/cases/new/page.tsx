@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { officeFetch } from "@/lib/office/client";
 
@@ -20,6 +20,7 @@ export default function NewCasePage() {
   const [types, setTypes] = useState<AttestationType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [picture, setPicture] = useState<File | null>(null);
   const [form, setForm] = useState({
     bookingOfficeId: "",
     clientName: "",
@@ -27,6 +28,7 @@ export default function NewCasePage() {
     rollNumber: "",
     registrationNumber: "",
     agreedAmount: "",
+    agreedAmountRemarks: "",
     notes: "",
     attestationTypeIds: [] as string[],
     contacts: [{ phone: "", label: "" }],
@@ -70,15 +72,38 @@ export default function NewCasePage() {
     }));
   }
 
+  const hasRorReg = Boolean(form.rollNumber.trim() || form.registrationNumber.trim());
+
   async function submit() {
-    setSaving(true);
     setError("");
-    const res = await officeFetch<{ id: string }>("/api/office/cases", { method: "POST", json: form });
-    if (res.ok) {
-      router.push(`/office/cases/${res.data.id}`);
+    // §N7: r-number ya reg-number — in men se aik lazmi hai (client-side check).
+    if (!hasRorReg) {
+      setError("r-number ya reg-number lazmi hai (in men se aik lazmi hai)");
       return;
     }
-    setError(res.error);
+    setSaving(true);
+    // Multipart (client picture ki waja se) — parseCaseInput array fields ko
+    // JSON strings ki soorat mein accept karta hai.
+    const fd = new FormData();
+    fd.append("bookingOfficeId", form.bookingOfficeId);
+    fd.append("clientName", form.clientName);
+    fd.append("categoryId", form.categoryId);
+    fd.append("rollNumber", form.rollNumber);
+    fd.append("registrationNumber", form.registrationNumber);
+    fd.append("agreedAmount", form.agreedAmount);
+    fd.append("agreedAmountRemarks", form.agreedAmountRemarks);
+    fd.append("notes", form.notes);
+    fd.append("contacts", JSON.stringify(form.contacts));
+    fd.append("addresses", JSON.stringify(form.addresses));
+    fd.append("attestationTypeIds", JSON.stringify(form.attestationTypeIds));
+    if (picture) fd.append("clientPicture", picture);
+    const res = await fetch("/api/office/cases", { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.id) {
+      router.push(`/office/cases/${data.id}`);
+      return;
+    }
+    setError(data.error || "Case save nahi ho saka");
     setSaving(false);
   }
 
@@ -108,7 +133,7 @@ export default function NewCasePage() {
               </div>
             )}
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Client / student name *</label>
+              <label className="block text-xs text-slate-500 mb-1">Client / student name (optional)</label>
               <input className={input} value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -124,11 +149,11 @@ export default function NewCasePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Roll number</label>
+                <label className="block text-xs text-slate-500 mb-1">R-number (roll number)</label>
                 <input className={input} value={form.rollNumber} onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Registration number</label>
+                <label className="block text-xs text-slate-500 mb-1">Reg-number (registration)</label>
                 <input
                   className={input}
                   value={form.registrationNumber}
@@ -136,6 +161,9 @@ export default function NewCasePage() {
                 />
               </div>
             </div>
+            <p className={`text-xs ${hasRorReg ? "text-slate-400" : "text-amber-600 font-semibold"}`}>
+              R-number ya reg-number — in men se aik lazmi hai
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Agreed total amount (Rs)</label>
@@ -146,10 +174,32 @@ export default function NewCasePage() {
                   onChange={(e) => setForm({ ...form, agreedAmount: e.target.value })}
                 />
               </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Agreed amount remarks (optional)</label>
+                <input
+                  className={input}
+                  value={form.agreedAmountRemarks}
+                  onChange={(e) => setForm({ ...form, agreedAmountRemarks: e.target.value })}
+                  placeholder="Maslan: 2 installments mein"
+                />
+              </div>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Notes</label>
+              <label className="block text-xs text-slate-500 mb-1">Remarks (optional)</label>
               <textarea className={input} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <ImagePlus className="w-4 h-4 text-primary-600" />
+                Client picture (optional — image)
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="text-sm"
+                  onChange={(e) => setPicture(e.target.files?.[0] || null)}
+                />
+              </label>
+              {picture && <p className="mt-1 text-xs text-slate-400">{picture.name}</p>}
             </div>
           </div>
 
@@ -251,7 +301,7 @@ export default function NewCasePage() {
           <div className="flex gap-2">
             <button
               onClick={submit}
-              disabled={saving || !form.clientName.trim() || (admin.role !== "booking_office" && !form.bookingOfficeId)}
+              disabled={saving || !hasRorReg || (admin.role !== "booking_office" && !form.bookingOfficeId)}
               className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

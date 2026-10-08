@@ -7,12 +7,22 @@ import { todayPakistan } from "@/lib/office/serializers";
 // docs/office-module/03_BUSINESS_RULES.md BR4 — PROFIT_SHARE offices.
 // profit = received − case expenses; each active member gets profitPercent %.
 // Re-running creates ADJUSTMENT rows for any difference (never edits old rows).
+//
+// §N8 (06_NEW_REQUIREMENTS.md): partner (profit-share) office ke tamam general
+// office expenses (OfficeExpense) pool se PEHLE minus hote hain, phir profit
+// members ke profitPercent ke hisaab se bant-ta hai:
+//   profit pool = received − case expenses − office expenses
+// Office expenses are office-level (not per case), so the pool can never be
+// negative per case — it is floored at 0. The EXPENSE ledger debit written by
+// /api/office/office-expenses is separate from these share rows; re-finalize
+// stays idempotent because only PROFIT_SHARE/ADJUSTMENT rows are compared.
 
 const SHARE_TYPES = ["PROFIT_SHARE", "ADJUSTMENT"];
 
 export type ProfitShareSummary = {
   received: number;
   expenses: number;
+  officeExpenses: number;
   profit: number;
   shares: Array<{ memberId: string; name: string; percent: number; target: number; delta: number }>;
 };
@@ -23,7 +33,13 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
       where: { id: caseId },
       include: {
         bookingOffice: {
-          select: { id: true, type: true, members: { where: { isActive: true } } },
+          select: {
+            id: true,
+            type: true,
+            members: { where: { isActive: true } },
+            // §N8 — partner office general expenses, deducted from the pool.
+            expenses: { select: { amount: true } },
+          },
         },
         payments: { where: { status: "RECEIVED" }, select: { amount: true } },
         expenses: { select: { amount: true } },
@@ -39,7 +55,9 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
     const received = sum(item.payments.map((p) => p.amount));
     if (received.isZero()) throw new Error("Abhi koi payment receive nahi hui");
     const expenses = sum(item.expenses.map((e) => e.amount));
-    const profit = Prisma.Decimal.max(received.minus(expenses), 0);
+    const officeExpenses = sum(item.bookingOffice.expenses.map((e) => e.amount));
+    // §N8: pool = received − case expenses − office expenses (floor 0).
+    const profit = Prisma.Decimal.max(received.minus(expenses).minus(officeExpenses), 0);
     const entryDate = todayPakistan();
 
     const shares: ProfitShareSummary["shares"] = [];
@@ -85,6 +103,7 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
     return {
       received: toNumber(received),
       expenses: toNumber(expenses),
+      officeExpenses: toNumber(officeExpenses),
       profit: toNumber(profit),
       shares,
     };

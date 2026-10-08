@@ -3,27 +3,47 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Plus, Search } from "lucide-react";
+import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
-import { adminCanAny } from "@/components/admin/AdminNav";
+import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import { CASE_STATUSES } from "@/lib/office/permissions";
+import type { AdminPermission } from "@/components/admin/AdminNav";
 
+// §N7 department queues (?dept=). Tab sirf tab dikhta hai jab user ke paas us
+// department ki write permission ho; admin / cashier ko saare tabs milte hain.
+const DEPT_TABS: Array<{ key: string; label: string; permission: AdminPermission }> = [
+  { key: "filing", label: "Filing queue", permission: "office:filing:write" },
+  { key: "printing", label: "Printing queue", permission: "office:printing:write" },
+  { key: "atta", label: "Atta queue", permission: "office:atta:write" },
+  { key: "courier", label: "Courier queue", permission: "office:courier:write" },
+];
+
+function canSeeDeptTab(admin: AdminNavUser, permission: AdminPermission) {
+  return adminCanAny(admin, [permission]) || admin.role === "cashier";
+}
+
+// Filing department ko stripped payload milta hai (no money/office fields),
+// is liye baqi fields optional hain.
 type CaseRow = {
   id: string;
   caseNumber: string;
-  clientName: string;
+  clientName?: string;
   rollNumber: string | null;
   registrationNumber: string | null;
   status: string;
-  isPrinted: boolean;
-  expectedPrintingDate: string | null;
-  createdAt: string;
-  bookingOffice: { id: string; name: string; type: string };
-  category: { id: string; name: string } | null;
-  attestations: Array<{ id: string; status: string; completedDate: string | null; attestationType: { name: string } }>;
-  totals: { received: number; remaining: number; extra: number; pendingCount: number; agreedAmount: number };
+  isPrinted?: boolean;
+  expectedPrintingDate?: string | null;
+  createdAt?: string;
+  bookingOffice?: { id: string; name: string; type: string };
+  category: { id?: string; name: string } | null;
+  attestations?: Array<{ id: string; status: string; completedDate: string | null; attestationType: { name: string } }>;
+  totals?: { received: number; remaining: number; extra: number; pendingCount: number; agreedAmount: number };
+  setName?: string | null;
+  isUrgent?: boolean;
+  setMissingWarning?: boolean;
+  hasUnseenWarning?: boolean;
 };
 
 type Office = { id: string; name: string };
@@ -41,6 +61,8 @@ function CasesList() {
   const [q, setQ] = useState(searchParams.get("q") || "");
   const status = searchParams.get("status") || "";
   const officeId = searchParams.get("officeId") || "";
+  const dept = searchParams.get("dept") || "";
+  const history = searchParams.get("history") === "1";
   const page = Number(searchParams.get("page")) || 1;
 
   const load = useCallback(async () => {
@@ -48,6 +70,8 @@ function CasesList() {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (officeId) params.set("officeId", officeId);
+    if (dept) params.set("dept", dept);
+    if (history) params.set("history", "1");
     if (searchParams.get("q")) params.set("q", searchParams.get("q") || "");
     params.set("page", String(page));
     const res = await officeFetch<{ items: CaseRow[]; total: number }>(`/api/office/cases?${params}`);
@@ -56,7 +80,7 @@ function CasesList() {
       setTotal(res.data.total);
     }
     setLoading(false);
-  }, [status, officeId, page, searchParams]);
+  }, [status, officeId, dept, history, page, searchParams]);
 
   useEffect(() => {
     void load();
@@ -72,6 +96,15 @@ function CasesList() {
     const params = new URLSearchParams(searchParams.toString());
     if (value) params.set(key, value);
     else params.delete(key);
+    params.delete("page");
+    router.push(`/office/cases?${params}`);
+  }
+
+  function selectDept(key: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (key && dept !== key) params.set("dept", key);
+    else params.delete("dept");
+    params.delete("history");
     params.delete("page");
     router.push(`/office/cases?${params}`);
   }
@@ -93,6 +126,41 @@ function CasesList() {
               </Link>
             )}
           </div>
+
+          {DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission)) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => selectDept("")}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  !dept ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                All cases
+              </button>
+              {DEPT_TABS.filter((tab) => canSeeDeptTab(admin, tab.permission)).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => selectDept(tab.key)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    dept === tab.key ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              {dept === "filing" && (
+                <label className="ml-1 inline-flex items-center gap-1.5 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={history}
+                    onChange={(e) => setParam("history", e.target.checked ? "1" : "")}
+                    className="rounded border-slate-300"
+                  />
+                  History (filing se aage ke cases)
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <form
@@ -161,45 +229,89 @@ function CasesList() {
                   {items.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50">
                       <td className="px-3 py-3 align-top">
-                        <Link href={`/office/cases/${item.id}`} className="font-semibold text-primary-700 hover:underline">
-                          {item.caseNumber}
-                        </Link>
-                        <p className="text-slate-800">{item.clientName}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Link href={`/office/cases/${item.id}`} className="font-semibold text-primary-700 hover:underline">
+                            {item.caseNumber}
+                          </Link>
+                          {item.isUrgent && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              <Flame className="w-3 h-3" /> URGENT
+                            </span>
+                          )}
+                          {item.setMissingWarning && (
+                            <span
+                              title="Is case ka set select nahi kiya gaya"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700"
+                            >
+                              <AlertTriangle className="w-3 h-3" /> Set missing
+                            </span>
+                          )}
+                          {item.hasUnseenWarning && (
+                            <span
+                              title="Aap ke department ke liye new remarks"
+                              className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"
+                            />
+                          )}
+                        </div>
+                        <p className="text-slate-800">{item.clientName || "—"}</p>
                         <p className="text-xs text-slate-400">
                           {item.rollNumber ? `Roll ${item.rollNumber}` : ""}
                           {item.rollNumber && item.registrationNumber ? " · " : ""}
                           {item.registrationNumber ? `Reg ${item.registrationNumber}` : ""}
                         </p>
-                        <p className="text-xs text-slate-400">{formatDate(item.createdAt)}</p>
+                        <p className="text-xs text-slate-400">
+                          {item.createdAt ? formatDate(item.createdAt) : ""}
+                          {item.setName ? ` · Set: ${item.setName}` : ""}
+                        </p>
+                        {(admin.role === "admin" || admin.role === "cashier") && (
+                          <Link
+                            href={`/office/cases/${item.id}#expenses`}
+                            className="mt-1 inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-primary-300 hover:text-primary-700"
+                          >
+                            <Wallet className="w-3 h-3" /> Expense
+                          </Link>
+                        )}
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <p className="text-slate-800">{item.bookingOffice.name}</p>
+                        <p className="text-slate-800">{item.bookingOffice?.name || "—"}</p>
                         <p className="text-xs text-slate-500">{item.category?.name || "—"}</p>
                       </td>
                       <td className="px-3 py-3 align-top">
-                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[item.status]}`}>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[item.status] || "bg-slate-100 text-slate-700"}`}>
                           {STATUS_LABELS[item.status] || item.status}
                         </span>
-                        {item.totals.pendingCount > 0 && (
-                          <p className="mt-1 text-[11px] text-amber-600">{item.totals.pendingCount} payment verify pending</p>
+                        {(item.totals?.pendingCount ?? 0) > 0 && (
+                          <p className="mt-1 text-[11px] text-amber-600">{item.totals!.pendingCount} payment verify pending</p>
                         )}
                       </td>
                       <td className="px-3 py-3 align-top text-xs">
-                        <p>Agreed: {formatMoney(item.totals.agreedAmount)}</p>
-                        <p className="text-emerald-700">Received: {formatMoney(item.totals.received)}</p>
-                        {item.totals.remaining > 0 && <p className="text-amber-700">Remaining: {formatMoney(item.totals.remaining)}</p>}
-                        {item.totals.extra > 0 && <p className="text-violet-700">Extra: {formatMoney(item.totals.extra)}</p>}
+                        {item.totals ? (
+                          <>
+                            <p>Agreed: {formatMoney(item.totals.agreedAmount)}</p>
+                            <p className="text-emerald-700">Received: {formatMoney(item.totals.received)}</p>
+                            {item.totals.remaining > 0 && <p className="text-amber-700">Remaining: {formatMoney(item.totals.remaining)}</p>}
+                            {item.totals.extra > 0 && <p className="text-violet-700">Extra: {formatMoney(item.totals.extra)}</p>}
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 align-top text-xs">
-                        <p className={item.isPrinted ? "font-semibold text-emerald-700" : "text-slate-500"}>
-                          {item.isPrinted ? "Printed" : "Not printed"}
-                        </p>
-                        <p className="text-slate-500">Expected: {formatDate(item.expectedPrintingDate)}</p>
+                        {item.isPrinted !== undefined ? (
+                          <>
+                            <p className={item.isPrinted ? "font-semibold text-emerald-700" : "text-slate-500"}>
+                              {item.isPrinted ? "Printed" : "Not printed"}
+                            </p>
+                            <p className="text-slate-500">Expected: {formatDate(item.expectedPrintingDate)}</p>
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 align-top">
                         <div className="flex flex-wrap gap-1">
-                          {item.attestations.length === 0 && <span className="text-xs text-slate-400">—</span>}
-                          {item.attestations.map((a) => (
+                          {(!item.attestations || item.attestations.length === 0) && <span className="text-xs text-slate-400">—</span>}
+                          {(item.attestations || []).map((a) => (
                             <span
                               key={a.id}
                               title={a.completedDate ? `Done ${formatDate(a.completedDate)}` : a.status}

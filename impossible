@@ -1,0 +1,67 @@
+IMPOSSIBLE / LIMITATIONS — jo cheezen is environment men 100% mumkin na thin
+=============================================================================
+(Taareekh: 2026-10-08 — Office wave 2 ke kaam ke sath)
+
+1) AI SE LIVE "RESEARCH" (taareekhi chhutiyan / hadsay / embassy band)
+   - Aap ne kaha tha ke dates teh kerte waqt AI model research kery k us din
+     Pakistan/Islamabad/Quetta men koi chhutti, hadsy ya tayyari ki waja sy bandi
+     to nahi thi, aur embassies band to nahi thin.
+   - Live AI "research" app ke andar har date per chalana reliable nahi (AI ke
+     jawab har bar badal sakty hen, aur 2019-2022 ke rozana hadsaat ka verified
+     record kisi API men mojod nahi). Is liye ye tareeqa banaya gaya hai:
+       * Admin-editable "Holidays / Band din" table (scope: PAKISTAN, ISLAMABAD,
+         QUETTA, GUJRAT, LAHORE, EMBASSIES_ISB, SAUDI) — admin kisi b date ko
+         kisi b city ke liye band mark ker sakta hai (hadsa/embassy band waghera).
+       * Date engine in tables + weekends (Pakistan: Sat/Sun, Saudi: Fri/Sat) se
+         100% deterministic dates nikalta hai — galti ki sorat men admin date
+         edit ker ke dobara "Dates generate karein" dabwa sakta hai.
+       * Expected printing date ke liye pehly sy mojod AI working-day helper
+         (bot provider wala) wesy hi kaam kerta rahy ga.
+
+2) ISLAMIC (HIJRI) DATE — Saud MBC
+   - Saud MBC ki date ke sath Islamic date b show hoti hai, lakin ye tabular
+     (civil) calendar sy calculate hoti hai jo chand dekhny wali asal tareekh sy
+     ±1 din farq ho sakta hai. Print kerany sy pehly aik dafa verify ker lena.
+   - Saudi Arabia ki working dates b isi hisab sy hain.
+
+3) EID WALI SEED DATES
+   - 2019-2026 ki Eid-ul-Fitr / Eid-ul-Adha / Eid Milad ki seed dates approximate
+     Gregorian dates hain (reason men likha hai). Admin unhen asal elan k mutabiq
+     edit ker sakta hai (Holidays panel).
+
+4) DNS / VERCEL DOMAINS
+   - Department access links siraf system men record hote hen (Setup → Department
+     Links). DNS records Vercel men khud manually add kerne hon gy — ye aap ne
+     khud kaha tha, is liye code men kuchh nahi kiya gaya.
+
+5) REAL DATABASE PER TEST
+   - Is environment men koi real PostgreSQL database nahi tha. Migration SQL
+     (prisma/migrations/20261008120000_office_wave2) hand-written aur idempotent
+     hai, prisma validate + poora typecheck pass hai, LAKIN live DB per run nahi
+     hua. Deploy ke baad zaroor:
+       1. npx prisma migrate deploy
+       2. npm run db:seed:office     (categories, sets, holidays seed)
+       3. 2019 pool men 30 working dates add karein (Setup → 2019 Working Dates
+          Pool → "Suggest dates" se aik click men)
+       4. Aik test case bana ker poora flow (payment → filing → printing → atta
+          → courier) chala kar dekh lein.
+
+6) R-NUMBER 19/20/21 KI SORAT MEN MONTH/DAY
+   - Aap ke instructions men siraf YEAR teh tha (19→2020, 20→2021, 21→2022).
+     Month/day ke liye system first payment ki month/day use kerta hai us year men
+     (phir first working day). Ager aap ka matlab kuchh aur tha to bataein, aik
+     line ka change hai.
+
+7) REMARK "SEEN" FLAG DEPARTMENT-LEVEL HAI
+   - Jab kisi department ka aik user remark "seen" mark kerta hai to usi
+     department ke baqi users ke liye b seen ho jata hai (schema target-based hai,
+     per-user nahi). Per-user seen chahiye to schema change chahiye hoga.
+
+8) 2019 POOL KA AI SE AUTO-BHarna
+   - Brief men tha k AI 2019 ki 30 working dates khud ikathi kery. Live AI
+     research ki waja sy (point 1) ye automatic nahi — Setup panel "Suggest dates"
+     button deta hai jo weekend/holiday table se sahi dates nikalta hai; admin aik
+     click men add kerta hai (30 tak). Phir system un men se random use kerta hai.
+
+Baqi tamam instructions (N1-N11) implement ho gayi hen — detail
+docs/office-module/05_AGENT_LOG.md aur 06_NEW_REQUIREMENTS.md men mojod hai.

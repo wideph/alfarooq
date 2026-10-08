@@ -36,6 +36,13 @@ export const ADMIN_PERMISSIONS = [
   "office:expenses:write",
   "office:finance:read",
   "office:setup:write",
+  // Office wave 2 (docs/office-module/06_NEW_REQUIREMENTS.md §N4/N9)
+  "office:cases:read-all",
+  "office:filing:write",
+  "office:printing:write",
+  "office:atta:write",
+  "office:courier:write",
+  "office:remarks:write",
 ] as const;
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];

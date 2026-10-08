@@ -1,12 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Save, Trash2, Users } from "lucide-react";
+import { Eye, EyeOff, Loader2, Plus, Save, Trash2, UserPlus, Users, X } from "lucide-react";
 import { officeFetch } from "@/lib/office/client";
+
+// N6 panels live in their own files to keep this file manageable.
+export { default as HolidayPanel } from "./HolidayPanel";
+export { default as DatePoolPanel } from "./DatePoolPanel";
 import {
   BOOKING_OFFICE_TYPES,
   BOOKING_OFFICE_TYPE_LABELS,
+  OFFICE_ROLES,
+  ROLE_LABELS,
   type BookingOfficeType,
+  type OfficeRole,
 } from "@/lib/office/permissions";
 
 type Category = { id: string; name: string; defaultAmount: number | null; order: number; isActive: boolean };
@@ -18,6 +25,7 @@ type Member = {
   isActive: boolean;
   adminId: string | null;
 };
+type OfficeUser = { id: string; name: string; email: string; role: string; isActive: boolean };
 type Office = {
   id: string;
   name: string;
@@ -26,6 +34,7 @@ type Office = {
   notes: string | null;
   isActive: boolean;
   members: Member[];
+  users: OfficeUser[];
   commissions: Array<{ categoryId: string; amount: number; category: { id: string; name: string } }>;
   _count: { cases: number; users: number };
 };
@@ -302,10 +311,90 @@ const emptyOffice = {
   isActive: true,
 };
 
+type UserDraft = { name: string; email: string; password: string; role: OfficeRole; show: boolean };
+const emptyUserDraft = (): UserDraft => ({
+  name: "",
+  email: "",
+  password: "",
+  role: "booking_office",
+  show: false,
+});
+
+// Ek user row: naam, email, password (show/hide), role dropdown — office create
+// form aur existing-office "add user" dono jagah use hoti hai (N2).
+function UserDraftFields({
+  draft,
+  onChange,
+  onRemove,
+}: {
+  draft: UserDraft;
+  onChange: (next: UserDraft) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_11rem_auto]">
+      <input
+        className={input}
+        placeholder="Naam"
+        value={draft.name}
+        onChange={(e) => onChange({ ...draft, name: e.target.value })}
+      />
+      <input
+        className={input}
+        type="email"
+        placeholder="User id (email)"
+        value={draft.email}
+        onChange={(e) => onChange({ ...draft, email: e.target.value })}
+      />
+      <div className="relative">
+        <input
+          className={`${input} pr-10`}
+          type={draft.show ? "text" : "password"}
+          placeholder="Password (min 6)"
+          value={draft.password}
+          onChange={(e) => onChange({ ...draft, password: e.target.value })}
+        />
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+          onClick={() => onChange({ ...draft, show: !draft.show })}
+          aria-label={draft.show ? "Password chhupayein" : "Password dekhein"}
+        >
+          {draft.show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+      <select
+        className={input}
+        value={draft.role}
+        onChange={(e) => onChange({ ...draft, role: e.target.value as OfficeRole })}
+      >
+        {OFFICE_ROLES.map((role) => (
+          <option key={role} value={role}>
+            {ROLE_LABELS[role]}
+          </option>
+        ))}
+      </select>
+      {onRemove ? (
+        <button
+          type="button"
+          className="grid h-10 w-10 place-items-center justify-self-start rounded-xl bg-red-50 text-red-600 hover:bg-red-100"
+          onClick={onRemove}
+          aria-label="Row hata dein"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : (
+        <span className="hidden lg:block" />
+      )}
+    </div>
+  );
+}
+
 export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string) => void }) {
   const [offices, setOffices] = useState<Office[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [form, setForm] = useState(emptyOffice);
+  const [userDrafts, setUserDrafts] = useState<UserDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -323,14 +412,33 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
   }, [load]);
 
   async function saveOffice() {
+    // Sirf woh user rows bhejein jin mein kuch likha gaya hai (N2).
+    const users = userDrafts
+      .map((draft) => ({
+        name: draft.name.trim(),
+        email: draft.email.trim(),
+        password: draft.password,
+        role: draft.role,
+      }))
+      .filter((draft) => draft.name || draft.email || draft.password);
+
     setSaving(true);
     const res = await officeFetch<Office>("/api/office/setup/booking-offices", {
       method: form.id ? "PUT" : "POST",
-      json: form,
+      json: form.id ? form : { ...form, users },
     });
-    onMessage(res.ok ? "Booking office save ho gaya" : res.error);
+    onMessage(
+      res.ok
+        ? form.id
+          ? "Office update ho gaya"
+          : users.length > 0
+            ? `Office ban gaya — ${users.length} user bhi add ho gaye`
+            : "Office ban gaya"
+        : res.error
+    );
     if (res.ok) {
       setForm(emptyOffice);
+      setUserDrafts([]);
       setSelectedId(res.data.id);
       await load();
     }
@@ -351,8 +459,15 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
 
   return (
     <Panel title="Booking Offices" icon={<Users className="w-5 h-5 text-primary-600" />}>
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-        <p className="font-semibold text-slate-800">{form.id ? "Edit office" : "New booking office"}</p>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5 space-y-4">
+        <div>
+          <p className="font-semibold text-slate-800">
+            {form.id ? "Edit office" : "New booking office"}
+          </p>
+          <p className="text-xs text-slate-500">
+            Office ki maloomat aur us ke login users / roles — sab ek hi jagah, ek submit mein.
+          </p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <input
             className={input}
@@ -395,13 +510,60 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
             Active
           </label>
         )}
+
+        {!form.id && (
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Users / Roles (optional)</p>
+                <p className="text-xs text-slate-500">
+                  Office ke sath hi us ke login users bana dein — booking office, cashier, filing,
+                  printing, atta, courier.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100"
+                onClick={() => setUserDrafts([...userDrafts, emptyUserDraft()])}
+              >
+                <UserPlus className="h-4 w-4" /> User row add karein
+              </button>
+            </div>
+            {userDrafts.length === 0 ? (
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400">
+                Abhi koi user row nahi — office akele bhi ban sakta hai; users baad mein bhi add ho
+                sakte hain.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {userDrafts.map((draft, index) => (
+                  <UserDraftFields
+                    key={index}
+                    draft={draft}
+                    onChange={(next) =>
+                      setUserDrafts(userDrafts.map((item, i) => (i === index ? next : item)))
+                    }
+                    onRemove={() => setUserDrafts(userDrafts.filter((_, i) => i !== index))}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button className={primaryBtn} disabled={saving || !form.name.trim()} onClick={saveOffice}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save
+            {form.id ? "Save" : "Office banayein"}
           </button>
           {form.id && (
-            <button className={ghostBtn} onClick={() => setForm(emptyOffice)}>
+            <button
+              className={ghostBtn}
+              onClick={() => {
+                setForm(emptyOffice);
+                setUserDrafts([]);
+              }}
+            >
               Cancel
             </button>
           )}
@@ -434,6 +596,7 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
                     className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setUserDrafts([]);
                       setForm({
                         id: office.id,
                         name: office.name,
@@ -468,6 +631,7 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
             </div>
           ) : (
             <>
+              <OfficeUsersEditor office={selected} onChanged={load} onMessage={onMessage} />
               <MembersEditor office={selected} onChanged={load} onMessage={onMessage} />
               {selected.type === "FIXED_COMMISSION" && (
                 <CommissionGrid office={selected} categories={categories} onChanged={load} onMessage={onMessage} />
@@ -477,6 +641,89 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
         </div>
       </div>
     </Panel>
+  );
+}
+
+// Mojooda office mein baad mein naya login user / role add karna (N2).
+function OfficeUsersEditor({
+  office,
+  onChanged,
+  onMessage,
+}: {
+  office: Office;
+  onChanged: () => Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState<UserDraft>(emptyUserDraft());
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    setDraft(emptyUserDraft());
+  }, [office.id]);
+
+  async function add() {
+    setAdding(true);
+    const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/users`, {
+      method: "POST",
+      json: {
+        name: draft.name.trim(),
+        email: draft.email.trim(),
+        password: draft.password,
+        role: draft.role,
+      },
+    });
+    onMessage(res.ok ? "User add ho gaya" : res.error);
+    if (res.ok) {
+      setDraft(emptyUserDraft());
+      await onChanged();
+    }
+    setAdding(false);
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <p className="font-semibold text-slate-800">Login users — {office.name}</p>
+        <p className="text-xs text-slate-500">
+          Is office ke tamam login users aur un ke roles. Naya user yahin inline add karein.
+        </p>
+      </div>
+
+      {office.users.length > 0 && (
+        <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+          {office.users.map((user) => (
+            <div key={user.id} className="flex items-center justify-between gap-3 p-3 text-sm">
+              <div className="min-w-0">
+                <p className={`truncate font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>
+                  {user.name}
+                </p>
+                <p className="truncate text-xs text-slate-500">{user.email}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
+                  {ROLE_LABELS[user.role] || user.role}
+                </span>
+                {!user.isActive && (
+                  <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <UserDraftFields draft={draft} onChange={setDraft} />
+      <div>
+        <button
+          className={primaryBtn}
+          disabled={adding || !draft.name.trim() || !draft.email.trim() || draft.password.length < 6}
+          onClick={add}
+        >
+          {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+          User add karein
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -562,8 +809,8 @@ function MembersEditor({
         )}
       </div>
       <p className="text-xs text-slate-500">
-        Login wale members /admin/sub-admins se &quot;Booking office&quot; role ke sath bante hain aur yahan
-        automatically show hote hain. Bina login members (sirf hisaab ke liye) yahan add karein.
+        &quot;Booking office&quot; role wale login users (oopar Users section se bante hain) yahan automatically
+        member ban jate hain. Bina login members (sirf hisaab ke liye) yahan add karein.
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <input className={input} placeholder="Member name" value={name} onChange={(e) => setName(e.target.value)} />

@@ -26,6 +26,8 @@ export default function CaseAttestations({
 }) {
   const canEditList = adminCanAny(admin, ["office:cases:write"]);
   const canStatus = adminCanAny(admin, ["office:attestation:write"]);
+  // §N7: atta department sirf steps aage barha sakta hai (PENDING → IN_PROGRESS → DONE).
+  const canAtta = !canStatus && adminCanAny(admin, ["office:atta:write"]);
   const [types, setTypes] = useState<AttestationType[]>([]);
   const [addId, setAddId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -89,7 +91,14 @@ export default function CaseAttestations({
         {detail.attestations.map((a) => (
           <div key={a.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
             <div className="min-w-[10rem] flex-1">
-              <p className="font-semibold text-slate-800">{a.attestationType.name}</p>
+              <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-800">
+                {a.attestationType.name}
+                {a.attestationType.name === "Bord" && detail.boardAttasNumber && (
+                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                    Board Attas # {detail.boardAttasNumber}
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-slate-500">
                 Scheduled {formatDate(a.scheduledDate)} · Done {formatDate(a.completedDate)}
                 {a.notes ? ` · ${a.notes}` : ""}
@@ -130,6 +139,25 @@ export default function CaseAttestations({
               </>
             ) : (
               <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ATTESTATION_STATUS_STYLES[a.status]}`}>{ATTESTATION_STATUS_LABELS[a.status]}</span>
+            )}
+            {canAtta && a.status !== "DONE" && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  call(
+                    `/api/office/cases/${detail.id}/attestations`,
+                    "PATCH",
+                    { id: a.id, status: a.status === "PENDING" ? "IN_PROGRESS" : "DONE" },
+                    a.status === "PENDING" ? "Step shuru ho gaya" : "Step done ho gaya"
+                  )
+                }
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:opacity-40 ${
+                  a.status === "PENDING" ? "bg-violet-600 text-white" : "bg-emerald-600 text-white"
+                }`}
+              >
+                {busy && <Loader2 className="w-3 h-3 animate-spin" />}
+                {a.status === "PENDING" ? "Shuru karein" : "Done karein"}
+              </button>
             )}
             {canEditList && a.status === "PENDING" && (
               <button disabled={busy} onClick={() => call(`/api/office/cases/${detail.id}/attestations?attestationId=${a.id}`, "DELETE", undefined, "Attestation remove ho gayi")} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50">

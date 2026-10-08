@@ -2,11 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { caseScope } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
+import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
+import {
+  isFilingLimited,
+  roleToRemarkTarget,
+  serializeFilingCase,
+  setMissingWarning,
+} from "@/lib/office/workflow";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true } },
+  set: { select: { id: true, name: true } },
   attestations: {
     orderBy: { order: "asc" as const },
     include: { attestationType: { select: { id: true, name: true } } },
@@ -15,13 +23,24 @@ export const caseListInclude = {
 };
 
 export function serializeCaseRow<
-  T extends { payments: Array<{ amount: unknown; status: string }>; agreedAmount: unknown },
->(item: T) {
+  T extends {
+    payments: Array<{ amount: unknown; status: string }>;
+    agreedAmount: unknown;
+    status: string;
+    setId: string | null;
+  },
+>(item: T, extras: { hasUnseenWarning?: boolean } = {}) {
   const totals = computeTotals(
     item.payments as Array<{ amount: number; status: string }>,
     item.agreedAmount as number
   );
-  return toJson({ ...item, totals });
+  return toJson({
+    ...item,
+    totals,
+    setName: (item as { set?: { name: string } | null }).set?.name ?? null,
+    setMissingWarning: setMissingWarning(item),
+    hasUnseenWarning: Boolean(extras.hasUnseenWarning),
+  });
 }
 
 // Names for createdBy / submittedBy / verifiedBy ids without joins on Admin.
@@ -41,6 +60,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     include: {
       bookingOffice: { select: { id: true, name: true, type: true } },
       category: { select: { id: true, name: true } },
+      set: { select: { id: true, name: true } },
       contacts: { orderBy: { createdAt: "asc" } },
       addresses: { orderBy: { createdAt: "asc" } },
       attestations: {
@@ -56,6 +76,12 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     },
   });
   if (!item) return null;
+
+  // §N7: the filing department gets a stripped payload — no payments, amounts,
+  // commission or ledger fields at all.
+  if (isFilingLimited(session)) {
+    return serializeFilingCase(item);
+  }
 
   const canSeeLedger =
     hasPermission(session, "office:ledger:read") || session.role === "booking_office";
@@ -84,6 +110,14 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
 
   const totals = computeTotals(item.payments, item.agreedAmount);
 
+  const remarkTarget = roleToRemarkTarget(session.role);
+  const hasUnseenWarning = remarkTarget
+    ? await prisma.caseRemarkRecipient.findFirst({
+        where: { seenAt: null, target: remarkTarget, remark: { caseId } },
+        select: { id: true },
+      })
+    : null;
+
   // BR4.4: profit share needs re-finalize when money moved after finalize.
   const lastMoneyChange = Math.max(
     0,
@@ -97,6 +131,12 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   return toJson({
     profitStale,
     ...item,
+    setName: item.set?.name ?? null,
+    setMissingWarning: setMissingWarning(item),
+    hasUnseenWarning: Boolean(hasUnseenWarning),
+    clientPictureUrl: item.clientPictureKey
+      ? await getOfficeFileSignedUrl(item.clientPictureKey)
+      : null,
     createdByName: names[item.createdByAdminId] || null,
     payments: item.payments.map((p) => ({
       ...p,

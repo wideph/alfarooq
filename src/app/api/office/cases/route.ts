@@ -9,6 +9,14 @@ import { parseAmount } from "@/lib/office/money";
 import { cleanText } from "@/lib/office/serializers";
 import { CASE_STATUSES } from "@/lib/office/permissions";
 import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
+import { uploadOfficeFile } from "@/lib/office/r2";
+import {
+  deptQueueWhere,
+  isFilingLimited,
+  parseCaseInput,
+  serializeFilingCase,
+  unseenWarningCaseIds,
+} from "@/lib/office/workflow";
 
 const PAGE_SIZE = 50;
 
@@ -20,12 +28,19 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status") || "";
   const officeId = searchParams.get("officeId") || "";
   const q = (searchParams.get("q") || "").trim();
+  const dept = (searchParams.get("dept") || "").trim().toLowerCase();
+  const history = searchParams.get("history") === "1";
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
 
   const where: Prisma.CaseWhereInput = { ...caseScope(session) };
   if (status && (CASE_STATUSES as readonly string[]).includes(status)) where.status = status;
   if (status === "open") where.status = { notIn: ["COMPLETED", "DELIVERED", "CANCELLED"] };
   if (officeId && canSeeOffice(session, officeId)) where.bookingOfficeId = officeId;
+  // §N7 department queues: ?dept=filing|printing|atta|courier.
+  if (dept) {
+    const deptWhere = deptQueueWhere(dept, history);
+    if (deptWhere) where.AND = [...(Array.isArray(where.AND) ? where.AND : []), deptWhere];
+  }
   if (q) {
     where.OR = [
       { caseNumber: { contains: q, mode: "insensitive" } },
@@ -39,7 +54,7 @@ export async function GET(request: NextRequest) {
   const [items, total] = await Promise.all([
     prisma.case.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: caseListInclude,
@@ -47,8 +62,19 @@ export async function GET(request: NextRequest) {
     prisma.case.count({ where }),
   ]);
 
+  // §N7: filing department gets the stripped payload (no money fields).
+  if (isFilingLimited(session)) {
+    const rows = await Promise.all(items.map((item) => serializeFilingCase(item)));
+    return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE });
+  }
+
+  const unseen = await unseenWarningCaseIds(
+    session,
+    items.map((item) => item.id)
+  );
+
   return NextResponse.json({
-    items: items.map(serializeCaseRow),
+    items: items.map((item) => serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) })),
     total,
     page,
     pageSize: PAGE_SIZE,
@@ -60,7 +86,7 @@ export async function POST(request: NextRequest) {
   if (denied) return denied;
 
   try {
-    const body = await request.json();
+    const { fields: body, clientPicture } = await parseCaseInput(request);
 
     // Booking office users always create for their own office.
     const bookingOfficeId =
@@ -73,8 +99,12 @@ export async function POST(request: NextRequest) {
     const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
     if (!office || !office.isActive) return badRequest("Booking office nahi mila ya inactive hai");
 
-    const clientName = cleanText(body.clientName, 200);
-    if (!clientName) return badRequest("Client ka naam zaroori hai");
+    // §N7: client name is optional; at least one of r-number / reg-number is
+    // compulsory.
+    const clientName = cleanText(body.clientName, 200) || "";
+    const rollNumber = cleanText(body.rollNumber, 80);
+    const registrationNumber = cleanText(body.registrationNumber, 80);
+    if (!rollNumber && !registrationNumber) return badRequest("r-number ya reg-number lazmi hai");
 
     const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
     if (categoryId) {
@@ -120,8 +150,17 @@ export async function POST(request: NextRequest) {
 
     const year = new Date(Date.now() + 5 * 3_600_000).getUTCFullYear();
 
+    // Client picture (optional) goes to R2 like payment slips.
+    let clientPictureKey: string | null = null;
+    let clientPictureType: string | null = null;
+
     const created = await prisma.$transaction(async (tx) => {
       const caseNumber = await nextCaseNumber(tx, year);
+      if (clientPicture) {
+        const uploaded = await uploadOfficeFile(clientPicture, `clients/${caseNumber}`);
+        clientPictureKey = uploaded.key;
+        clientPictureType = uploaded.type;
+      }
       return tx.case.create({
         data: {
           caseNumber,
@@ -129,9 +168,14 @@ export async function POST(request: NextRequest) {
           createdByAdminId: session.adminId,
           categoryId,
           clientName,
-          rollNumber: cleanText(body.rollNumber, 80),
-          registrationNumber: cleanText(body.registrationNumber, 80),
+          rollNumber,
+          registrationNumber,
           agreedAmount: agreedAmount ?? new Prisma.Decimal(0),
+          agreedAmountRemarks: cleanText(body.agreedAmountRemarks, 500),
+          courierNumber: cleanText(body.courierNumber, 120),
+          isUrgent: Boolean(body.isUrgent),
+          clientPictureKey,
+          clientPictureType,
           commissionAmount,
           notes: cleanText(body.notes, 2000),
           contacts: { create: contacts },

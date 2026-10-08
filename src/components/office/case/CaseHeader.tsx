@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CalendarClock, Loader2, Printer } from "lucide-react";
+import { AlertTriangle, CalendarClock, Flame, Loader2, Printer } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
@@ -23,9 +23,24 @@ export default function CaseHeader({
 }) {
   const canVerify = adminCanAny(admin, ["office:payments:verify"]);
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
+  const canEdit = adminCanAny(admin, ["office:cases:write"]);
   const [popup, setPopup] = useState(false);
   const [editRemaining, setEditRemaining] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // §N7: Urgent badge toggle (booking office / admin).
+  async function toggleUrgent() {
+    setBusy(true);
+    const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}`, {
+      method: "PATCH",
+      json: { isUrgent: !detail.isUrgent },
+    });
+    if (res.ok) {
+      onUpdated(res.data);
+      onMessage(res.data.isUrgent ? "Case urgent mark ho gaya" : "Urgent badge hata diya");
+    } else onMessage(res.error);
+    setBusy(false);
+  }
 
   async function decideExtra(percent: number) {
     const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}/commission`, {
@@ -69,15 +84,30 @@ export default function CaseHeader({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{detail.caseNumber}</p>
-            <h2 className="text-2xl font-bold text-slate-900">{detail.clientName}</h2>
+            <h2 className="flex flex-wrap items-center gap-2 text-2xl font-bold text-slate-900">
+              {detail.clientName || "—"}
+              {detail.isUrgent && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                  <Flame className="w-3.5 h-3.5" /> URGENT
+                </span>
+              )}
+            </h2>
             <p className="text-sm text-slate-500">
               {detail.bookingOffice.name} · {BOOKING_OFFICE_TYPE_LABELS[detail.bookingOffice.type]}
               {detail.category ? ` · ${detail.category.name}` : ""}
+              {detail.setName ? ` · Set: ${detail.setName}` : ""}
             </p>
             <p className="text-xs text-slate-400">
               Created {formatDate(detail.createdAt)}
               {detail.createdByName ? ` by ${detail.createdByName}` : ""}
             </p>
+            {detail.boardAttasNumber && (
+              <p className="mt-1">
+                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                  Board Attas # {detail.boardAttasNumber}
+                </span>
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLES[detail.status]}`}>
@@ -86,6 +116,17 @@ export default function CaseHeader({
             <span className={`inline-flex items-center gap-1 text-xs ${detail.isPrinted ? "text-emerald-700 font-semibold" : "text-slate-500"}`}>
               <Printer className="w-3.5 h-3.5" /> {detail.isPrinted ? `Printed ${formatDate(detail.printedAt)}` : "Not printed"}
             </span>
+            {canEdit && (
+              <button
+                disabled={busy}
+                onClick={toggleUrgent}
+                className={`inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                  detail.isUrgent ? "border border-red-300 text-red-600" : "bg-red-600 text-white"
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5" /> {detail.isUrgent ? "Urgent hatayein" : "Urgent karein"}
+              </button>
+            )}
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
@@ -102,6 +143,13 @@ export default function CaseHeader({
           </div>
         </div>
       </div>
+
+      {detail.setMissingWarning && (
+        <div className="flex items-center gap-2 rounded-2xl border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <AlertTriangle className="w-4 h-4" />
+          Is case ka set select nahi kiya gaya — printing ho chuki hai. Neeche &quot;Attestation set&quot; card se set select karein.
+        </div>
+      )}
 
       {detail.needsExtraDecision !== null && canLedgerWrite && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-800">

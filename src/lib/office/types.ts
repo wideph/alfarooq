@@ -25,6 +25,18 @@ export type CaseDetail = {
   createdByName: string | null;
   bookingOffice: { id: string; name: string; type: "FIXED_COMMISSION" | "PROFIT_SHARE" | "SALARY" };
   category: { id: string; name: string } | null;
+  // Wave 2026-10 (docs 06 §N5/N7/N8): department workflow fields.
+  setId: string | null;
+  set: { id: string; name: string } | null;
+  setName: string | null;
+  setMissingWarning: boolean;
+  hasUnseenWarning: boolean;
+  isUrgent: boolean;
+  courierNumber: string | null;
+  agreedAmountRemarks: string | null;
+  boardAttasNumber: string | null;
+  clientPictureUrl: string | null;
+  clientPictureType: string | null;
   contacts: Array<{ id: string; phone: string; label: string | null }>;
   addresses: Array<{ id: string; address: string; label: string | null }>;
   attestations: Array<{
@@ -71,6 +83,83 @@ export type CaseDetail = {
   }>;
   totals: { received: number; remaining: number; extra: number; pendingCount: number; agreedAmount: number };
   needsExtraDecision: number | null;
+};
+
+// Stripped payload returned to the filing department (serializeFilingCase,
+// docs 06 §N7): no payments / amounts / commission / ledger at all.
+export type FilingCaseDetail = {
+  id: string;
+  caseNumber: string;
+  category: { name: string } | null;
+  rollNumber: string | null;
+  registrationNumber: string | null;
+  notes: string | null;
+  status: string;
+  setName: string | null;
+  clientPictureType: string | null;
+  clientPictureUrl: string | null;
+};
+
+// GET /api/office/cases/[id]/files item.
+export type CaseFileItem = {
+  id: string;
+  department: "FILING" | "PRINTING" | "ATTA" | "COURIER";
+  stepKey: string | null;
+  title: string | null;
+  fileType: "pdf" | "image" | "video";
+  createdAt: string;
+  uploadedByName: string | null;
+  url: string;
+};
+
+// GET /api/office/setup/sets item (with r-number dim info).
+export type CategorySetWithSteps = {
+  id: string;
+  categoryId: string;
+  name: string;
+  order: number;
+  dimmed: boolean;
+  reason: string | null;
+  steps: Array<{ id: string; stepKey: string; label: string; order: number }>;
+};
+
+// GET /api/office/cases/[id]/remarks item.
+export type CaseRemarkItem = {
+  id: string;
+  text: string;
+  createdById: string;
+  createdByRole: string;
+  createdByName: string | null;
+  createdAt: string;
+  mine: boolean;
+  targets: Array<{ recipientId: string; target: string; seenAt: string | null; forMe: boolean }>;
+};
+
+// DiscountRequest row (GET /api/office/cases/[id]/discount-requests).
+export type DiscountRequestItem = {
+  id: string;
+  caseId: string;
+  amount: number;
+  reason: string | null;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  deductFrom: "COMMISSION" | "PROFIT" | "PARTIAL" | null;
+  decidedAt: string | null;
+  createdAt: string;
+};
+
+// BonusRequest row (GET /api/office/bonus-requests).
+export type BonusRequestItem = {
+  id: string;
+  bookingOfficeId: string;
+  caseId: string | null;
+  amount: number;
+  reason: string | null;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  deductFrom: "COMMISSION" | "PROFIT" | null;
+  decidedAt: string | null;
+  createdAt: string;
+  bookingOffice: { id: string; name: string };
+  case: { id: string; caseNumber: string; clientName: string } | null;
 };
 
 export const inputClass =

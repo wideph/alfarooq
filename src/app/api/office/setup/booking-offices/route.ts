@@ -4,10 +4,15 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { toJson, cleanText } from "@/lib/office/serializers";
 import { BOOKING_OFFICE_TYPES, type BookingOfficeType } from "@/lib/office/permissions";
+import { createOfficeUser, validateOfficeUser, type OfficeUserInput } from "@/lib/office/office-users";
 
 const officeInclude = {
   members: { orderBy: { createdAt: "asc" as const } },
   commissions: { include: { category: { select: { id: true, name: true } } } },
+  users: {
+    select: { id: true, name: true, email: true, role: true, isActive: true },
+    orderBy: { createdAt: "asc" as const },
+  },
   _count: { select: { cases: true, users: true } },
 };
 
@@ -42,40 +47,68 @@ function readOfficeBody(body: Record<string, unknown>) {
   };
 }
 
+// N2: office + uske users/roles ek hi submit mein bante hain. Sab kuch ek
+// transaction mein — koi bhi user fail ho to office bhi nahi banta.
 export async function POST(request: NextRequest) {
   const { session, denied } = await guardOffice("office:setup:write");
   if (denied) return denied;
 
   try {
-    const parsed = readOfficeBody(await request.json());
+    const body = await request.json();
+    const parsed = readOfficeBody(body);
     if (parsed.error !== undefined) return badRequest(parsed.error);
 
-    const office = await prisma.bookingOffice.create({
-      data: parsed.data,
-      include: officeInclude,
-    });
-
-    // Every office gets a default member row (the office itself) so payouts and
-    // salaries always have a target even before shareholders are added.
-    if (office.members.length === 0) {
-      await prisma.bookingOfficeMember.create({
-        data: { bookingOfficeId: office.id, name: office.name },
-      });
+    const users: OfficeUserInput[] = [];
+    if (body.users !== undefined) {
+      if (!Array.isArray(body.users)) return badRequest("Users ki list sahi nahi hai");
+      const emails = new Set<string>();
+      for (const raw of body.users) {
+        const validated = validateOfficeUser(raw);
+        if ("error" in validated) return badRequest(validated.error);
+        if (emails.has(validated.data.email)) {
+          return badRequest(`Email "${validated.data.email}" list mein do baar hai`);
+        }
+        emails.add(validated.data.email);
+        users.push(validated.data);
+      }
     }
 
-    await logOfficeAction(session, {
-      action: "booking_office.create",
-      entity: "BookingOffice",
-      entityId: office.id,
-      after: parsed.data,
+    const officeId = await prisma.$transaction(async (tx) => {
+      const office = await tx.bookingOffice.create({ data: parsed.data });
+
+      // Every office gets a default member row (the office itself) so payouts
+      // and salaries always have a target even before shareholders are added.
+      await tx.bookingOfficeMember.create({
+        data: { bookingOfficeId: office.id, name: office.name },
+      });
+
+      await logOfficeAction(
+        session,
+        {
+          action: "booking_office.create",
+          entity: "BookingOffice",
+          entityId: office.id,
+          after: parsed.data,
+        },
+        tx
+      );
+
+      for (const user of users) {
+        await createOfficeUser(tx, session, office.id, user);
+      }
+
+      return office.id;
     });
 
     const fresh = await prisma.bookingOffice.findUnique({
-      where: { id: office.id },
+      where: { id: officeId },
       include: officeInclude,
     });
     return NextResponse.json(toJson(fresh), { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("pehle se registered")) {
+      return badRequest(error.message);
+    }
     return serverError(error);
   }
 }

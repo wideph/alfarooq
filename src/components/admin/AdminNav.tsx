@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Banknote,
+  BookOpenCheck,
   Bot,
   BookOpen,
   Briefcase,
   Home,
+  LayoutDashboard,
   LogOut,
+  PieChart,
   Settings,
+  Settings2,
   ShieldCheck,
   Signal,
 } from "lucide-react";
 import type { AdminPermission } from "@/lib/auth";
-import { ALL_OFFICE_PERMISSIONS } from "@/lib/office/permissions";
 
 export type { AdminPermission };
 
@@ -81,11 +85,43 @@ const navItems: Array<{
     icon: ShieldCheck,
     permissions: ["admins:read", "admins:write"],
   },
+  // Office destinations show directly in the admin nav (N1), permission-filtered
+  // the same way OfficeNav does. Super admin (role "admin") sees all.
   {
     href: "/office",
     label: "Office",
+    icon: LayoutDashboard,
+    permissions: ["office:cases:read"],
+  },
+  {
+    href: "/office/cases",
+    label: "Cases",
     icon: Briefcase,
-    permissions: ALL_OFFICE_PERMISSIONS,
+    permissions: ["office:cases:read"],
+  },
+  {
+    href: "/office/payments",
+    label: "Payments",
+    icon: Banknote,
+    permissions: ["office:payments:verify", "office:payments:submit"],
+  },
+  {
+    href: "/office/ledger",
+    label: "Ledger",
+    icon: BookOpenCheck,
+    permissions: ["office:ledger:read", "office:ledger:write", "office:expenses:write"],
+  },
+  {
+    href: "/office/finance",
+    label: "Finance",
+    icon: PieChart,
+    permissions: ["office:finance:read"],
+  },
+  {
+    href: "/office/setup",
+    label: "Setup",
+    icon: Settings2,
+    permissions: ["office:setup:write"],
   },
 ];
 

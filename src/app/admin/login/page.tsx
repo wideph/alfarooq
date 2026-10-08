@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GraduationCap, Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { ExternalLink, GraduationCap, Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
 import { isOfficeRole } from "@/lib/office/permissions";
+
+type DepartmentLinkChip = { id: string; label: string; url: string };
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -13,6 +15,16 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [departmentLinks, setDepartmentLinks] = useState<DepartmentLinkChip[] | null>(null);
+
+  useEffect(() => {
+    // §N9 — department access links. The GET route needs an office session; agar
+    // bina login na mile (401) to static hint dikhate hain (API auth kamzor nahi ki).
+    fetch("/api/office/setup/department-links")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setDepartmentLinks(Array.isArray(data) ? data : []))
+      .catch(() => setDepartmentLinks([]));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,6 +137,30 @@ export default function AdminLoginPage() {
             </Link>
           </p>
         </form>
+
+        {departmentLinks && departmentLinks.length > 0 ? (
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {departmentLinks.map((link) => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:border-primary-300 hover:text-primary-600 transition-colors"
+              >
+                {link.label}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ))}
+          </div>
+        ) : (
+          departmentLinks !== null &&
+          departmentLinks.length === 0 && (
+            <p className="mt-6 text-center text-xs text-slate-400">
+              Department links admin se hasil karein
+            </p>
+          )
+        )}
 
         <p className="text-center text-xs text-slate-400 mt-6">
           Password .env file se set hota hai

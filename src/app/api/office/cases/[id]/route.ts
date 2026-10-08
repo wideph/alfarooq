@@ -8,7 +8,9 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
+import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
 import { cleanText } from "@/lib/office/serializers";
+import { parseCaseInput } from "@/lib/office/workflow";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -35,17 +37,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
     if (!existing) return notFound("Case nahi mila");
 
-    const body = await request.json();
+    const { fields: body, clientPicture } = await parseCaseInput(request);
     const data: Prisma.CaseUpdateInput = {};
 
+    // §N7: client name is optional (empty string allowed), but the case must
+    // always keep at least one of r-number / reg-number.
     if (body.clientName !== undefined) {
-      const clientName = cleanText(body.clientName, 200);
-      if (!clientName) return badRequest("Client ka naam zaroori hai");
-      data.clientName = clientName;
+      data.clientName = cleanText(body.clientName, 200) || "";
     }
     if (body.rollNumber !== undefined) data.rollNumber = cleanText(body.rollNumber, 80);
     if (body.registrationNumber !== undefined) data.registrationNumber = cleanText(body.registrationNumber, 80);
+    const nextRoll = data.rollNumber !== undefined ? (data.rollNumber as string | null) : existing.rollNumber;
+    const nextReg =
+      data.registrationNumber !== undefined ? (data.registrationNumber as string | null) : existing.registrationNumber;
+    if (!nextRoll && !nextReg) return badRequest("r-number ya reg-number lazmi hai");
     if (body.notes !== undefined) data.notes = cleanText(body.notes, 2000);
+    if (body.agreedAmountRemarks !== undefined) {
+      data.agreedAmountRemarks = cleanText(body.agreedAmountRemarks, 500);
+    }
+    if (body.courierNumber !== undefined) data.courierNumber = cleanText(body.courierNumber, 120);
+    if (body.isUrgent !== undefined) data.isUrgent = Boolean(body.isUrgent);
 
     if (body.categoryId !== undefined) {
       const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
@@ -85,9 +96,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Client picture replace (multipart) → R2 like payment slips.
+    if (clientPicture) {
+      const uploaded = await uploadOfficeFile(clientPicture, `clients/${existing.caseNumber}`);
+      data.clientPictureKey = uploaded.key;
+      data.clientPictureType = uploaded.type;
+    }
+
     if (Object.keys(data).length === 0) return badRequest("Kuch change nahi kiya");
 
     const updated = await prisma.case.update({ where: { id }, data });
+    if (clientPicture && existing.clientPictureKey) {
+      await deleteOfficeFile(existing.clientPictureKey).catch((error) =>
+        console.error("[office] old client picture delete fail", error)
+      );
+    }
     await logOfficeAction(session, {
       action: "case.update",
       entity: "Case",

@@ -7,8 +7,8 @@ import { Home } from "lucide-react";
 export default function FloatingHomeButton() {
   const pathname = usePathname();
 
-  // Home page aur admin area par floating button nahi dikhana
-  if (pathname === "/" || pathname.startsWith("/admin")) return null;
+  // Home page, admin area aur office area par floating button nahi dikhana
+  if (pathname === "/" || pathname.startsWith("/admin") || pathname.startsWith("/office")) return null;
 
   return (
     <Link

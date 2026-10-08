@@ -3,6 +3,8 @@
 export const STATUS_LABELS: Record<string, string> = {
   NEW: "New",
   PAYMENT_PENDING: "Payment pending",
+  WAITING_FOR_FILE: "Waiting for file",
+  WAITING_FOR_PRINTING: "Waiting for printing",
   IN_PROCESS: "In process",
   PRINTED: "Printed",
   ATTESTATION: "Attestation",
@@ -14,6 +16,8 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_STYLES: Record<string, string> = {
   NEW: "bg-slate-100 text-slate-700",
   PAYMENT_PENDING: "bg-amber-100 text-amber-700",
+  WAITING_FOR_FILE: "bg-orange-100 text-orange-700",
+  WAITING_FOR_PRINTING: "bg-cyan-100 text-cyan-700",
   IN_PROCESS: "bg-blue-100 text-blue-700",
   PRINTED: "bg-indigo-100 text-indigo-700",
   ATTESTATION: "bg-violet-100 text-violet-700",
@@ -64,4 +68,5 @@ export const LEDGER_TYPE_LABELS: Record<string, string> = {
   PROFIT_SHARE: "Profit share",
   PAYOUT: "Payout",
   ADJUSTMENT: "Adjustment",
+  EXPENSE: "Office expense",
 };

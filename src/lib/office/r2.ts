@@ -78,6 +78,51 @@ export async function uploadOfficeFile(
   return { key, type: fileType };
 }
 
+export const OFFICE_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+
+// Department workflow files (§N7): printing proof and the atta final file may
+// be video; everything else stays pdf/image like payment slips.
+function getDepartmentFileType(mimeType: string, filename?: string): "pdf" | "image" | "video" | null {
+  const base = getFileType(mimeType, filename);
+  if (base) return base;
+  const normalizedMime = mimeType.trim().toLowerCase();
+  if (normalizedMime.startsWith("video/")) return "video";
+  if (filename) {
+    const ext = path.extname(filename).toLowerCase();
+    if ([".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"].includes(ext)) return "video";
+  }
+  return null;
+}
+
+export async function uploadDepartmentFile(
+  file: File,
+  prefix: string
+): Promise<{ key: string; type: "pdf" | "image" | "video" }> {
+  const fileType = getDepartmentFileType(file.type, file.name);
+  if (!fileType) throw new Error("Sirf PDF, image ya video file allowed hai");
+  const maxBytes = fileType === "video" ? OFFICE_VIDEO_MAX_BYTES : OFFICE_FILE_MAX_BYTES;
+  if (file.size > maxBytes) {
+    throw new Error(fileType === "video" ? "Video 100 MB se badi nahi ho sakti" : "File 10 MB se badi nahi ho sakti");
+  }
+
+  const ext = path.extname(file.name) || (fileType === "pdf" ? ".pdf" : fileType === "video" ? ".mp4" : ".jpg");
+  const base = sanitizeFilename(path.basename(file.name, ext)).slice(0, 60);
+  const key = `office/${prefix}/${Date.now()}_${base}${ext}`;
+  const body = Buffer.from(await file.arrayBuffer());
+
+  const { bucket } = getR2Config();
+  await getR2Client().send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: file.type?.trim() || getMimeType(key),
+    })
+  );
+
+  return { key, type: fileType };
+}
+
 export async function deleteOfficeFile(key: string) {
   const { bucket } = getR2Config();
   await getR2Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));

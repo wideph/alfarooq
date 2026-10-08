@@ -1,0 +1,259 @@
+import type { NextRequest } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import type { AdminPermission, AdminSession } from "@/lib/auth";
+import { generateSetDates } from "@/lib/office/date-engine";
+import { getOfficeFileSignedUrl } from "@/lib/office/r2";
+import { toJson } from "@/lib/office/serializers";
+
+// ---------------------------------------------------------------------------
+// Wave 4 (docs/office-module/06_NEW_REQUIREMENTS.md §N7): department workflow
+// helpers shared by the cases / files / remarks routes.
+// ---------------------------------------------------------------------------
+
+export const CASE_DEPARTMENTS = ["FILING", "PRINTING", "ATTA", "COURIER"] as const;
+export type CaseDepartment = (typeof CASE_DEPARTMENTS)[number];
+
+// Department → permission required to upload/delete its files.
+export const DEPARTMENT_PERMISSIONS: Record<CaseDepartment, AdminPermission> = {
+  FILING: "office:filing:write",
+  PRINTING: "office:printing:write",
+  ATTA: "office:atta:write",
+  COURIER: "office:courier:write",
+};
+
+// -- Targeted remarks (§N7) ---------------------------------------------------
+
+export const REMARK_TARGETS = ["ADMIN", "BOOKING", "FILING", "PRINTING", "ATTA", "COURIER"] as const;
+export type RemarkTarget = (typeof REMARK_TARGETS)[number];
+
+export function roleToRemarkTarget(role?: string | null): RemarkTarget | null {
+  switch (role) {
+    case "admin":
+      return "ADMIN";
+    case "booking_office":
+      return "BOOKING";
+    case "filing":
+      return "FILING";
+    case "printing":
+      return "PRINTING";
+    case "atta":
+      return "ATTA";
+    case "courier":
+      return "COURIER";
+    default:
+      return null;
+  }
+}
+
+// Who a role may address (§N7): booking office → admin/atta/printing, filing →
+// admin/booking/printing, printing/atta/courier → anyone, admin → anyone.
+export function allowedRemarkTargets(role?: string | null): RemarkTarget[] {
+  switch (role) {
+    case "admin":
+      return [...REMARK_TARGETS];
+    case "booking_office":
+      return ["ADMIN", "ATTA", "PRINTING"];
+    case "filing":
+      return ["ADMIN", "BOOKING", "PRINTING"];
+    case "printing":
+    case "atta":
+    case "courier":
+      return [...REMARK_TARGETS];
+    default:
+      return [];
+  }
+}
+
+// -- Department queues (§N7 list filters) -------------------------------------
+
+// ?dept=filing|printing|atta|courier on GET /api/office/cases. These are plain
+// filters over the normal scope; `history` (filing only) shows cases that
+// already passed the filing stage.
+export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhereInput | null {
+  switch (dept) {
+    case "filing":
+      return history
+        ? { status: { in: ["WAITING_FOR_PRINTING", "PRINTED", "ATTESTATION", "COMPLETED", "DELIVERED"] } }
+        : { status: "WAITING_FOR_FILE" };
+    case "printing":
+      return { status: { in: ["WAITING_FOR_PRINTING", "PRINTED"] } };
+    case "atta":
+      return { status: { in: ["PRINTED", "ATTESTATION"] } };
+    case "courier":
+      // Courier sees a case once attestation is complete AND courier number +
+      // address exist (payment-clear simplification per wave-4 brief), plus
+      // already-delivered cases.
+      return {
+        OR: [
+          { status: "COMPLETED", courierNumber: { not: null }, addresses: { some: {} } },
+          { status: "DELIVERED" },
+        ],
+      };
+    default:
+      return null;
+  }
+}
+
+// -- Warnings -----------------------------------------------------------------
+
+// Set-warning: printing marked the case printed (or it moved beyond) without a
+// selected set → booking office sees a red warning (§N7).
+export const SET_WARNING_STATUSES = ["PRINTED", "ATTESTATION", "COMPLETED", "DELIVERED"];
+
+export function setMissingWarning(item: { status: string; setId: string | null }): boolean {
+  return !item.setId && SET_WARNING_STATUSES.includes(item.status);
+}
+
+// Case ids (out of `caseIds`) that have an unseen remark aimed at the caller's
+// department → `hasUnseenWarning` flag on list rows.
+export async function unseenWarningCaseIds(
+  session: AdminSession,
+  caseIds: string[]
+): Promise<Set<string>> {
+  const target = roleToRemarkTarget(session.role);
+  if (!target || caseIds.length === 0) return new Set();
+  const rows = await prisma.caseRemarkRecipient.findMany({
+    where: { target, seenAt: null, remark: { caseId: { in: caseIds } } },
+    select: { remark: { select: { caseId: true } } },
+  });
+  return new Set(rows.map((row) => row.remark.caseId));
+}
+
+// -- Filing-limited view (§N7) --------------------------------------------------
+
+// Filing department (unless super admin) sees ONLY: id, caseNumber, category
+// name, r-number, reg-number, notes, client picture, status, set name — never
+// payments / agreed amount / commission / ledger.
+export function isFilingLimited(session: AdminSession): boolean {
+  return session.role === "filing";
+}
+
+type FilingCaseRow = {
+  id: string;
+  caseNumber: string;
+  rollNumber: string | null;
+  registrationNumber: string | null;
+  notes: string | null;
+  status: string;
+  clientPictureKey: string | null;
+  clientPictureType: string | null;
+  category?: { name: string } | null;
+  set?: { name: string } | null;
+};
+
+export async function serializeFilingCase(item: FilingCaseRow) {
+  return toJson({
+    id: item.id,
+    caseNumber: item.caseNumber,
+    category: item.category ? { name: item.category.name } : null,
+    rollNumber: item.rollNumber,
+    registrationNumber: item.registrationNumber,
+    notes: item.notes,
+    status: item.status,
+    setName: item.set?.name ?? null,
+    clientPictureType: item.clientPictureType,
+    clientPictureUrl: item.clientPictureKey
+      ? await getOfficeFileSignedUrl(item.clientPictureKey)
+      : null,
+  });
+}
+
+// -- Attestation-complete rule (§N7) -------------------------------------------
+
+// A case becomes COMPLETED when (a) every attestation step of its set is DONE
+// (fallback when no set: every CaseAttestation of the case) AND (b) the atta
+// department uploaded the mandatory final file (department=ATTA, stepKey=FINAL).
+// Forward-only: never touches COMPLETED / DELIVERED / CANCELLED cases.
+export async function evaluateCaseCompletion(
+  caseId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<boolean> {
+  const item = await db.case.findUnique({
+    where: { id: caseId },
+    include: {
+      attestations: { include: { attestationType: { select: { name: true } } } },
+      set: { include: { steps: { select: { label: true } } } },
+    },
+  });
+  if (!item) return false;
+  if (["COMPLETED", "DELIVERED", "CANCELLED"].includes(item.status)) return false;
+
+  const relevant = item.set
+    ? item.attestations.filter((a) =>
+        item.set!.steps.some((step) => step.label === a.attestationType.name)
+      )
+    : item.attestations;
+  if (relevant.length === 0 || !relevant.every((a) => a.status === "DONE")) return false;
+
+  const finalFile = await db.caseFile.findFirst({
+    where: { caseId, department: "ATTA", stepKey: "FINAL" },
+    select: { id: true },
+  });
+  if (!finalFile) return false;
+
+  await db.case.update({ where: { id: caseId }, data: { status: "COMPLETED" } });
+  return true;
+}
+
+// -- First-payment hook (§N7) ---------------------------------------------------
+
+// After the FIRST payment turns RECEIVED the case enters the department
+// workflow: status → WAITING_FOR_FILE (visible to filing) and, when a set is
+// already selected, its dates are generated. Call after recomputeCaseFinancials
+// (which may have moved NEW → IN_PROCESS). Never throws.
+export async function activateWorkflowOnFirstPayment(caseId: string): Promise<void> {
+  try {
+    const receivedCount = await prisma.payment.count({ where: { caseId, status: "RECEIVED" } });
+    if (receivedCount !== 1) return;
+    const item = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: { status: true, setId: true },
+    });
+    if (!item) return;
+    if (["NEW", "PAYMENT_PENDING", "IN_PROCESS"].includes(item.status)) {
+      await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_FILE" } });
+    }
+    if (item.setId) await generateSetDates(caseId);
+  } catch (error) {
+    console.error("[office] first-payment hook fail", error);
+  }
+}
+
+// -- Multipart / JSON case input (client picture upload) ------------------------
+
+// Case create/update accept either JSON or multipart (multipart when a client
+// picture is attached, like payment slips). Array/object fields arrive as
+// JSON-encoded strings in multipart mode.
+export async function parseCaseInput(request: NextRequest): Promise<{
+  fields: Record<string, unknown>;
+  clientPicture: File | null;
+}> {
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.includes("multipart/form-data")) {
+    const fields = (await request.json()) as Record<string, unknown>;
+    return { fields, clientPicture: null };
+  }
+
+  const formData = await request.formData();
+  const fields: Record<string, unknown> = {};
+  let clientPicture: File | null = null;
+  for (const [key, value] of formData.entries()) {
+    if (value instanceof File) {
+      if (key === "clientPicture" && value.size > 0) clientPicture = value;
+      continue;
+    }
+    if (["contacts", "addresses", "attestationTypeIds"].includes(key)) {
+      try {
+        fields[key] = JSON.parse(value);
+      } catch {
+        fields[key] = value;
+      }
+    } else if (key === "isUrgent") {
+      fields[key] = value === "true" || value === "1";
+    } else {
+      fields[key] = value;
+    }
+  }
+  return { fields, clientPicture };
+}

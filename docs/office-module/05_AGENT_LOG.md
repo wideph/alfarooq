@@ -64,3 +64,440 @@ Next step for the next agent:
 Open questions (for the owner):
 - Type-1 offices: when agreedAmount is still 0, only the half commission is credited until the fee is set (documented BR3.4). Confirm this is desired.
 - Should booking-office logins see their office's ledger balance (currently yes, read-only)?
+
+## [2026-10-08 —] Agent: Claude (Fable 5.1) — Wave 2026-10: N1, N2, N3 (docs 06)
+Done:
+- N3: `FloatingHomeButton` + `BotChatWidget` ("Sawal poochein" trigger aur chat bubble)
+  ab `/office/*` par bhi render nahi hote (`/admin` guard pehle se tha). Public site par
+  dono waise hi kaam karte hain. `SubmitQuestionModal` sirf confirmation modal hai
+  (floating trigger nahi), isliye touch nahi kiya.
+- N1: `AdminNav` se single generic "Office" entry hata di; office destinations
+  (Dashboard /office, Cases, Payments, Ledger, Finance, Setup) ab DIRECT top-level nav
+  items hain — same look, `adminCanAny` permission-filtered (OfficeNav jaisa), super
+  admin ko sab. Icons + `hidden md:inline` labels, overflow-x-auto intact.
+- N2 API: `POST /api/office/setup/booking-offices` ab `users: [{name,email,password,role}]`
+  accept karta hai — poora office + default member + saare users + audit rows ek
+  `prisma.$transaction` mein. Validation: email unique (DB + list ke andar duplicate),
+  password min 6, role ∈ OFFICE_ROLES (tamam 7 roles). Naya route
+  `POST /api/office/setup/booking-offices/[id]/users` mojooda office mein baad mein user
+  add karne ke liye. Shared logic naye `src/lib/office/office-users.ts` mein
+  (`validateOfficeUser` + `createOfficeUser`: bcrypt hash, ROLE_PRESETS permissions,
+  bookingOfficeId, booking_office role par BookingOfficeMember auto-link — /api/admin/users
+  ka mirror). GET booking-offices ab `users` (id/name/email/role/isActive) bhi include karta hai.
+- N2 UI: `SetupPanels.tsx` Booking Offices panel redesign — create card mein "Users / Roles"
+  sub-section (inline rows: naam, email, password show/hide eye toggle, role dropdown
+  ROLE_LABELS ke sath, remove row; khaali rows submit par filter). Selected office ke neeche
+  naya `OfficeUsersEditor` (mojooda logins list + inline add row). Members (profit %) aur
+  commission grid waise ke waise. `/office/setup` page par heading add ki.
+- Verification: `npm run typecheck` ✅ green (tsc --noEmit, 0 errors) — lekin NOTE:
+  shared repo ka node_modules is environment mein bar bar wipe/install ho raha tha
+  (doosre wave-2 installer + FUSE portal FS jahan symlinks/chmod kaam nahi karte), isliye
+  typecheck ek fresh copy `/tmp/tc` mein chalaya gaya (source usi waqt repo se sync,
+  `npm install` wahan clean, `prisma generate` OK). Repo mein node_modules/.bin ke
+  wrapper scripts (tsc, prisma — plain sh jo node invoke karte hain) maine chhore hain
+  kyunke is FS par npm .bin symlinks bana nahi sakta.
+Half-done / caveats:
+- Typecheck repo ke andar `npm run typecheck` se verify nahi ho saka (node_modules churn);
+  /tmp/tc copy par green hai. Agla agent jab repo node_modules stable ho to ek dafa
+  `npm run typecheck` repo mein dohra le.
+- Kuch bhi commit nahi kiya (owner ne nahi kaha); saari changes working tree mein hain.
+Files touched:
+- src/components/FloatingHomeButton.tsx, src/components/BotChatWidget.tsx,
+  src/components/admin/AdminNav.tsx, src/components/office/SetupPanels.tsx,
+  src/app/office/setup/page.tsx, src/app/api/office/setup/booking-offices/route.ts,
+  src/app/api/office/setup/booking-offices/[id]/users/route.ts (NEW),
+  src/lib/office/office-users.ts (NEW), docs/office-module/05_AGENT_LOG.md (append).
+Next step for the next agent:
+- Repo node_modules stable hone par repo mein `npm run typecheck` re-run karein; phir
+  real DB ke sath N2 flow (office + users create, baad mein user add) smoke test karein.
+
+
+## [2026-10-08 —] Agent: Claude (subagent, date-engine mission) — Wave 2026-10: N5 + N6 engine & APIs (docs 06)
+Done:
+- `src/lib/office/date-engine.ts` (NEW): deterministic working-day engine over the
+  HolidayClosure table (scopes PAKISTAN/ISLAMABAD/QUETTA/GUJRAT/LAHORE/EMBASSIES_ISB/SAUDI),
+  weekends PK Sat+Sun / Saudi Fri+Sat. Exports `isPakistanWorkingDay(date, city?)`,
+  `isSaudiWorkingDay`, `firstWorkingDayOnOrAfter`, `firstWorkingDayAfterOffset`,
+  `specialMoofaCityDate` (Islamabad → Gujrat → Lahore priority, city stored),
+  `saudMbcDate` (+2, ISB working day on Tue/Wed/Thu/Fri, no EMBASSIES_ISB closure),
+  `moofaSaudDate` (+4, Saudi working day Sun–Wed), `formatDdMmYy`, and the
+  orchestrator `generateSetDates(caseId)`.
+- `generateSetDates`: computes every set step per §N5 (r-number mode for
+  UV_IDCC/BACK_NEVTCC 2nd-step sets + M Tech (i)/(iii): suffix 19/20/21 → year
+  2020/2021/2022 via payment month/day in that year, else random pick from
+  WorkingDatePool year=2019 excluding Sat/Sun; UV/Back-Nevtcc paired ≥3 days later,
+  pair noted on both steps. QR/CURRENT_NEVTCC family + Bord-only (v)/(vii): Bord =
+  payment+5 (PAK+QUETTA rule), QR = Bord+2 (ISB). Special Moofa: i-style payment+7,
+  ii-style prev+1, Medical MOH_ATTA+1, CPLS/APAC nevtcc+1. Medical/CPLS/APAC
+  formulas per §N5). Upserts AttestationType by label + CaseAttestation
+  (caseId+typeId); sets Board Attas Number once per case (never re-consumes the
+  counter). Missing first RECEIVED payment / empty 2019 pool → steps stay pending,
+  `pending` status + Roman-Urdu reasons returned, never throws.
+- Deviation (documented in code): regeneration keeps an existing step's status
+  (IN_PROGRESS/DONE) and keeps the old date when the new computation is pending —
+  brief said "status PENDING" but wiping atta-department progress on regenerate
+  would break N7. Confirm with owner.
+- `src/lib/office/hijri.ts` (NEW): tabular (civil) Hijri conversion, comment notes
+  ±1 day approximation. `src/lib/office/board-attas.ts` (NEW): atomic
+  BoardAttasCounter increment (upsert+increment in tx), format
+  `[year last digit][MM][count pad-3, grows past 999]`, leading `0`→`8`.
+  `src/lib/office/rnumber.ts` (NEW): `parseRollSuffix`, `boardYearForSuffix`
+  (19→2020, 20→2021, 21→2022, else null = 2019 pool), dim rule for categories
+  "Dip BBTE DAE 3Y"/"BBTE DBA 3Y" suffix 22..29 → set names containing "(i)"
+  dimmed, reason "Ye set is r-number ke liye available nahi".
+- APIs (all guardOffice + logOfficeAction, `NextResponse.json({error})` on failure):
+  `GET /api/office/setup/sets` (?categoryId, ?rollNumber → per-set dimmed info,
+  office:cases:read); `POST|DELETE /api/office/cases/[id]/set` (office:cases:write +
+  findAccessibleCase, rejects dimmed with 403 Roman-Urdu, auto-generates dates if a
+  RECEIVED payment exists); `POST /api/office/cases/[id]/generate-dates`
+  (office:attestation:write, admin bypasses); `GET|POST|PATCH|DELETE
+  /api/office/setup/holidays` (office:setup:write, filters year/scope);
+  `GET|POST|DELETE /api/office/setup/date-pool` (office:setup:write, POST validates
+  the date is a PK working day, 30-per-year cap, `?suggest=1` returns next
+  candidate working dates not yet pooled).
+- Payment verify hook (`payments/[id]/route.ts` PATCH): when a payment newly turns
+  RECEIVED and it is the case's first RECEIVED payment → status NEW/PAYMENT_PENDING
+  becomes WAITING_FOR_FILE, and if Case.setId is set `generateSetDates` runs
+  (awaited, errors logged not thrown). Extra-amount/commission logic untouched.
+Half-done / caveats:
+- Repo node_modules on the fuse FS repeatedly broke (concurrent installs); per lead
+  coordination, verification was done in a full copy at /tmp/w2:
+  `npx prisma validate` ✅, `npx prisma generate` ✅, `npm run typecheck` ✅ (zero
+  errors, against the latest repo state incl. other agents' files). If repo
+  node_modules is repaired later, re-run `npm run typecheck` there once.
+- Nothing executed against a real DB (same as previous entries).
+- UI for set selection / holidays / date-pool panels not in scope (comes later).
+Files touched:
+- src/lib/office/{date-engine,hijri,board-attas,rnumber}.ts (NEW),
+  src/app/api/office/setup/sets/route.ts (NEW),
+  src/app/api/office/cases/[id]/set/route.ts (NEW),
+  src/app/api/office/cases/[id]/generate-dates/route.ts (NEW),
+  src/app/api/office/setup/holidays/route.ts (NEW),
+  src/app/api/office/setup/date-pool/route.ts (NEW),
+  src/app/api/office/payments/[id]/route.ts (hook added),
+  docs/office-module/05_AGENT_LOG.md (this entry).
+Next step for the next agent:
+- N7/N10 UI: case set-selection dropdown consuming GET /api/office/setup/sets
+  (?categoryId&rollNumber, honour `dimmed`), holidays + date-pool admin panels,
+  atta-department step UI over CaseAttestation scheduledDate/notes.
+Open questions (for the owner):
+- Suffix 19/20/21: brief fixes only the Bord/UV YEAR (2020/2021/2022); engine uses
+  the first payment's month/day inside that year → first working day. Confirm.
+- Regenerate keeps DONE/IN_PROGRESS step status (see Deviation above). Confirm.
+
+
+---
+
+## Entry — N6 admin UI: Holidays panel + 2019 Working Dates Pool panel (setup page)
+
+Task: N6 follow-up — admin panels for `HolidayClosure` and `WorkingDatePool` on
+`/office/setup` (permission `office:setup:write`, same visibility pattern as the
+other setup panels via `OfficePageFrame`).
+
+Done:
+- NEW `src/components/office/HolidayPanel.tsx` — HolidayClosure CRUD. Lists all
+  holidays grouped by year (desc), date asc inside each year; columns: date
+  (dd-mmm-yyyy via shared `formatDate`), coloured scope badge
+  (PAKISTAN / ISLAMABAD / QUETTA / GUJRAT / LAHORE / EMBASSIES_ISB / SAUDI),
+  reason, Edit + Delete per row. Add/edit form (date picker, scope dropdown,
+  reason text) — POST for add, PATCH for edit (upsert note shown: same
+  date+scope updates reason). Roman-Urdu messages ("Chhuti add ho gayi",
+  "Chhuti update ho gayi", "Delete ho gaya") + the required note about
+  non-working dates and approximate Eid dates. Scope list is mirrored locally
+  (date-engine.ts is server-only — must not be imported into a client bundle).
+- NEW `src/components/office/DatePoolPanel.tsx` — WorkingDatePool panel. Year
+  selector (2019–2030, default 2019), X/30 count badge, list of pooled dates
+  with delete, manual date add (POST), "Suggest dates" button
+  (GET ?year=Y&suggest=1) rendering candidate chips with one-click add
+  (POST per date) plus a "Sab add karein" loop button that stops on the first
+  API error and shows it as-is. Required note about random Bord-date picks
+  when r-number last digits are not 19–29.
+- `src/components/office/SetupPanels.tsx` — only re-exports the two new
+  default-export panels (`HolidayPanel`, `DatePoolPanel`) so page imports stay
+  in one place; no existing panel touched.
+- `src/app/office/setup/page.tsx` — renders both panels in a 2-col grid under
+  `WorkingDayPanel`, sharing the existing `onMessage` toast.
+Style: matches existing panels exactly (rounded-2xl border cards, slate
+palette, primary-600 buttons, same input/btn class strings, mobile-friendly
+grids + overflow-x-auto tables).
+
+Verification (per ENV RULE — nothing installed in the repo): full copy at
+/tmp/w4c (repo sans node_modules; node_modules seeded from the repo copy since
+/tmp/tc did not exist), `npm install --no-audit --no-fund` (reconcile) ✅,
+`npx prisma generate` ✅, `npm run typecheck` ✅ (zero errors, against latest
+repo state incl. other agents' files). No DB access available (as before).
+No commit made — working tree left as-is.
+
+Files touched:
+- src/components/office/HolidayPanel.tsx (NEW),
+  src/components/office/DatePoolPanel.tsx (NEW),
+  src/components/office/SetupPanels.tsx (re-export lines only),
+  src/app/office/setup/page.tsx (render the 2 panels),
+  docs/office-module/05_AGENT_LOG.md (this entry).
+
+Next step for the next agent:
+- N7/N10 UI remaining: case set-selection dropdown (GET /api/office/setup/sets),
+  atta-department step UI over CaseAttestation scheduledDate/notes.
+
+## Entry — Wave 5: §N8/N9 finance rules + department links (backend, subagent)
+
+- `src/app/api/office/office-expenses/route.ts` (NEW): `GET ?bookingOfficeId=&from=&to=`
+  (office:ledger:read; booking_office login scoped to own office) lists OfficeExpense
+  with office + member names. `POST {bookingOfficeId, memberId?, amount, description,
+  expenseDate}` (office:expenses:write; admin bypasses) in ONE transaction creates the
+  OfficeExpense row + ledger write per §N8: FIXED_COMMISSION → EXPENSE DEBIT on office
+  ledger (memberId when given — "minus from that user's commission"; company profit
+  impact zero, only payout liability shrinks); PROFIT_SHARE → same EXPENSE DEBIT plus
+  pool deduction in finalize (below); SALARY → NO ledger debit, company cost in finance
+  only. `DELETE ?id=` admin-only; ledger rows are never deleted (BR1.5) so the EXPENSE
+  debit is neutralised with a reversing EXPENSE CREDIT on the same entryDate, all in
+  one transaction + audit.
+- `src/lib/office/profit-share.ts`: §N8 — pool = received − case expenses − office
+  expenses (OfficeExpense of the office, floored at 0), then split by profitPercent.
+  `ProfitShareSummary` gains `officeExpenses`. Re-finalize stays idempotent (only
+  PROFIT_SHARE/ADJUSTMENT rows compared).
+- `src/app/api/office/finance/route.ts`: presets `daily`/`weekly` added as aliases of
+  today/week. Fetches OfficeExpense rows in range: per-office breakdown field
+  `offices[].officeExpenses` (all types, informational); summary gains
+  `officeExpenses` (SALARY-office rows = company cost, subtracted from profit) and
+  `officeExpensesTotal` (all rows, NOT subtracted); day rows gain `officeExpenses`.
+  No double count: commission-office expenses sit in EXPENSE ledger debits (not in
+  SHARE_TYPES) and profit-share expenses are already netted in the share credits, so
+  neither is subtracted again. Response shape only extended, nothing renamed.
+- `src/app/api/office/ledger/route.ts` + `src/lib/office/ledger.ts`: new
+  `memberBalance(memberId, officeId?)` helper; `GET ?memberId=` response gains
+  `memberBalance` (all-time CREDIT−DEBIT, office-scoped when known). memberId filter
+  + memberBalances already existed. EXPENSE entries from office-expenses POST appear
+  in member/office ledgers automatically.
+- `src/app/api/office/setup/department-links/route.ts` (NEW): `GET` any authenticated
+  office user (active links; `?all=1` + office:setup:write shows inactive too),
+  `POST`/`PATCH`/`DELETE` office:setup:write with logOfficeAction; URL must start
+  http(s)://.
+- `src/lib/office/labels.ts`: LEDGER_TYPE_LABELS gains `EXPENSE: "Office expense"`.
+- booking-offices route NOT touched: GET already includes `users` (Wave-3 work).
+Known accounting note (per spec, flagged): for PROFIT_SHARE offices the expense is
+reflected twice at the office-AGGREGATE balance (reduced share credits + EXPENSE
+debit); per-member balances are correct (memberBalances ignores null-member rows).
+This matches the Wave-5 spec literally; revisit with owner if aggregate display
+should net it out.
+Verify: full-repo copy at /tmp/w5 (repo node_modules was broken — 29 entries, so
+fresh `npm install --no-audit --no-fund` there), `npx prisma validate` OK,
+`npx prisma generate` OK, `npm run typecheck` zero errors. Not committed.
+
+## Entry — Wave 4: §N7 department workflow + case model changes (backend, subagent)
+Done:
+- `src/lib/office/workflow.ts` (NEW): department constants + permission map
+  (FILING→office:filing:write etc.), remark-target role mapping + allowed
+  targets (booking→ADMIN/ATTA/PRINTING, filing→ADMIN/BOOKING/PRINTING,
+  printing/atta/courier/admin→any), `deptQueueWhere` (?dept=filing|printing|
+  atta|courier, filing `history=1`), `setMissingWarning` (status PRINTED+ &
+  setId null), `unseenWarningCaseIds`, `serializeFilingCase` (stripped payload:
+  id/caseNumber/category name/r-number/reg-number/notes/status/setName/client
+  picture signed URL only), `evaluateCaseCompletion` (all set-step
+  CaseAttestations DONE — fallback: ALL CaseAttestations DONE when no set — AND
+  an ATTA file with stepKey=FINAL ⇒ status COMPLETED; forward-only),
+  `activateWorkflowOnFirstPayment` (first RECEIVED payment ⇒ WAITING_FOR_FILE +
+  generateSetDates when set selected; accepts IN_PROCESS because it runs after
+  recomputeCaseFinancials — fixes Wave-2 hook that never fired), `parseCaseInput`
+  (JSON or multipart w/ clientPicture file).
+- `src/lib/office/r2.ts`: `uploadDepartmentFile` (pdf/image ≤10MB, video
+  ≤100MB) for department files; payment-slip upload untouched.
+- `src/lib/office/case-access.ts` (§N9): booking_office scoped to own office
+  UNLESS `office:cases:read-all`; company-side roles see all.
+- `src/lib/office/case-detail.ts`: list+detail include `set`; detail returns
+  setName/setMissingWarning/hasUnseenWarning/clientPictureUrl; filing role gets
+  `serializeFilingCase` (no money fields at all). `serializeCaseRow` gains
+  setName/setMissingWarning/hasUnseenWarning.
+- `cases/route.ts`: GET `?dept=` queues + urgent-first ordering + warnings;
+  POST clientName OPTIONAL (""), r-number OR reg-number required (400
+  "r-number ya reg-number lazmi hai"), agreedAmountRemarks/courierNumber/
+  isUrgent/clientPicture (multipart→R2).
+- `cases/[id]/route.ts` PATCH: same fields + clientPicture replace (old R2
+  object deleted), combined roll/reg check against existing values.
+- `cases/[id]/files/route.ts` (NEW): GET signed-URL list; POST multipart
+  (file+department+stepKey?+title?) with per-department permission and status
+  side-effects in one tx (first FILING→WAITING_FOR_PRINTING; first
+  PRINTING→PRINTED+isPrinted+printedAt; ATTA→evaluateCaseCompletion;
+  COURIER→DELIVERED); DELETE ?id= uploader's department or admin.
+- `cases/[id]/attestations/route.ts` PATCH: office:atta:write can move steps
+  forward-only PENDING→IN_PROGRESS→DONE (+completedDate), status/notes/date
+  edits stay with office:attestation:write; COMPLETED now requires FINAL atta
+  file (evaluateCaseCompletion), ATTESTATION auto-move kept.
+- `cases/[id]/remarks/route.ts` (NEW): POST {text,targets[]} role-limited;
+  GET visibility = admin-all / targeted-at-my-department / created-by-me, with
+  recipient ids+seenAt+hasUnseenWarning; PATCH {recipientId} marks seen.
+- `cases/[id]/discount-requests/route.ts` (NEW): POST {amount,reason} (one
+  PENDING per case, ≤ agreedAmount), GET list.
+- `api/office/discount-requests/route.ts` (NEW): GET admin/cashier (optional
+  ?status=); PATCH {id,action,deductFrom,partialCommissionAmount?} — ACCEPT in
+  tx: mark ACCEPTED, decrement Case.agreedAmount (recompute keeps remaining
+  consistent), DISCOUNT DEBIT LedgerEntry for the commission part (PROFIT part
+  absorbed by company, audit-only), then recomputeCaseFinancials.
+- `api/office/bonus-requests/route.ts` (NEW): GET (admin/cashier all, booking
+  office own), POST {bookingOfficeId?,caseId?,amount,reason}, PATCH accept ⇒
+  BONUS CREDIT LedgerEntry to office (deductFrom COMMISSION|PROFIT recorded).
+- `payments/route.ts` POST + `payments/[id]/route.ts` PATCH: both call
+  `activateWorkflowOnFirstPayment` (direct-RECEIVED creates were missing the
+  hook; verify-hook bug fixed, see above).
+- `permissions.ts`: booking_office + courier presets gain office:remarks:write
+  (N7 requires them to send targeted remarks).
+- schema.prisma: LedgerEntry type comment extended with DISCOUNT | BONUS
+  (comment only, no migration needed — types are plain strings).
+Status transition table (auto): first RECEIVED payment ⇒ WAITING_FOR_FILE ⇒
+first FILING file ⇒ WAITING_FOR_PRINTING ⇒ first PRINTING file ⇒ PRINTED ⇒
+atta step IN_PROGRESS ⇒ ATTESTATION ⇒ all set steps DONE + FINAL ATTA file ⇒
+COMPLETED ⇒ COURIER file ⇒ DELIVERED. CANCELLED stays admin-only.
+Half-done / caveats:
+- Courier queue "payment clear" simplified per brief: status COMPLETED +
+  courierNumber + ≥1 address (no received-vs-agreed check).
+- CaseRemarkRecipient.seenAt is per TARGET (schema), so one department user
+  marking seen clears the warning for colleagues of the same department.
+- Case clientName column stays required String — empty name stored as "".
+- No pages/components (backend-only mission). N7 UI still open.
+Verify: full-repo copy at /tmp/w4 (repo node_modules broken on fuse FS; fresh
+`npm install --no-audit --no-fund` there per ENV RULE), `npx prisma generate`
+OK, `npm run typecheck` zero errors (repo state incl. Wave-5 files at sync
+time). NOT committed, per instructions.
+Next step for the next agent:
+- N7/N8 UI: department queues (?dept=), file upload/view per department,
+  targeted remarks UI + warning badges (setMissingWarning/hasUnseenWarning/
+  isUrgent), discount/bonus request + decision popups.
+
+## Entry — Wave 5 UI: §N9 department links panel + login/nav surfaces (subagent)
+
+Mission: UI for department access links (backend route
+`api/office/setup/department-links` already existed from Wave 5 backend).
+Files touched (owned scope only, NOT committed):
+- `src/components/office/DepartmentLinksPanel.tsx` (NEW): CRUD admin panel
+  (office:setup:write, loads `?all=1`). Department dropdown
+  (BOOKING_OFFICE/CASHIER/FILING/PRINTING/ATTA/COURIER/OTHER), label, url,
+  order, isActive toggle (inline PATCH), edit/delete rows. Includes the
+  required note: "In links ka DNS Vercel men manually add karna ho ga — yahan
+  siraf link record hota hai." Style copied from HolidayPanel.
+- `src/app/office/setup/page.tsx`: renders <DepartmentLinksPanel> at the
+  bottom, imported directly from the new file (SetupPanels.tsx untouched).
+- `src/app/admin/login/page.tsx`: below the login card, tries
+  GET /api/office/setup/department-links. NOTE: the GET route requires an
+  office session (guardOffice office:cases:read → 401 logged-out), so for
+  logged-out visitors the fetch fails and the static hint "Department links
+  admin se hasil karein" is shown instead (per mission brief — API auth NOT
+  weakened). If the fetch ever succeeds (e.g. session still alive), active
+  links render as small chips (label → url, target _blank).
+- `src/components/office/OfficeNav.tsx`: new "Links" dropdown in the center
+  nav (any office user), fetches active links, label + ExternalLink icon,
+  opens new tab; backdrop click closes menu. Existing nav items untouched.
+Verify: fresh copy at /tmp/w4d (repo node_modules is stub-only; fresh
+`npm install --no-audit --no-fund` in /tmp/w4d per ENV RULE — nothing
+installed in the repo), `npx prisma generate` OK, `npm run typecheck`
+zero errors. NOT committed, per instructions.
+Next step: none for N9 UI. Open from previous entries: N7/N8 department
+queues/remarks UI.
+
+## Entry — Wave 6 UI: §N7/N8 department workflow UI — cases create/list/detail (subagent)
+
+Mission: full department-workflow UI over the Wave-4 backend APIs (owned
+scope only: `src/app/office/cases/**` + `src/components/office/case/**`,
+plus two additive shared-lib edits; NOT committed).
+
+Done:
+- Case CREATE (`cases/new/page.tsx`): client name ab optional; r-number +
+  reg-number fields with note "R-number ya reg-number — in men se aik lazmi
+  hai" + client-side validation (submit disabled/error); remarks textarea;
+  agreed amount remarks; client picture (image) file input; submit hamesha
+  multipart FormData (parseCaseInput ke mutabiq, arrays JSON strings);
+  success par detail page redirect.
+- Cases LIST (`cases/page.tsx`): department queue tabs (?dept=filing|
+  printing|atta|courier) — tab sirf matching office:<dept>:write permission
+  par, admin/cashier ko sab; filing tab par "History" toggle (?history=1);
+  "All cases" tab. Row badges: URGENT (red, isUrgent), red "Set missing"
+  badge (title "Is case ka set select nahi kiya gaya"), amber dot
+  (title "Aap ke department ke liye new remarks"). Admin/cashier ko per-row
+  "Expense" quick action → `/office/cases/[id]#expenses`. Filing-stripped
+  list payload (no bookingOffice/totals/attestations/isPrinted) ke liye
+  saare cells optional-safe. Existing filters (q/status/officeId/paging)
+  unchanged.
+- NEW `case/CaseFileViewer.tsx`: in-app modal viewer for R2 signed URLs —
+  image (zoom), pdf (pdfjs, getDocument({url}) + fetch/Uint8Array fallback),
+  video (<video controls>). ImageViewer/PdfViewer jaise hi style (signed URL
+  se, /api/media ke bajaye — shared components touch nahi kiye).
+- NEW `case/CaseFilesCard.tsx`: per-department sections. FILING: upload
+  1–2 pdf/image + list. PRINTING: filing files ki alag list (dekhne/download
+  ke liye) + printed proof upload (image/pdf/video). ATTA: per-set-step
+  optional upload (stepKey dropdown selected set ke steps se) + alag
+  highlighted "Final file (lazmi)" uploader (stepKey=FINAL). COURIER:
+  printing+atta files "Dekhein" se in-app viewer mein + courier slip upload.
+  Upload sirf us dept ki write permission par (admin sab); lists sab ke liye
+  read-only; delete own-dept/admin. Upload ke baad detail reload (status
+  workflow aage barhta hai).
+- NEW `case/CaseSetCard.tsx`: GET setup/sets?categoryId&rollNumber se sets;
+  dimmed sets opacity-50 + cursor-not-allowed + reason tooltip/text (select
+  bhi disabled); select = POST cases/[id]/set; selected set ke steps with
+  scheduledDate/status/notes (detail.attestations se label match) + Bord
+  step par Board Attas # chip; "Dates generate karein" button
+  (office:attestation:write / office:atta:write / cashier — API khud guard
+  karta hai) → POST generate-dates, pendingReasons amber box mein.
+- NEW `case/CaseRemarksCard.tsx`: visible remarks list (creator name+role,
+  time, target chips with seen ✓); amber "Aap ke department ke liye new
+  remarks" banner + "Mark seen" (tamam forMe unseen recipients PATCH);
+  create form target checkboxes role-limited (booking→ADMIN/ATTA/PRINTING,
+  filing→ADMIN/BOOKING/PRINTING, printing/atta/courier/admin→sab), sirf
+  office:remarks:write par.
+- NEW `case/CaseDiscountCard.tsx`: booking (office:cases:write) request form
+  {amount, reason} → POST cases/[id]/discount-requests; admin/cashier
+  (payments:verify) pending par Decide popup: radio COMMISSION/PROFIT/
+  PARTIAL (+ partial commission amount input) → PATCH
+  /api/office/discount-requests; Reject button; poori history status chips
+  ke sath; accept par detail reload (agreed amount ghatti hai).
+- NEW `case/CaseBonusCard.tsx`: booking office form {amount, reason} (caseId
+  auto-linked) → POST /api/office/bonus-requests; admin/cashier is case ki
+  requests (GET se caseId filter) Decide popup COMMISSION/PROFIT → PATCH;
+  history chips.
+- NEW `case/FilingCaseView.tsx`: filing role ke liye detail page ka limited
+  render (API payload bhi stripped hai) — sirf category, r/reg, remarks
+  (notes), client picture (viewer), status, set name, FILING files card,
+  remarks card. Koi money/payment card nahi. cases/[id] page role===filing
+  par ye render karta hai.
+- CaseHeader: URGENT badge + "Urgent karein/hatayein" toggle
+  (office:cases:write, PATCH isUrgent); red banner jab setMissingWarning;
+  Board Attas # chip; set name header line mein.
+- CaseInfoCard: courierNumber row + edit; clientName optional (r/reg lazmi
+  validation); client picture thumbnail (click → viewer) + edit mode mein
+  picture replace (multipart PATCH); Set row.
+- CaseMoneyCard: agreed amount ke sath remarks view/edit
+  (PATCH agreedAmountRemarks, office:cases:write).
+- CaseAttestations: atta role (office:atta:write, bina attestation:write)
+  per-step "Shuru karein"/"Done karein" forward-only buttons; Bord step par
+  Board Attas # chip; scheduledDate + notes pehle se show.
+- CaseExpensesLedger: expenses card ko `id="expenses"` anchor (list ke
+  Expense quick action ke liye).
+- Shared additive edits (owned scope se bahar, sirf additive):
+  `src/lib/office/types.ts` — CaseDetail gains setId/set/setName/
+  setMissingWarning/hasUnseenWarning/isUrgent/courierNumber/
+  agreedAmountRemarks/boardAttasNumber/clientPictureUrl/clientPictureType +
+  new types FilingCaseDetail/CaseFileItem/CategorySetWithSteps/
+  CaseRemarkItem/DiscountRequestItem/BonusRequestItem.
+  `src/lib/office/labels.ts` — STATUS_LABELS/STYLES mein WAITING_FOR_FILE +
+  WAITING_FOR_PRINTING (naye workflow statuses ke liye).
+Verification (ENV RULE — repo mein kuch install nahi): fresh copy /tmp/w4b
+(repo sans node_modules rsync; fresh `npm install --no-audit --no-fund`),
+`npx prisma generate` OK, `npm run typecheck` ZERO errors (latest repo state
+incl. other agents' files), `next lint` on all touched files clean.
+NOT committed, per instructions.
+Caveats:
+- "Dates generate karein" button cashier/atta ko dikhta hai per brief, lekin
+  API office:attestation:write mangta hai (admin bypass) — bina permission
+  ke 403 "Unauthorized" message dikhega.
+- Courier queue "payment clear" backend simplification waisi hi (Wave-4).
+Next step for the next agent:
+- Real DB ke sath poora N7 flow smoke test (create → payment receive →
+  filing files → printing → atta steps + FINAL → courier slip), aur owner se
+  confirm: cashier/atta ko generate-dates permission deni hai ya button
+  ghata dein.
+
+## [2026-10-08] Agent: Kimi (orchestrator + 7 coder waves) — Wave 2 COMPLETE (06_NEW_REQUIREMENTS.md N1–N11)
+Done (all waves, typecheck+lint green in /tmp/final clean env, prisma validate green):
+- N1 AdminNav direct office items; N2 office creation with inline users/roles API+UI; N3 floating buttons hidden on /admin+/office.
+- N4 roles filing/printing/atta/courier + permissions; N5/N6 date engine (date-engine.ts, hijri.ts, board-attas.ts, rnumber.ts) + set APIs + holidays/date-pool CRUD + setup panels; N7 dept workflow (files, statuses, remarks, urgent, queues, filing-limited view, courier in-app viewer); N8 discount/bonus flows + office expenses accounting; N9 finance rules + isolation (office:cases:read-all) + DepartmentLink APIs/UI; N10 seed updated; N11 `impossible` file in repo root.
+- Integration fix by orchestrator: generate-dates route now allows atta/payments:verify; BotChatWidget lint warning fixed.
+Verification: `npm run typecheck` exit 0, `npm run lint` exit 0, `npx prisma validate` valid. `next build` NOT run (needs real DATABASE_URL at prerender — pre-existing).
+Next step (owner): on real DB run `npx prisma migrate deploy` + `npm run db:seed:office`, fill 2019 pool via Setup panel, smoke-test full chain. See repo-root `impossible` file for limitations.

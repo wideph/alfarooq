@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { memberBalances, officeBalances } from "@/lib/office/ledger";
+import { memberBalance, memberBalances, officeBalances } from "@/lib/office/ledger";
 import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/office/permissions";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  const [items, total, balances, members] = await Promise.all([
+  const [items, total, balances, members, singleMemberBalance] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where,
       orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     prisma.ledgerEntry.count({ where }),
     officeBalances(officeId ? [officeId] : undefined),
     officeId ? memberBalances(officeId) : Promise.resolve({}),
+    // §N9 per-user ledger: ?memberId= returns that member's running balance too
+    // (all-time, scoped to the office when known — not just the page/range).
+    memberId ? memberBalance(memberId, officeId || undefined) : Promise.resolve(null),
   ]);
 
   return NextResponse.json({
@@ -60,6 +63,7 @@ export async function GET(request: NextRequest) {
     pageSize,
     officeBalances: balances,
     memberBalances: members,
+    memberBalance: singleMemberBalance,
   });
 }
 

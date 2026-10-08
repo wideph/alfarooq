@@ -8,6 +8,7 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
 import { deleteOfficeFile } from "@/lib/office/r2";
+import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -61,6 +62,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
+
+    // Wave 2 (§N5/N7): the FIRST payment that turns RECEIVED activates the
+    // workflow — case becomes WAITING_FOR_FILE (visible to filing) and, if a
+    // set is selected, its dates are generated. Runs AFTER the recompute (which
+    // may have moved NEW → IN_PROCESS), so the helper accepts IN_PROCESS too.
+    // Failures are logged, never thrown.
+    if (data.status === "RECEIVED" && existing.status !== "RECEIVED") {
+      await activateWorkflowOnFirstPayment(existing.caseId);
+    }
 
     return NextResponse.json(
       toJson({ payment: { ...payment, hasSlip: Boolean(payment.slipKey), slipKey: undefined }, ...result })

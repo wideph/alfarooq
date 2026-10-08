@@ -51,7 +51,7 @@ export default function CaseExpensesLedger({
   return (
     <div className="space-y-4">
       {canSeeExpenses && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+        <div id="expenses" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3 scroll-mt-24">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-900">Case expenses</h3>
             <span className="text-sm text-slate-500">Total {formatMoney(expenseTotal)}</span>
