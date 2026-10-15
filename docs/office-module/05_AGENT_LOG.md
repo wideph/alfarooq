@@ -977,3 +977,15 @@ Next step for the next agent:
   **Singapore (sin1)**. Ye sab se bara free speed win hai — function aur
   Supabase DB same region mein hon to har query ka cross-region latency
   (~200ms+) khatam ho jata hai.
+
+## Wave 14 (2026-10-09) — Expense/payout UX + auto recompute
+- Expense reason optional (route + modal); cases list rows show expenseSummary
+  (count/total/reasons tooltip); finance expenses rendered red.
+- Auto recompute: case expense + office expense changes re-finalize profit-share
+  distributions in after() (snapshot percents honored); payment auto-distribute
+  already live — manual re-calculate button no longer needed anywhere.
+- PayoutRequest accept flow: admin/cashier Pay → PENDING + member notification;
+  office holder Accept writes PAYOUT ledger (system entry) / Reject leaves it.
+- Status note optional; set-missing warning scoped to PRINTED/ATTESTATION;
+  new-case form optional set select per category (setId on create).
+- PayoutRequest migration applied live; tsc 0, lint 0, build exit 0. Pushed 1e6d171.
