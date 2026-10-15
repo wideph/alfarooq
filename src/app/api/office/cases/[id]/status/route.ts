@@ -64,10 +64,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (session.role !== "admin" && ADMIN_ONLY_STATUSES.includes(status)) {
         return forbidden("Ye status sirf super admin set kar sakta hai");
       }
-      // Wajah (note/remarks) lazmi hai — OfficeAuditLog ke after.note mein
-      // store hoti hai.
+      // §W14.7: wajah (note/remarks) ab OPTIONAL hai — present ho to
+      // OfficeAuditLog ke after.note mein store hoti hai.
       adminNote = cleanText(body.note ?? body.remarks, 500);
-      if (!adminNote) return badRequest("Status change ki wajah (note/remarks) lazmi hai");
 
       if (status === "ATTESTATION") {
         // Dynamic status: current attestation step select karna zaroori hai.

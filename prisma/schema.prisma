@@ -214,6 +214,7 @@ model BookingOffice {
   salaries      SalaryEntry[]
   expenses      OfficeExpense[]
   bonusRequests BonusRequest[]
+  payoutRequests PayoutRequest[]
 }
 
 model BookingOfficeMember {
@@ -230,6 +231,7 @@ model BookingOfficeMember {
   ledger          LedgerEntry[]
   salaries        SalaryEntry[]
   officeExpenses  OfficeExpense[]
+  payoutRequests  PayoutRequest[]
 
   @@index([bookingOfficeId])
 }
@@ -706,4 +708,30 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([createdAt])
+}
+
+// Wave 14 — shareholder payout requests: admin/cashier request banata hai,
+// system ka hissa tab banti hai jab office holder (member ka linked user)
+// ACCEPT karta hai (us waqt PAYOUT ledger entry likhi jati hai).
+model PayoutRequest {
+  id              String    @id @default(cuid())
+  bookingOfficeId String
+  memberId        String
+  amount          Decimal   @db.Decimal(12, 2)
+  method          String    @default("CASH")
+  entryDate       DateTime
+  remarks         String?
+  // PENDING | ACCEPTED | REJECTED
+  status          String    @default("PENDING")
+  ledgerEntryId   String?
+  createdById     String
+  decidedById     String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  bookingOffice BookingOffice       @relation(fields: [bookingOfficeId], references: [id], onDelete: Cascade)
+  member        BookingOfficeMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, status])
+  @@index([bookingOfficeId, status])
 }

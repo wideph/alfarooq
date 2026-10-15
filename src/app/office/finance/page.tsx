@@ -68,6 +68,30 @@ type MemberDetail = {
   totals: { totalEarning: number; wasool: number; due: number };
 };
 
+// §W14.6 — office general expenses (GET /api/office/office-expenses).
+type OfficeExpenseRow = {
+  id: string;
+  amount: number;
+  description: string;
+  expenseDate: string;
+  bookingOffice: { id: string; name: string; type: BookingOfficeType } | null;
+  member: { id: string; name: string } | null;
+};
+
+// §W14.5 — payout requests (GET /api/office/payouts).
+type PayoutRequestRow = {
+  id: string;
+  amount: number;
+  method: string | null;
+  entryDate: string;
+  remarks: string | null;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  createdAt: string;
+  createdByName?: string | null;
+  member: { id: string; name: string; adminId: string | null } | null;
+  bookingOffice: { id: string; name: string } | null;
+};
+
 // Earning type labels (Roman Urdu / short English).
 const EARNING_TYPE_LABELS: Record<string, string> = {
   COMMISSION_HALF: "Commission 50%",
@@ -121,6 +145,26 @@ function FinanceDashboard() {
 
   const [selectedMember, setSelectedMember] = useState<UserEarningRow | null>(null);
 
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") => setToast(m ? { message: m, kind } : null);
+
+  // §W14.6: office general expenses (recent ~20) + add modal.
+  const [officeExpenses, setOfficeExpenses] = useState<OfficeExpenseRow[] | null>(null);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseOffices, setExpenseOffices] = useState<Array<{ id: string; name: string }>>([]);
+  const [expenseForm, setExpenseForm] = useState({ bookingOfficeId: "", amount: "", description: "", expenseDate: todayInputDate() });
+  const [expenseSaving, setExpenseSaving] = useState(false);
+
+  // §W14.5: pending payout requests (admin/cashier ko sab dikhte hain) —
+  // yahan se reject bhi ho sakta hai.
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequestRow[] | null>(null);
+  const [payoutBusy, setPayoutBusy] = useState<string | null>(null);
+
+  // §W14.5: users earnings table → per-row Pay modal.
+  const [payTarget, setPayTarget] = useState<UserEarningRow | null>(null);
+  const [payForm, setPayForm] = useState({ amount: "", method: "CASH", entryDate: todayInputDate(), remarks: "" });
+  const [paySaving, setPaySaving] = useState(false);
+
   const loadReport = useCallback(
     async (silent = false) => {
       if (!silent) setReportLoading(true);
@@ -151,6 +195,24 @@ function FinanceDashboard() {
     if (!silent) setUsersLoading(false);
   }, []);
 
+  // §W14.6: recent office expenses (silent — card skeleton ke baghair bhi chale).
+  const loadOfficeExpenses = useCallback(async () => {
+    const res = await officeFetch<OfficeExpenseRow[]>("/api/office/office-expenses");
+    if (res.ok) setOfficeExpenses(res.data.slice(0, 20));
+  }, []);
+
+  // §W14.5: pending payout requests.
+  const loadPayoutRequests = useCallback(async () => {
+    const res = await officeFetch<PayoutRequestRow[]>("/api/office/payouts?status=PENDING");
+    if (res.ok) setPayoutRequests(res.data);
+  }, []);
+
+  useEffect(() => {
+    officeFetch<Array<{ id: string; name: string }>>("/api/office/setup/booking-offices").then((res) => {
+      if (res.ok) setExpenseOffices(res.data);
+    });
+  }, []);
+
   useEffect(() => {
     if (preset !== "custom") void loadReport();
   }, [preset, loadReport]);
@@ -163,18 +225,110 @@ function FinanceDashboard() {
     void loadUsers();
   }, [loadUsers]);
 
-  // §W12.3: live refresh (silent — spinner flash nahi).
+  useEffect(() => {
+    void loadOfficeExpenses();
+    void loadPayoutRequests();
+  }, [loadOfficeExpenses, loadPayoutRequests]);
+
+  // §W12.3: live refresh (silent — spinner flash nahi). §W14.5/W14.6: office
+  // expenses + pending payouts bhi isi refresh ke saath update hote hain.
   useLiveRefresh(
     useCallback(() => {
       void loadReport(true);
       void loadPayments(paymentsPage, true);
       void loadUsers(true);
-    }, [loadReport, loadPayments, loadUsers, paymentsPage])
+      void loadOfficeExpenses();
+      void loadPayoutRequests();
+    }, [loadReport, loadPayments, loadUsers, loadOfficeExpenses, loadPayoutRequests, paymentsPage])
   );
+
+  // §W14.6: office expense save → toast → silent reload.
+  async function submitOfficeExpense() {
+    if (!expenseForm.bookingOfficeId) {
+      setMessage("Office select karein", "error");
+      return;
+    }
+    if (!expenseForm.amount.trim() || Number(expenseForm.amount) <= 0) {
+      setMessage("Amount sahi nahi hai", "error");
+      return;
+    }
+    if (!expenseForm.expenseDate) {
+      setMessage("Date zaroori hai", "error");
+      return;
+    }
+    setExpenseSaving(true);
+    const res = await officeFetch("/api/office/office-expenses", {
+      method: "POST",
+      json: {
+        bookingOfficeId: expenseForm.bookingOfficeId,
+        amount: expenseForm.amount.trim(),
+        description: expenseForm.description.trim(),
+        expenseDate: expenseForm.expenseDate,
+      },
+    });
+    setExpenseSaving(false);
+    if (res.ok) {
+      setMessage("Office expense add ho gaya", "success");
+      setExpenseModalOpen(false);
+      setExpenseForm({ bookingOfficeId: "", amount: "", description: "", expenseDate: todayInputDate() });
+      void loadOfficeExpenses();
+      void loadReport(true);
+    } else {
+      setMessage(res.error, "error");
+    }
+  }
+
+  // §W14.5: Pay → payout REQUEST (PENDING) — ledger men tab aata hai jab
+  // office holder accept kare.
+  async function submitPay() {
+    if (!payTarget) return;
+    if (!payForm.amount.trim() || Number(payForm.amount) <= 0) {
+      setMessage("Amount sahi nahi hai", "error");
+      return;
+    }
+    if (!payForm.entryDate) {
+      setMessage("Date zaroori hai", "error");
+      return;
+    }
+    setPaySaving(true);
+    const res = await officeFetch("/api/office/payouts", {
+      method: "POST",
+      json: {
+        bookingOfficeId: payTarget.officeId,
+        memberId: payTarget.memberId,
+        amount: payForm.amount.trim(),
+        method: payForm.method,
+        entryDate: payForm.entryDate,
+        remarks: payForm.remarks.trim(),
+      },
+    });
+    setPaySaving(false);
+    if (res.ok) {
+      setMessage("Payout request bhej di — office holder accept kare ga to ledger men aa jayegi", "success");
+      setPayTarget(null);
+      void loadPayoutRequests();
+    } else {
+      setMessage(res.error, "error");
+    }
+  }
+
+  // §W14.5: admin/cashier pending request reject kar sakta hai.
+  async function rejectPayout(id: string) {
+    setPayoutBusy(id);
+    const res = await officeFetch(`/api/office/payouts/${id}`, { method: "POST", json: { action: "reject" } });
+    setPayoutBusy(null);
+    if (res.ok) {
+      setMessage("Payout request reject kar di gayi", "success");
+      void loadPayoutRequests();
+    } else {
+      setMessage(res.error, "error");
+    }
+  }
 
   return (
     <div className="space-y-5">
       <h2 className="text-xl font-bold text-slate-900">Finance</h2>
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* (a) Company summary strip */}
       <section className="space-y-3">
@@ -212,10 +366,11 @@ function FinanceDashboard() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <SummaryTile label="Income (received)" value={report.summary.income} tone="emerald" />
               <SummaryTile label="Commissions / shares" value={report.summary.commissions} tone="amber" />
+              {/* §W14.3: expenses figure RED. */}
               <SummaryTile
                 label="Expenses"
                 value={report.summary.caseExpenses + report.summary.salaries + report.summary.otherExpenses}
-                tone="amber"
+                tone="red"
               />
               <SummaryTile
                 label="Net profit"
@@ -236,6 +391,87 @@ function FinanceDashboard() {
             </div>
           </>
         ) : null}
+      </section>
+
+      {/* §W14.5 (d): pending payout requests — admin/cashier yahan se reject
+          bhi kar sakta hai. */}
+      {payoutRequests && payoutRequests.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Wallet className="h-4 w-4 text-red-500" />
+            Pending payout requests
+            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-600">
+              {payoutRequests.length}
+            </span>
+          </h3>
+          <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {payoutRequests.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-800">
+                    {r.member?.name || "—"}
+                    <span className="ml-1 font-normal text-xs text-slate-500">· {r.bookingOffice?.name || "—"}</span>
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {formatDate(r.entryDate)}
+                    {r.method ? ` · ${PAYMENT_METHOD_LABELS[r.method] || r.method}` : ""}
+                    {r.createdByName ? ` · by ${r.createdByName}` : ""}
+                    {r.remarks ? ` · ${r.remarks}` : ""}
+                  </p>
+                </div>
+                <span className="font-bold text-red-600">{formatMoney(r.amount)}</span>
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">Pending</span>
+                <button
+                  type="button"
+                  disabled={payoutBusy === r.id}
+                  onClick={() => void rejectPayout(r.id)}
+                  className="min-h-[32px] rounded-lg border border-red-200 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {payoutBusy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reject"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* §W14.6 (b): office general expenses — list + add modal. */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <Wallet className="h-4 w-4 text-red-500" />
+            Office general expenses
+          </h3>
+          <button
+            type="button"
+            onClick={() => setExpenseModalOpen(true)}
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white"
+          >
+            Office expense add
+          </button>
+        </div>
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {!officeExpenses ? (
+            <TableSkeleton rows={3} />
+          ) : officeExpenses.length === 0 ? (
+            <p className="px-3 py-8 text-center text-sm text-slate-400">Koi office expense nahi</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {officeExpenses.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-800">{e.bookingOffice?.name || "—"}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {e.description || "—"}
+                      {e.member ? ` · ${e.member.name}` : ""} · {formatDate(e.expenseDate)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-bold text-red-600">{formatMoney(e.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       {/* (b) Payments received */}
@@ -368,6 +604,7 @@ function FinanceDashboard() {
                   <th className="px-3 py-2 text-right">Total earning</th>
                   <th className="px-3 py-2 text-right">Wasool</th>
                   <th className="px-3 py-2 text-right">Due</th>
+                  <th className="px-3 py-2 text-right">Pay</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -391,6 +628,25 @@ function FinanceDashboard() {
                     >
                       {formatMoney(u.due)}
                     </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                      {/* §W14.5 (c): payout REQUEST — accept hone par ledger men aati hai. */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPayForm({
+                            amount: u.due > 0 ? String(u.due) : "",
+                            method: "CASH",
+                            entryDate: todayInputDate(),
+                            remarks: "",
+                          });
+                          setPayTarget(u);
+                        }}
+                        className="min-h-[32px] rounded-lg bg-primary-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-primary-700"
+                      >
+                        Pay
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -400,6 +656,181 @@ function FinanceDashboard() {
       </section>
 
       {selectedMember && <UserDrawer member={selectedMember} onClose={() => setSelectedMember(null)} />}
+
+      {/* §W14.5 (c): Pay modal — payout request bhejta hai (PENDING). */}
+      {payTarget && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => !paySaving && setPayTarget(null)}
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Pay — {payTarget.name}</h3>
+                <p className="text-xs text-slate-500">
+                  {payTarget.officeName} · Due: {formatMoney(payTarget.due)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPayTarget(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Band karein"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Amount (Rs) *</label>
+                <input
+                  className={`${input} w-full`}
+                  inputMode="decimal"
+                  placeholder="Maslan: 5000"
+                  value={payForm.amount}
+                  onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Method</label>
+                <select
+                  className={`${input} w-full`}
+                  value={payForm.method}
+                  onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Date *</label>
+                <input
+                  type="date"
+                  className={`${input} w-full`}
+                  value={payForm.entryDate}
+                  onChange={(e) => setPayForm({ ...payForm, entryDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Remarks (optional)</label>
+                <input
+                  className={`${input} w-full`}
+                  placeholder="Remarks likhna optional hai"
+                  value={payForm.remarks}
+                  onChange={(e) => setPayForm({ ...payForm, remarks: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Ye payout request jayegi — office holder accept kare ga to ledger men aa jayegi.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={paySaving}
+                onClick={() => setPayTarget(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button type="button" disabled={paySaving} onClick={submitPay} className={primaryBtn}>
+                {paySaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Request bhejein
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* §W14.6 (b): office expense add modal. */}
+      {expenseModalOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => !expenseSaving && setExpenseModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900">Office expense add</h3>
+              <button
+                type="button"
+                onClick={() => setExpenseModalOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Band karein"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-slate-500">Office *</label>
+                <select
+                  className={`${input} w-full`}
+                  value={expenseForm.bookingOfficeId}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, bookingOfficeId: e.target.value })}
+                >
+                  <option value="">Select karein…</option>
+                  {expenseOffices.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Amount (Rs) *</label>
+                <input
+                  className={`${input} w-full`}
+                  inputMode="decimal"
+                  placeholder="Maslan: 500"
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Date *</label>
+                <input
+                  type="date"
+                  className={`${input} w-full`}
+                  value={expenseForm.expenseDate}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-slate-500">Description (optional)</label>
+                <input
+                  className={`${input} w-full`}
+                  placeholder="Expense ki tafseel likhna optional hai"
+                  value={expenseForm.description}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={expenseSaving}
+                onClick={() => setExpenseModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button type="button" disabled={expenseSaving} onClick={submitOfficeExpense} className={primaryBtn}>
+                {expenseSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save expense
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -598,6 +1029,30 @@ function BookingOfficeLedgerView({ admin }: { admin: AdminNavUser }) {
   const [payout, setPayout] = useState({ memberId: "", amount: "", entryDate: todayInputDate(), method: "CASH", remarks: "" });
   const [saving, setSaving] = useState(false);
 
+  // §W14.5 (e): payout requests — apne office ki (server scoped). Jis row ka
+  // member isi login se linked hai wahan Accept/Reject buttons; baqi read-only.
+  const currentAdminId = (admin as AdminNavUser & { adminId?: string }).adminId || "";
+  const [requests, setRequests] = useState<PayoutRequestRow[] | null>(null);
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
+
+  const loadRequests = useCallback(async () => {
+    const res = await officeFetch<PayoutRequestRow[]>("/api/office/payouts");
+    if (res.ok) setRequests(res.data);
+  }, []);
+
+  async function decideRequest(id: string, action: "accept" | "reject") {
+    setRequestBusy(id);
+    const res = await officeFetch(`/api/office/payouts/${id}`, { method: "POST", json: { action } });
+    setRequestBusy(null);
+    if (res.ok) {
+      setMessage(action === "accept" ? "Payout accept ho gayi — ledger men aa gayi" : "Payout request reject kar di gayi", "success");
+      await load();
+      await loadRequests();
+    } else {
+      setMessage(res.error, "error");
+    }
+  }
+
   useEffect(() => {
     officeFetch<BookingOffice[]>("/api/office/setup/booking-offices").then((res) => {
       if (res.ok) {
@@ -622,7 +1077,16 @@ function BookingOfficeLedgerView({ admin }: { admin: AdminNavUser }) {
     void load();
   }, [load]);
 
-  useLiveRefresh(useCallback(() => void load(true), [load]));
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
+
+  useLiveRefresh(
+    useCallback(() => {
+      void load(true);
+      void loadRequests();
+    }, [load, loadRequests])
+  );
 
   const office = offices.find((o) => o.id === officeId) || null;
 
@@ -719,6 +1183,67 @@ function BookingOfficeLedgerView({ admin }: { admin: AdminNavUser }) {
           <button type="button" className={primaryBtn} disabled={saving || !payout.amount} onClick={submitPayout}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save payout
           </button>
+        </div>
+      )}
+
+      {/* §W14.5 (e): payout requests — linked member Accept/Reject, baqi read-only. */}
+      {requests && requests.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-bold text-slate-900">Payout requests</p>
+          <ul className="divide-y divide-slate-100">
+            {requests.map((r) => {
+              const canDecide = r.status === "PENDING" && r.member?.adminId !== null && r.member?.adminId === currentAdminId;
+              return (
+                <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-800">
+                      {r.member?.name || "—"}
+                      <span className="ml-1 font-normal text-xs text-slate-500">· {r.bookingOffice?.name || "—"}</span>
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {formatDate(r.entryDate)}
+                      {r.method ? ` · ${PAYMENT_METHOD_LABELS[r.method] || r.method}` : ""}
+                      {r.createdByName ? ` · by ${r.createdByName}` : ""}
+                      {r.remarks ? ` · ${r.remarks}` : ""}
+                    </p>
+                  </div>
+                  <span className="font-bold text-red-600">{formatMoney(r.amount)}</span>
+                  {r.status === "PENDING" ? (
+                    canDecide ? (
+                      <span className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={requestBusy === r.id}
+                          onClick={() => void decideRequest(r.id, "accept")}
+                          className="min-h-[32px] rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          {requestBusy === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Accept"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={requestBusy === r.id}
+                          onClick={() => void decideRequest(r.id, "reject")}
+                          className="min-h-[32px] rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">Pending</span>
+                    )
+                  ) : (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        r.status === "ACCEPTED" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {r.status === "ACCEPTED" ? "Accepted" : "Rejected"}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

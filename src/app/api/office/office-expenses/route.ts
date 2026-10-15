@@ -1,13 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth";
+import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
+import { finalizeProfitShare } from "@/lib/office/profit-share";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
+
+// §W14.4 — office general expense add/delete ke baad us partner office ke
+// TAMAM PROFIT_SHARE cases (jin ki received > 0 hai) dobara finalize: pool
+// shrink/grow hota hai to shares auto adjust. Sequential loop; har case apne
+// try/catch mein — ek fail ho to baqi phir bhi chalein.
+async function refinalizeOfficeCases(bookingOfficeId: string, session: AdminSession) {
+  try {
+    const cases = await prisma.case.findMany({
+      where: { bookingOfficeId, payments: { some: { status: "RECEIVED" } } },
+      select: { id: true },
+    });
+    for (const item of cases) {
+      try {
+        await finalizeProfitShare(item.id, session);
+      } catch (error) {
+        console.error("[office] office-expense auto re-finalize fail", item.id, error);
+      }
+    }
+  } catch (error) {
+    console.error("[office] office-expense auto re-finalize list fail", bookingOfficeId, error);
+  }
+}
 
 // Office-level general expenses (OfficeExpense) — docs/office-module/06_NEW_REQUIREMENTS.md §N8.
 // Accounting per booking office type (LedgerEntry written in the SAME transaction):
@@ -116,6 +139,12 @@ export async function POST(request: NextRequest) {
       return created;
     }, { maxWait: 10000, timeout: 30000 });
 
+    // §W14.4: partner office ka profit pool auto adjust (response ke baad).
+    after(async () => {
+      if (office.type !== "PROFIT_SHARE") return;
+      await refinalizeOfficeCases(bookingOfficeId, session);
+    });
+
     return NextResponse.json(toJson(expense), { status: 201 });
   } catch (error) {
     return serverError(error);
@@ -158,6 +187,12 @@ export async function DELETE(request: NextRequest) {
       tx
     );
   }, { maxWait: 10000, timeout: 30000 });
+
+  // §W14.4: partner office ke cases ka pool dobara finalize (response ke baad).
+  after(async () => {
+    if (existing.bookingOffice.type !== "PROFIT_SHARE") return;
+    await refinalizeOfficeCases(existing.bookingOfficeId, session);
+  });
 
   return NextResponse.json({ success: true });
 }

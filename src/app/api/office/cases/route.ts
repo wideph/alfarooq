@@ -25,8 +25,9 @@ const PAGE_SIZE = 50;
 
 // F6: list rows ke liye sirf zaroori fields — attestations ka slim select
 // (list page ke badges sirf id/status/completedDate/type-name use karte hain),
-// payments ke sirf totals wale scalar fields. expenses/ledger kabhi include
-// nahi hote. Payload mein raw payments nahi bhejte (totals kaafi hai).
+// payments ke sirf totals wale scalar fields. §W14.2: expenses ka slim select
+// (amount/description) expenseSummary ke liye; ledger kabhi include nahi hota.
+// Payload mein raw payments nahi bhejte (totals kaafi hai).
 const caseListRowInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true } },
@@ -41,6 +42,12 @@ const caseListRowInclude = {
     },
   },
   payments: { select: { id: true, amount: true, status: true, paymentDate: true } },
+  // §W14.2: expenseSummary ke liye slim expense rows (amount + description,
+  // newest first). DB chhota hai is liye poori rows cheap hain.
+  expenses: {
+    orderBy: { expenseDate: "desc" as const },
+    select: { amount: true, description: true },
+  },
 } satisfies Prisma.CaseInclude;
 
 export async function GET(request: NextRequest) {
@@ -117,8 +124,10 @@ export async function GET(request: NextRequest) {
     {
       items: items.map((item) => {
         const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
-        // F6: raw payment rows list payload mein nahi — totals pehle se computed.
+        // F6: raw payment/expense rows list payload mein nahi — totals aur
+        // expenseSummary pehle se computed hain.
         delete row.payments;
+        delete row.expenses;
         return row;
       }),
       total,
@@ -159,6 +168,15 @@ export async function POST(request: NextRequest) {
     if (!categoryId) return badRequest("Category select karna lazmi hai");
     const category = await prisma.caseCategory.findUnique({ where: { id: categoryId } });
     if (!category || !category.isActive) return badRequest("Category nahi mili ya inactive hai");
+
+    // §W14.9: optional set — diya ho to usi category ka hona chahiye taake
+    // dates engine + workflow creation se hi set par chalein.
+    const setId = typeof body.setId === "string" && body.setId.trim() ? body.setId.trim() : "";
+    if (setId) {
+      const set = await prisma.categorySet.findUnique({ where: { id: setId } });
+      if (!set || !set.isActive) return badRequest("Set nahi mila ya inactive hai");
+      if (set.categoryId !== categoryId) return badRequest("Set is category ka nahi hai");
+    }
 
     const agreedAmount =
       body.agreedAmount === undefined || body.agreedAmount === "" ? null : parseAmount(body.agreedAmount);
@@ -215,6 +233,8 @@ export async function POST(request: NextRequest) {
           bookingOfficeId,
           createdByAdminId: session.adminId,
           categoryId,
+          // §W14.9: optional set connect (dates engine creation se chale).
+          setId: setId || null,
           // §W11.1: naya case hamesha 1st payment pending se start hota hai.
           status: "FIRST_PAYMENT_PENDING",
           clientName,

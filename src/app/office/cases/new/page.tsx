@@ -9,6 +9,7 @@ import { officeFetch } from "@/lib/office/client";
 type Office = { id: string; name: string; type: string; isActive: boolean };
 type Category = { id: string; name: string; defaultAmount: number | null; isActive: boolean };
 type AttestationType = { id: string; name: string; isActive: boolean };
+type CategorySet = { id: string; name: string };
 
 const input =
   "w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100";
@@ -25,6 +26,7 @@ export default function NewCasePage() {
     bookingOfficeId: "",
     clientName: "",
     categoryId: "",
+    setId: "",
     rollNumber: "",
     registrationNumber: "",
     agreedAmount: "",
@@ -51,11 +53,35 @@ export default function NewCasePage() {
     });
   }, []);
 
+  // §W14.9: category select hone par us category ke sets fetch ho jate hain —
+  // "Set (optional)" dropdown attestation section men dikhta hai.
+  const [sets, setSets] = useState<CategorySet[]>([]);
+  const [setsLoading, setSetsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!form.categoryId) {
+      setSets([]);
+      return;
+    }
+    let cancelled = false;
+    setSetsLoading(true);
+    officeFetch<CategorySet[]>(`/api/office/setup/sets?categoryId=${form.categoryId}`).then((res) => {
+      if (cancelled) return;
+      setSets(res.ok ? res.data : []);
+      setSetsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.categoryId]);
+
   function pickCategory(categoryId: string) {
     const category = categories.find((c) => c.id === categoryId);
     setForm((prev) => ({
       ...prev,
       categoryId,
+      // Category badalte hi set reset (nayi category ka set alag hota hai).
+      setId: "",
       agreedAmount:
         prev.agreedAmount || category?.defaultAmount === null || category?.defaultAmount === undefined
           ? prev.agreedAmount
@@ -93,6 +119,7 @@ export default function NewCasePage() {
     fd.append("bookingOfficeId", form.bookingOfficeId);
     fd.append("clientName", form.clientName);
     fd.append("categoryId", form.categoryId);
+    if (form.setId) fd.append("setId", form.setId);
     fd.append("rollNumber", form.rollNumber);
     fd.append("registrationNumber", form.registrationNumber);
     fd.append("agreedAmount", form.agreedAmount);
@@ -215,6 +242,25 @@ export default function NewCasePage() {
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
             <p className="font-semibold text-slate-800">Required attestations</p>
+            {/* §W14.9: category chunne ke baad optional set select. */}
+            {form.categoryId && (
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Set (optional)</label>
+                <select
+                  className={input}
+                  value={form.setId}
+                  onChange={(e) => setForm({ ...form, setId: e.target.value })}
+                  disabled={setsLoading}
+                >
+                  <option value="">{setsLoading ? "Sets load ho rahe hain…" : "Set ke baghair"}</option>
+                  {sets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {types.length === 0 ? (
               <p className="text-sm text-slate-400">Koi attestation type set nahi hai (Setup se add karein)</p>
             ) : (

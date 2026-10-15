@@ -49,6 +49,8 @@ type CaseRow = {
   isUrgent?: boolean;
   setMissingWarning?: boolean;
   hasUnseenWarning?: boolean;
+  // §W14.2: expenses ka compact summary har row ke saath.
+  expenseSummary?: { count: number; total: number; reasons: string[] };
 };
 
 type Office = { id: string; name: string };
@@ -95,10 +97,7 @@ function CasesList() {
       showToast("Amount sahi nahi hai", "error");
       return;
     }
-    if (!expenseForm.description.trim()) {
-      showToast("Expense ki tafseel likhein", "error");
-      return;
-    }
+    // §W14.1: tafseel optional hai (khali bhi chalti hai).
     if (!expenseForm.expenseDate) {
       showToast("Expense date zaroori hai", "error");
       return;
@@ -264,6 +263,23 @@ function CasesList() {
           {item.createdAt ? formatDate(item.createdAt) : ""}
           {item.setName ? ` · Set: ${item.setName}` : ""}
         </p>
+        {/* §W14.2: expenses hain to compact red line (+ pehla reason, tooltip
+            men tamam reasons). */}
+        {(item.expenseSummary?.count ?? 0) > 0 && (
+          <p
+            className="text-xs text-red-600"
+            title={
+              item.expenseSummary!.reasons.length > 0
+                ? item.expenseSummary!.reasons.join(" · ")
+                : undefined
+            }
+          >
+            Expenses: {item.expenseSummary!.count} · {formatMoney(item.expenseSummary!.total)}
+            {item.expenseSummary!.reasons[0] ? (
+              <span className="text-red-400"> — {item.expenseSummary!.reasons[0]}</span>
+            ) : null}
+          </p>
+        )}
         {(admin.role === "admin" || adminCanAny(admin, ["office:expenses:write"])) && (
           <button
             type="button"
@@ -550,10 +566,10 @@ function CasesList() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-slate-500">Tafseel *</label>
+                  <label className="mb-1 block text-xs text-slate-500">Tafseel (optional)</label>
                   <input
                     className={`${input} w-full`}
-                    placeholder="Expense ki tafseel likhein"
+                    placeholder="Expense ki tafseel likhna optional hai"
                     value={expenseForm.description}
                     onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                   />

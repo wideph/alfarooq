@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/useToast";
 // §W11.1/W11.2 — ONE shared status control (cases list row + detail header):
 // chip jaisa dikhnay wala compact select. Options = 12 fixed statuses (flow
 // order) + is case ki har attestation ka option "Attestation: <name>" — select
-// karne par chhota modal "Wajah / note *" maangta hai (API par lazmi), phir
+// karne par chhota modal "Wajah / note (optional)" maangta hai (§W14.7: optional), phir
 // PATCH /api/office/cases/[id]/status. CANCELLED hamesha aakhir mein alag.
 // Sirf admin ke liye render hota hai (caller decide karta hai).
 
@@ -65,10 +65,7 @@ export default function CaseStatusSelect({
 
   async function confirmChange() {
     if (!pending) return;
-    if (!note.trim()) {
-      showToast("Status change ki wajah (note) lazmi hai", "error");
-      return;
-    }
+    // §W14.7: note ab optional hai (khali note bhi chalta hai).
     setBusy(true);
     const res = await officeFetch(`/api/office/cases/${caseId}/status`, {
       method: "PATCH",
@@ -153,12 +150,12 @@ export default function CaseStatusSelect({
               </button>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">Wajah / note *</label>
+              <label className="mb-1 block text-xs text-slate-500">Wajah / note (optional)</label>
               <textarea
                 autoFocus
                 rows={2}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                placeholder="Status kyun badal rahe hain? (lazmi)"
+                placeholder="Wajah likhna optional hai"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -174,7 +171,7 @@ export default function CaseStatusSelect({
               </button>
               <button
                 type="button"
-                disabled={busy || !note.trim()}
+                disabled={busy}
                 onClick={confirmChange}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >

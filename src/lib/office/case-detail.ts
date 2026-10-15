@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { caseScope } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
+import { sum, toNumber } from "@/lib/office/money";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 import {
@@ -22,6 +23,20 @@ export const caseListInclude = {
   payments: { select: { id: true, amount: true, status: true, paymentDate: true } },
 };
 
+// §W14.2 — compact expense summary for list rows (and detail payload).
+// `expenses` newest-first hon (list include expenseDate desc se aata hai);
+// reasons = up to 3 latest non-empty descriptions.
+export function expenseSummaryOf(expenses: Array<{ amount: unknown; description: string | null }>) {
+  return {
+    count: expenses.length,
+    total: toNumber(sum(expenses.map((e) => e.amount as number))),
+    reasons: expenses
+      .map((e) => e.description)
+      .filter((d): d is string => Boolean(d))
+      .slice(0, 3),
+  };
+}
+
 export function serializeCaseRow<
   T extends {
     payments: Array<{ amount: unknown; status: string }>;
@@ -34,9 +49,12 @@ export function serializeCaseRow<
     item.payments as Array<{ amount: number; status: string }>,
     item.agreedAmount as number
   );
+  const expenseRows =
+    (item as { expenses?: Array<{ amount: unknown; description: string | null }> }).expenses ?? [];
   return toJson({
     ...item,
     totals,
+    expenseSummary: expenseSummaryOf(expenseRows),
     setName: (item as { set?: { name: string } | null }).set?.name ?? null,
     setMissingWarning: setMissingWarning(item),
     hasUnseenWarning: Boolean(extras.hasUnseenWarning),
@@ -133,6 +151,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   return toJson({
     profitStale,
     ...item,
+    // §W14.2 — detail mein bhi wahi summary (expenses asc loaded hain → reverse).
+    expenseSummary: expenseSummaryOf([...item.expenses].reverse()),
     setName: item.set?.name ?? null,
     setMissingWarning: setMissingWarning(item),
     hasUnseenWarning: Boolean(hasUnseenWarning),

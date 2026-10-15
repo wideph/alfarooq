@@ -108,17 +108,10 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
 // Set-warning: printing marked the case printed (or it moved beyond) without a
 // selected set → booking office sees a red warning. §W11.1: PRINTED and later,
 // except CANCELLED.
-export const SET_WARNING_STATUSES = [
-  "PRINTED",
-  "ATTESTATION",
-  "ATTESTATION_COMPLETE",
-  "WAITING_FOR_COURIER",
-  "DELIVERED",
-  "MUSADIQA_APPLIED",
-  "MUSADIQA_FEES_PAID",
-  "MUSADIQA_SENT_BY_BOARD",
-  "MUSADIQA_VERIFIED",
-];
+// §W14.8: set-missing warning SIRF PRINTED + ATTESTATION ke dauraan —
+// ATTESTATION_COMPLETE (ya us se aage) push ho chuka case warn karna band
+// kar deta hai; PRINTED se pehle ke stages bhi warn nahi karte.
+export const SET_WARNING_STATUSES = ["PRINTED", "ATTESTATION"];
 
 export function setMissingWarning(item: { status: string; setId: string | null }): boolean {
   return !item.setId && SET_WARNING_STATUSES.includes(item.status);

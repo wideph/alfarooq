@@ -422,3 +422,63 @@ in the request path; only audit + notify move to after().
 preferredRegion code-side hai; Vercel Hobby par dashboard se bhi region free
 set ho sakta hai: Project → Settings → Functions → Region → Singapore (sin1).
 Ye sab se bara free speed win hai. Agent log mein note karo.
+
+---
+
+# WAVE 14 (2026-10-09) — Expense/payout UX + auto recompute + small fixes
+
+## W14.1 — Case expense: reason OPTIONAL
+POST /api/office/cases/[id]/expenses: description optional (store "" when empty).
+UI label "Tafseel (optional)".
+
+## W14.2 — Expenses visible in cases list
+List payload per case adds `expenseSummary: { count, total, reasons: string[] }`
+(reasons = up to 3 latest non-empty descriptions). UI shows compact line per row:
+"Expenses: 3 · Rs 12,500" + reasons (tooltip or tiny text).
+
+## W14.3 — Finance: expenses RED
+Company summary expenses tile + office expense lists render amounts in red.
+
+## W14.4 — Auto recompute (no manual button)
+- Case expense create/delete → after(): finalizeProfitShare(case) for PROFIT_SHARE
+  cases with received>0 (snapshot percents honored) → shareholders auto minus.
+- Office general expense create/delete → after(): re-finalize ALL that office's
+  PROFIT_SHARE cases (received>0) → pool shrinks, shares auto adjust.
+- Payment RECEIVED → auto distribute (already live since wave 11). No
+  re-calculate button anywhere required; keep manual finalize harmless.
+
+## W14.5 — Shareholder payout with ACCEPT flow
+PayoutRequest table (migrated live). APIs:
+- POST /api/office/payouts (office:ledger:write): {bookingOfficeId, memberId,
+  amount, method?, entryDate, remarks?} → PENDING request + notify member's
+  linked admin user.
+- GET /api/office/payouts?status=&memberId=&bookingOfficeId= → admin/cashier all;
+  booking_office user sees own office; member-linked user sees own requests.
+  Items include member name + office name + creator name.
+- POST /api/office/payouts/[id]/accept — ONLY the member's linked admin user:
+  creates PAYOUT DEBIT ledger entry (same tx), status ACCEPTED, ledgerEntryId,
+  decidedById/decidedAt; notify creator.
+- POST /api/office/payouts/[id]/reject — member-linked user OR admin/cashier:
+  status REJECTED; notify creator.
+UI: Finance users table per-row "Pay" button → modal → POST. Admin sees pending
+payouts strip (status chips). Booking-office finance view shows pending requests
+with Accept/Reject buttons. Notification link → /office/finance.
+
+## W14.6 — Office general expense UI (API exists)
+Finance page: "Office expense add" button (office select, amount, description
+optional, date) → POST /api/office/office-expenses; recent office expenses list
+(red amounts) under it. Booking-office scoped view keeps own-office only.
+
+## W14.7 — Status change reason OPTIONAL
+status route: note no longer required (still logged when present).
+CaseStatusSelect modal: "Wajah / note (optional)".
+
+## W14.8 — Set-missing warning scope
+setMissingWarning only during PRINTED + ATTESTATION (NOT ATTESTATION_COMPLETE
+or later) — a case pushed past attestations stops warning.
+
+## W14.9 — New case: category → optional set select
+New-case form: after category chosen, fetch /api/office/setup/sets?categoryId=
+and show optional "Set (optional)" dropdown in the attestation section; POST
+/api/office/cases accepts optional setId (connect) so dates engine + workflow
+work from creation.
