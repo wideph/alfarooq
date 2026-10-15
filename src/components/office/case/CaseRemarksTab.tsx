@@ -16,16 +16,16 @@ import type { ToastKind } from "@/components/Toast";
 // yahan list + create (role ke mutabiq limited targets) + "Mark seen" (warning
 // hatane ke liye PATCH recipientId). Chat-style bubbles: apne right, baqi left.
 
-type RemarkTarget = "ADMIN" | "BOOKING" | "FILING" | "PRINTING" | "ATTA" | "COURIER";
+type RemarkTarget = "ADMIN" | "BOOKING" | "FILING" | "PRINTING" | "ATTESTATION" | "COURIER";
 
-const ALL_TARGETS: RemarkTarget[] = ["ADMIN", "BOOKING", "FILING", "PRINTING", "ATTA", "COURIER"];
+const ALL_TARGETS: RemarkTarget[] = ["ADMIN", "BOOKING", "FILING", "PRINTING", "ATTESTATION", "COURIER"];
 
 export const REMARK_TARGET_LABELS: Record<RemarkTarget, string> = {
   ADMIN: "Admin",
   BOOKING: "Booking office",
   FILING: "Filing",
   PRINTING: "Printing",
-  ATTA: "Atta",
+  ATTESTATION: "Attestation department",
   COURIER: "Courier",
 };
 
@@ -35,11 +35,11 @@ function allowedTargetsFor(role?: string | null): RemarkTarget[] {
     case "admin":
       return ALL_TARGETS;
     case "booking_office":
-      return ["ADMIN", "ATTA", "PRINTING"];
+      return ["ADMIN", "ATTESTATION", "PRINTING"];
     case "filing":
       return ["ADMIN", "BOOKING", "PRINTING"];
     case "printing":
-    case "atta":
+    case "attestation_dept":
     case "courier":
       return ALL_TARGETS;
     default:

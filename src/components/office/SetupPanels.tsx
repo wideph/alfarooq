@@ -520,7 +520,7 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
                 <p className="text-sm font-semibold text-slate-800">Users / Roles (optional)</p>
                 <p className="text-xs text-slate-500">
                   Office ke sath hi us ke login users bana dein — booking office, cashier, filing,
-                  printing, atta, courier.
+                  printing, attestation, courier.
                 </p>
               </div>
               <button

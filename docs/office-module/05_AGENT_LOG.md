@@ -1023,3 +1023,10 @@ Next step for the next agent:
 
 ## WAVE 17 (2026-10-11) — Terminology rename (code + DB + AI date formula)
 - Poora project rename per owner map; live DB categories/attestation types/sets/steps renamed; boardAttasNumber→boardAttestationNumber migration. Details in 06 §WAVE 17.
+
+## WAVE 18 (2026-10-11) — Internal keys rename + department work UX
+- stepKeys 13 rename (code + live CategorySetStep UPDATE); "ATTA"→"ATTESTATION" dept constant; role "atta"→"attestation_dept"; permission "office:atta:write"→"office:attestation-dept:write"; dept URL key "atta"→"attestation" (legacy alias accepted).
+- BUG FIX: booking user + dept permission ab dept queues TAMAM offices ke saath dekhta hai (pehle caseScope own-office rokta tha); navbar mein Filing/Printing/Attestation/Courier tabs by permission; cross-office case detail = limited DeptCaseView + apne dept ka upload; files GET/POST dept-permission se cross-office; DELETE sirf full-access.
+- Privacy: cross-office rows slim (no money/contacts), limited flag; files filtered to user's depts.
+- Slim rows mein createdAt + currentAttestationId (integration patch).
+- Verify: tsc 0, lint 0, build exit 0 (real DB).

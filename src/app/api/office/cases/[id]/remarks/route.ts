@@ -86,8 +86,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 }
 
 // POST { text, targets[] } — office:remarks:write. Target lists are limited by
-// role (§N7): booking → ADMIN/ATTA/PRINTING, filing → ADMIN/BOOKING/PRINTING,
-// printing/atta/courier → any, admin → any.
+// role (§N7): booking → ADMIN/ATTESTATION/PRINTING, filing → ADMIN/BOOKING/PRINTING,
+// printing/attestation/courier → any, admin → any.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:remarks:write");
   if (denied) return denied;
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         BOOKING: "booking_office",
         FILING: "filing",
         PRINTING: "printing",
-        ATTA: "atta",
+        ATTESTATION: "attestation_dept",
         COURIER: "courier",
       };
       const notice = {

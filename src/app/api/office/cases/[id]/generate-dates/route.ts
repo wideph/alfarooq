@@ -18,7 +18,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const allowed =
     hasPermission(session, "office:attestation:write") ||
-    hasPermission(session, "office:atta:write") ||
+    hasPermission(session, "office:attestation-dept:write") ||
     hasPermission(session, "office:payments:verify");
   if (!allowed) return forbidden();
   const { id } = await params;

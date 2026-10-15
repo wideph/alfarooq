@@ -17,16 +17,16 @@ function utcToday() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-// "Attestations complete" (F2): atta department / attestation office / super
-// admin — ek hi click mein case ke TAMAM attestation steps DONE. Shart: ATTA
-// department ka stepKey=FINAL file pehle upload ho chuki ho (warna 400). Ek
+// "Attestations complete" (F2): attestation department / attestation office /
+// super admin — ek hi click mein case ke TAMAM attestation steps DONE. Shart:
+// ATTESTATION department ka stepKey=FINAL file pehle upload ho chuki ho (warna 400). Ek
 // transaction mein sab rows DONE, phir evaluateCaseCompletion (jo FINAL file
 // dekh kar status ATTESTATION_COMPLETE karti hai, §W11.1).
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
-  // office:atta:write ya office:attestation:write (admin dono paas karta hai).
-  if (!hasAnyPermission(session, ["office:atta:write", "office:attestation:write"])) {
+  // office:attestation-dept:write ya office:attestation:write (admin dono paas karta hai).
+  if (!hasAnyPermission(session, ["office:attestation-dept:write", "office:attestation:write"])) {
     return forbidden();
   }
 
@@ -36,7 +36,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (!item) return notFound("Case nahi mila");
 
     const finalFile = await prisma.caseFile.findFirst({
-      where: { caseId: id, department: "ATTA", stepKey: "FINAL" },
+      where: { caseId: id, department: "ATTESTATION", stepKey: "FINAL" },
       select: { id: true },
     });
     if (!finalFile) return badRequest("Pehle final file upload karein");
@@ -53,7 +53,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           where: { caseId: id, status: "DONE", completedDate: null },
           data: { completedDate: now },
         });
-        // §W11.1: saare set steps DONE + FINAL atta file → ATTESTATION_COMPLETE.
+        // §W11.1: saare set steps DONE + FINAL attestation file → ATTESTATION_COMPLETE.
         await evaluateCaseCompletion(id, tx);
         const updated = await tx.case.findUnique({ where: { id }, select: { status: true } });
         const attestations = await tx.caseAttestation.findMany({
@@ -79,11 +79,11 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         after: { status: result.status },
       });
 
-      // §W11.8: attestation stage complete → atta department + admins.
+      // §W11.8: attestation stage complete → attestation department + admins.
       if (result.status === "ATTESTATION_COMPLETE" && item.status !== "ATTESTATION_COMPLETE") {
         const link = `/office/cases/${id}`;
         const title = `Case ${item.caseNumber}: attestation complete`;
-        await notifyRole("atta", { type: "attestation", title, link });
+        await notifyRole("attestation_dept", { type: "attestation", title, link });
         await notifyAdmins({ type: "attestation", title, link });
       }
     });

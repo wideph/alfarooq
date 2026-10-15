@@ -585,3 +585,26 @@ Owner ke exact words: idcc→ibcc, attas→attestation, MBC→Embassy, Saud→Sa
 - CaseCategory: 4 renames; AttestationType: 13 renames; CategorySet: `Set (i): …` → `Set of Attestations (i): …` with inner term renames; CategorySetStep labels: same map.
 - Historical audit logs / notifications purani wording mein hain (history as-is).
 - Verify: tsc 0, lint 0, build exit 0 (real DB).
+
+---
+
+## WAVE 18 — Internal keys rename + department work UX (2026-10-11)
+
+Owner: (1) internal step keys bhi rename karo (BORD→BOARD, UV_IDCC→UV_IBCC, QR_IDCC→QR_IBCC, SPECIAL_MOOFA→SPECIAL_MOFA, SAUD_MBC→SAUDI_EMBASSY, MOOFA_SAUD→MOFA_SAUDI, BACK_NEVTCC→BACK_NAVTTC, CURRENT_NEVTCC→CURRENT_NAVTTC, BMFQ_VER→BMFQ_VERIFICATION, MOH_ATTA→MOH_ATTESTATION, CPLS_ATTA→CPLS_ATTESTATION, APAC_ATTA→APAC_ATTESTATION, NEVTCC→NAVTTC) + jo bhi old terms baaki hon. (2) BUG: booking user AW D ko office:filing:write dene ke bawajood upload option nahi — navbar mein dept tabs hain hi nahi; caseScope own-office tak limited; findAccessibleCase cross-office block. (3) Filing tab → tamam offices ke cases jin ki files pending hain. (4) Printing/Attestation/Courier permission holders ko bhi kaam ke mutabiq clear UI/UX.
+
+### A. Key/term rename (Agent R2 + live DB)
+- CASE_DEPARTMENTS/CaseFile.department/REMARK_TARGETS: "ATTA"→"ATTESTATION" (live DB mein 0 rows — safe).
+- dept queue key "atta"→"attestation" (URL param + deptQueueWhere + nav-counts).
+- Role "atta"→"attestation_dept" (label "Attestation department"; 0 live rows).
+- Permission "office:atta:write"→"office:attestation-dept:write" (0 live grants; "office:attestation:write" = attestation OFFICE, untouched — semantic collision avoid).
+- stepKeys 13 rename (code + CategorySetStep live UPDATE; CaseFile.stepKey 0 rows).
+
+### B. Department access backend (Agent B2)
+- Cases API ?dept=: dept write permission (ya admin/cashier) → tamam offices; warna current scope. Cross-office rows for booking_office = slim serializer (no money) + `limited:true` flag; own-office rows full.
+- Case detail: scope fail → any dept write permission → `{ok, limited:true, depts:[...], detail: slim}`; else 404.
+- Files GET/POST: access = caseScope OR any dept permission; POST per-department permission unchanged.
+
+### C. Department UX (Agent U2)
+- OfficeNav: Filing/Printing/Attestation/Courier tabs by permission → /office/cases?dept=<key>.
+- Dept queue polish: office chip/column, per-dept relevant columns (filing: files pending; printing: expected date/isPrinted; attestation: current step; courier: courier number), upload CTA, clear empty states, "Attestation queue" label.
+- Case detail limited view (cross-office dept worker): slim header + relevant info + apne department ka upload; koi money data nahi.

@@ -8,7 +8,7 @@ export const OFFICE_ROLES = [
   "booking_office",
   "filing",
   "printing",
-  "atta",
+  "attestation_dept",
   "courier",
 ] as const;
 export type OfficeRole = (typeof OFFICE_ROLES)[number];
@@ -21,7 +21,7 @@ export const ROLE_LABELS: Record<string, string> = {
   booking_office: "Booking office",
   filing: "Filing department",
   printing: "Printing department",
-  atta: "Atta department",
+  attestation_dept: "Attestation department",
   courier: "Courier department",
 };
 
@@ -48,7 +48,7 @@ export const ROLE_PRESETS: Record<OfficeRole, AdminPermission[]> = {
   ],
   filing: ["office:cases:read", "office:filing:write", "office:remarks:write"],
   printing: ["office:cases:read", "office:printing:write", "office:remarks:write"],
-  atta: ["office:cases:read", "office:atta:write", "office:remarks:write"],
+  attestation_dept: ["office:cases:read", "office:attestation-dept:write", "office:remarks:write"],
   courier: ["office:cases:read", "office:courier:write", "office:remarks:write"],
 };
 
@@ -72,7 +72,7 @@ export const OFFICE_PERMISSION_GROUPS: Array<{
     permissions: [
       { value: "office:filing:write", label: "Filing department (files upload)" },
       { value: "office:printing:write", label: "Printing department (printed proof)" },
-      { value: "office:atta:write", label: "Atta department (set steps complete)" },
+      { value: "office:attestation-dept:write", label: "Attestation department (set steps complete)" },
       { value: "office:courier:write", label: "Courier department (courier slip)" },
       { value: "office:remarks:write", label: "Departments ko remarks bhejein" },
     ],

@@ -41,7 +41,7 @@ export const ADMIN_PERMISSIONS = [
   "office:cases:read-all",
   "office:filing:write",
   "office:printing:write",
-  "office:atta:write",
+  "office:attestation-dept:write",
   "office:courier:write",
   "office:remarks:write",
 ] as const;

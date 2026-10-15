@@ -15,6 +15,7 @@ import CaseFilesTab from "@/components/office/case/CaseFilesTab";
 import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import CaseHistoryTab from "@/components/office/case/CaseHistoryTab";
 import FilingCaseView from "@/components/office/case/FilingCaseView";
+import DeptCaseView, { type DeptLimitedResponse } from "@/components/office/case/DeptCaseView";
 import { officeFetch } from "@/lib/office/client";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import type { CaseDetail } from "@/lib/office/types";
@@ -33,6 +34,9 @@ type TabKey = (typeof TABS)[number]["key"];
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
+  // §W18: cross-office dept worker ko limited payload milta hai
+  // ({ limited: true, depts: [...] }) — DeptCaseView render hota hai.
+  const [limited, setLimited] = useState<DeptLimitedResponse | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<ToastData | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -42,9 +46,17 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     setToast(m ? { message: m, kind } : null);
 
   const reload = useCallback(async () => {
-    const res = await officeFetch<CaseDetail>(`/api/office/cases/${id}`);
-    if (res.ok) setDetail(res.data);
-    else setError(res.error);
+    const res = await officeFetch<CaseDetail | DeptLimitedResponse>(`/api/office/cases/${id}`);
+    if (res.ok) {
+      const data = res.data as DeptLimitedResponse;
+      if (data && data.limited === true && Array.isArray(data.depts) && data.detail) {
+        setLimited(data);
+        setDetail(null);
+      } else {
+        setDetail(res.data as CaseDetail);
+        setLimited(null);
+      }
+    } else setError(res.error);
   }, [id]);
 
   useEffect(() => {
@@ -69,6 +81,10 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         // payload bhi stripped hai) — koi payment/money section nahi.
         admin.role === "filing" ? (
           <FilingCaseView id={id} admin={admin} />
+        ) : limited ? (
+          // §W18: cross-office dept worker (filing/printing/attestation/courier
+          // permission) — limited view, sirf apne departments ki files + upload.
+          <DeptCaseView id={id} data={limited} onReload={reload} />
         ) : (
           <div className="space-y-4">
             <Toast toast={toast} onClose={() => setToast(null)} />

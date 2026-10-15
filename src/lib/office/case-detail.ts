@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
-import { caseScope } from "@/lib/office/case-access";
+import { caseScope, deptPermissionsOf } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
 import { sum, toNumber } from "@/lib/office/money";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
@@ -72,6 +72,66 @@ async function adminNameMap(ids: Array<string | null | undefined>) {
   return Object.fromEntries(admins.map((admin) => [admin.id, admin.name]));
 }
 
+// §W18: cross-office limited detail for department workers. Jab caseScope
+// case ko block kare (maslan booking office ka user doosre office ka case)
+// magar session ke paas kisi department ki write permission ho, to slim
+// detail milta hai — koi payments/totals/expenses/commission/contacts nahi.
+// Top-level envelope wahi convention rakhta hai jis par UI branch karti hai:
+// { ok: true, limited: true, depts, detail }.
+export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: string) {
+  const depts = deptPermissionsOf(session);
+  if (depts.length === 0) return null;
+  const item = await prisma.case.findFirst({
+    where: { id: caseId },
+    include: {
+      bookingOffice: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
+      set: { select: { id: true, name: true } },
+      attestations: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          status: true,
+          scheduledDate: true,
+          completedDate: true,
+          notes: true,
+          attestationType: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  if (!item) return null;
+
+  return toJson({
+    ok: true,
+    limited: true,
+    depts,
+    detail: {
+      id: item.id,
+      caseNumber: item.caseNumber,
+      status: item.status,
+      currentAttestationId: item.currentAttestationId,
+      category: item.category ? { id: item.category.id, name: item.category.name } : null,
+      rollNumber: item.rollNumber,
+      registrationNumber: item.registrationNumber,
+      setName: item.set?.name ?? null,
+      bookingOffice: { id: item.bookingOffice.id, name: item.bookingOffice.name },
+      expectedPrintingDate: item.expectedPrintingDate,
+      isPrinted: item.isPrinted,
+      courierNumber: item.courierNumber,
+      createdAt: item.createdAt,
+      attestations: item.attestations.map((a) => ({
+        id: a.id,
+        status: a.status,
+        scheduledDate: a.scheduledDate,
+        completedDate: a.completedDate,
+        notes: a.notes,
+        attestationType: { id: a.attestationType.id, name: a.attestationType.name },
+      })),
+    },
+  });
+}
+
 export async function loadCaseDetail(session: AdminSession, caseId: string) {
   const item = await prisma.case.findFirst({
     where: { id: caseId, ...caseScope(session) },
@@ -93,7 +153,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       },
     },
   });
-  if (!item) return null;
+  // §W18: caseScope ne block kiya — department workers ko limited detail.
+  if (!item) return loadDeptLimitedCaseDetail(session, caseId);
 
   // §N7: the filing department gets a stripped payload — no payments, amounts,
   // commission or ledger fields at all.

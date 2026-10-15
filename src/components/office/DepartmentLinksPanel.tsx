@@ -12,7 +12,7 @@ const DEPARTMENTS = [
   "CASHIER",
   "FILING",
   "PRINTING",
-  "ATTA",
+  "ATTESTATION",
   "COURIER",
   "OTHER",
 ] as const;
@@ -22,7 +22,7 @@ const DEPARTMENT_STYLES: Record<string, string> = {
   CASHIER: "bg-emerald-100 text-emerald-700",
   FILING: "bg-amber-100 text-amber-700",
   PRINTING: "bg-violet-100 text-violet-700",
-  ATTA: "bg-pink-100 text-pink-700",
+  ATTESTATION: "bg-pink-100 text-pink-700",
   COURIER: "bg-teal-100 text-teal-700",
   OTHER: "bg-slate-100 text-slate-600",
 };

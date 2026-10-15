@@ -26,8 +26,8 @@ const ADMIN_ONLY_STATUSES: readonly string[] = [
 const STAGE_ROLE: Record<string, string> = {
   WAITING_FOR_FILE: "filing",
   WAITING_FOR_PRINTING: "printing",
-  PRINTED: "atta",
-  ATTESTATION: "atta",
+  PRINTED: "attestation_dept",
+  ATTESTATION: "attestation_dept",
   WAITING_FOR_COURIER: "courier",
 };
 

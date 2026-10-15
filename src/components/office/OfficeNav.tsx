@@ -1,24 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Banknote,
   Briefcase,
   ExternalLink,
+  FileUp,
   Home,
   LayoutDashboard,
   Link2,
   LogOut,
   PieChart,
+  Printer,
   Settings2,
   ShieldCheck,
+  Stamp,
+  Truck,
 } from "lucide-react";
 import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
 import { ROLE_LABELS } from "@/lib/office/permissions";
+
+// §W18: atta department ka rename — permission ab office:attestation-dept:write
+// hai (auth.ts mid-flight update; cast dono states mein compile hota hai).
+const ATTESTATION_DEPT_PERMISSION = "office:attestation-dept:write" as AdminPermission;
 
 const navItems: Array<{
   href: string;
@@ -27,11 +35,19 @@ const navItems: Array<{
   permissions: AdminPermission[];
   // §W11.7: amber count bubble — nav-counts ke kis field se.
   countKey?: "cases" | "payments";
+  // §W18: department queue tab — /office/cases?dept=<key> par active hota hai
+  // aur sirf us department ki write permission (ya cashier) par dikhta hai.
+  dept?: "filing" | "printing" | "attestation" | "courier";
 }> = [
   // §W16: /office ab multi-office overview hai — label "Offices" taake tab ka
   // maqsad wazeh ho (pehle "Dashboard" tha, jo confusing tha).
   { href: "/office", label: "Offices", icon: LayoutDashboard, permissions: ["office:cases:read"] },
   { href: "/office/cases", label: "Cases", icon: Briefcase, permissions: ["office:cases:read"], countKey: "cases" },
+  // §W18 department queues — cross-office pending kaam, per-department permission.
+  { href: "/office/cases?dept=filing", label: "Filing", icon: FileUp, permissions: ["office:filing:write"], dept: "filing" },
+  { href: "/office/cases?dept=printing", label: "Printing", icon: Printer, permissions: ["office:printing:write"], dept: "printing" },
+  { href: "/office/cases?dept=attestation", label: "Attestation", icon: Stamp, permissions: [ATTESTATION_DEPT_PERMISSION], dept: "attestation" },
+  { href: "/office/cases?dept=courier", label: "Courier", icon: Truck, permissions: ["office:courier:write"], dept: "courier" },
   {
     href: "/office/payments",
     label: "Payments",
@@ -44,6 +60,57 @@ const navItems: Array<{
   { href: "/office/setup", label: "Setup", icon: Settings2, permissions: ["office:setup:write"] },
 ];
 
+// §W18: nav links alag component mein — dept tabs ki active state ?dept= query
+// par depend karti hai (useSearchParams), is liye Suspense boundary zaroori hai.
+function NavLinks({ admin }: { admin: AdminNavUser | null }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const deptParam = pathname === "/office/cases" ? searchParams.get("dept") || "" : "";
+  const counts = useOfficeNavCounts();
+
+  const visibleItems = navItems.filter((item) => {
+    // §W18: dept tabs — cases page ke canSeeDeptTab rule ke mutabiq: us dept ki
+    // write permission (adminCanAny admin ko bhi cover karta hai) ya cashier.
+    if (item.dept) return adminCanAny(admin, item.permissions) || admin?.role === "cashier";
+    // §W15.3 — booking-office users ko payout notifications /office/finance par
+    // link karte hain; Finance tab unke liye visible (scoped view page par hai).
+    if (item.href === "/office/finance" && admin?.role === "booking_office") return true;
+    return adminCanAny(admin, item.permissions);
+  });
+
+  return (
+    <>
+      {visibleItems.map((item) => {
+        const Icon = item.icon;
+        const active = item.dept
+          ? deptParam === item.dept
+          : item.href === "/office"
+            ? pathname === item.href
+            : item.href === "/office/cases"
+              ? pathname.startsWith(item.href) && !deptParam
+              : pathname.startsWith(item.href);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            prefetch
+            title={item.label}
+            className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
+              active
+                ? "bg-primary-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="hidden md:inline">{item.label}</span>
+            <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
 export default function OfficeNav({
   admin,
   onLogout,
@@ -51,15 +118,7 @@ export default function OfficeNav({
   admin: AdminNavUser | null;
   onLogout: () => void;
 }) {
-  const pathname = usePathname();
-  const visibleItems = navItems.filter((item) => {
-    // §W15.3 — booking-office users ko payout notifications /office/finance par
-    // link karte hain; Finance tab unke liye visible (scoped view page par hai).
-    if (item.href === "/office/finance" && admin?.role === "booking_office") return true;
-    return adminCanAny(admin, item.permissions);
-  });
   const isSuperAdmin = admin?.role === "admin";
-  const counts = useOfficeNavCounts();
 
   // §N9 — department access links, kisi bhi office user ke liye. Lazy: sirf
   // pehli dafa dropdown khulne par fetch hota hai (har page load par nahi).
@@ -105,28 +164,9 @@ export default function OfficeNav({
           {/* CENTER — nav links (khud scroll karte hain, scrollbar hidden) */}
           <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-center justify-start gap-1.5 md:justify-center">
-              {visibleItems.map((item) => {
-                const Icon = item.icon;
-                const active =
-                  item.href === "/office" ? pathname === item.href : pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch
-                    title={item.label}
-                    className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
-                      active
-                        ? "bg-primary-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="hidden md:inline">{item.label}</span>
-                    <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />
-                  </Link>
-                );
-              })}
+              <Suspense fallback={null}>
+                <NavLinks admin={admin} />
+              </Suspense>
 
               {/* §W11.9: Department Links sirf super admin ke liye — baqi roles
                   ko ye dropdown confusing lagta tha. */}

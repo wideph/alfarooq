@@ -13,7 +13,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import type { AdminNavUser } from "@/components/admin/AdminNav";
+import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
@@ -24,28 +24,33 @@ import { type CaseFileItem, type CategorySetWithSteps, inputClass, primaryBtnCla
 import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (filing
-// files dekhe + printed proof), ATTA (per set-step optional + FINAL lazmi),
-// COURIER (printing+atta files in-app viewer mein + courier slip).
+// files dekhe + printed proof), ATTESTATION (per set-step optional + FINAL lazmi),
+// COURIER (printing+attestation files in-app viewer mein + courier slip).
 // Upload sirf us department ki write permission par; lists sab ko (read).
 
-type Department = "FILING" | "PRINTING" | "ATTA" | "COURIER";
+// §W18: ATTA → ATTESTATION rename (department value + permission key).
+type Department = "FILING" | "PRINTING" | "ATTESTATION" | "COURIER";
 
-const DEPARTMENTS: Department[] = ["FILING", "PRINTING", "ATTA", "COURIER"];
+const DEPARTMENTS: Department[] = ["FILING", "PRINTING", "ATTESTATION", "COURIER"];
 
 const DEPARTMENT_LABELS: Record<Department, string> = {
   FILING: "Filing",
   PRINTING: "Printing",
-  ATTA: "Atta",
+  ATTESTATION: "Attestation",
   COURIER: "Courier",
 };
 
 // Client-side mirror of workflow.ts DEPARTMENT_PERMISSIONS (server-only file).
-const DEPARTMENT_PERMISSIONS_CLIENT = {
+// office:attestation-dept:write — auth.ts mid-flight rename; cast safe hai.
+const DEPARTMENT_PERMISSIONS_CLIENT: Record<Department, AdminPermission> = {
   FILING: "office:filing:write",
   PRINTING: "office:printing:write",
-  ATTA: "office:atta:write",
+  ATTESTATION: "office:attestation-dept:write" as AdminPermission,
   COURIER: "office:courier:write",
-} as const;
+};
+
+// Files API (B2) naye department names return karti hai (ATTA → ATTESTATION).
+type FileItem = Omit<CaseFileItem, "department"> & { department: Department };
 
 const ACCEPT_DOC = "application/pdf,.pdf,image/*";
 const ACCEPT_ALL = "application/pdf,.pdf,image/*,video/*";
@@ -72,7 +77,7 @@ type Props = {
 // karein" button (POST .../attestations/complete-all; FINAL lazmi, warna API
 // ka error toast; success par detail reload).
 export default function CaseFilesTab({ detail, admin, onReload, onMessage, departments = DEPARTMENTS }: Props) {
-  const [files, setFiles] = useState<CaseFileItem[]>([]);
+  const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<ViewableFile | null>(null);
   const [setSteps, setSetSteps] = useState<Array<{ stepKey: string; label: string }>>([]);
@@ -84,10 +89,10 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     return initial;
   });
 
-  const canCompleteAll = adminCanAny(admin, ["office:atta:write", "office:attestation:write"]);
+  const canCompleteAll = adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION, "office:attestation:write"]);
 
   const load = useCallback(async () => {
-    const res = await officeFetch<{ items: CaseFileItem[] }>(`/api/office/cases/${detail.id}/files`);
+    const res = await officeFetch<{ items: FileItem[] }>(`/api/office/cases/${detail.id}/files`);
     if (res.ok) setFiles(res.data.items);
     setLoading(false);
   }, [detail.id]);
@@ -126,7 +131,7 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     setBusy(false);
   }
 
-  async function remove(file: CaseFileItem) {
+  async function remove(file: FileItem) {
     if (!confirm("File delete karein?")) return;
     const res = await officeFetch(`/api/office/cases/${detail.id}/files?id=${file.id}`, { method: "DELETE" });
     onMessage(res.ok ? "File delete ho gayi" : res.error, res.ok ? "success" : "error");
@@ -150,7 +155,7 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     return adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT[department]]);
   }
 
-  function canDelete(file: CaseFileItem) {
+  function canDelete(file: FileItem) {
     return admin.role === "admin" || canWrite(file.department);
   }
 
@@ -170,7 +175,7 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     setTogglingVisibility(false);
   }
 
-  function fileRow(file: CaseFileItem) {
+  function fileRow(file: FileItem) {
     return (
       <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
         <span className="min-w-0">
@@ -289,14 +294,14 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                     {department === "COURIER" && (
                       <div className="rounded-lg bg-slate-50 p-2">
                         <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                          Printing + Atta files (yahan dekhein)
+                          Printing + Attestation files (yahan dekhein)
                         </p>
-                        {files.filter((file) => file.department === "PRINTING" || file.department === "ATTA").length === 0 ? (
-                          <p className="p-2 text-xs text-slate-400">Abhi koi printing / atta file nahi</p>
+                        {files.filter((file) => file.department === "PRINTING" || file.department === "ATTESTATION").length === 0 ? (
+                          <p className="p-2 text-xs text-slate-400">Abhi koi printing / attestation file nahi</p>
                         ) : (
                           <ul className="divide-y divide-slate-100">
                             {files
-                              .filter((file) => file.department === "PRINTING" || file.department === "ATTA")
+                              .filter((file) => file.department === "PRINTING" || file.department === "ATTESTATION")
                               .map(fileRow)}
                           </ul>
                         )}
@@ -322,15 +327,15 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                                 ? "Courier slip (image / pdf / video) — admin + booking office ko dikhegi"
                                 : "Step file (optional)"
                         }
-                        stepOptions={department === "ATTA" ? setSteps : []}
-                        showFinal={department === "ATTA"}
+                        stepOptions={department === "ATTESTATION" ? setSteps : []}
+                        showFinal={department === "ATTESTATION"}
                         busy={busy}
                         onUpload={upload}
                       />
                     )}
 
                     {/* ATTA: ek click mein tamam steps complete (FINAL lazmi) */}
-                    {department === "ATTA" && canCompleteAll && (
+                    {department === "ATTESTATION" && canCompleteAll && (
                       <button
                         disabled={completing}
                         onClick={completeAll}

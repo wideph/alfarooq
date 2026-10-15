@@ -14,62 +14,62 @@ const LEGACY_CATEGORIES = ["Matric", "Intermediate (FA/FSc)", "Bachelor (BA/BSc)
 const WAVE2_CATEGORIES = ["Matric Tech", "DAE 3Y BBTE", "DBA 3Y BBTE", "1-2 Y BBTE", "Medical Bmfq", "CPLS", "APAC"];
 
 const STEP_LABELS: Record<string, string> = {
-  BORD: "Board",
-  UV_IDCC: "UV ibcc",
-  QR_IDCC: "QR code ibcc",
-  SPECIAL_MOOFA: "Special Mofa",
-  SAUD_MBC: "Saudi Embassy",
-  MOOFA_SAUD: "Mofa Saudi",
-  BACK_NEVTCC: "Back Navttc",
-  CURRENT_NEVTCC: "Current Navttc",
-  BMFQ_VER: "bmfq verification",
-  MOH_ATTA: "MoH attestation",
-  CPLS_ATTA: "CPLS attestation",
-  APAC_ATTA: "APAC attestation",
-  NEVTCC: "Navttc",
+  BOARD: "Board",
+  UV_IBCC: "UV ibcc",
+  QR_IBCC: "QR code ibcc",
+  SPECIAL_MOFA: "Special Mofa",
+  SAUDI_EMBASSY: "Saudi Embassy",
+  MOFA_SAUD: "Mofa Saudi",
+  BACK_NAVTTC: "Back Navttc",
+  CURRENT_NAVTTC: "Current Navttc",
+  BMFQ_VERIFICATION: "bmfq verification",
+  MOH_ATTESTATION: "MoH attestation",
+  CPLS_ATTESTATION: "CPLS attestation",
+  APAC_ATTESTATION: "APAC attestation",
+  NAVTTC: "Navttc",
 };
 
 const ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
 
 // §N5: DAE 3Y BBTE = "category 4" with 7 sets of attestations; DBA 3Y BBTE uses the same.
 const BBTE_SETS: string[][] = [
-  ["BORD", "UV_IDCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
-  ["BORD", "QR_IDCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
-  ["BORD", "UV_IDCC", "SPECIAL_MOOFA"],
-  ["BORD", "QR_IDCC", "SPECIAL_MOOFA"],
-  ["BORD", "UV_IDCC"],
-  ["BORD", "QR_IDCC"],
-  ["BORD"],
+  ["BOARD", "UV_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
+  ["BOARD", "QR_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
+  ["BOARD", "UV_IBCC", "SPECIAL_MOFA"],
+  ["BOARD", "QR_IBCC", "SPECIAL_MOFA"],
+  ["BOARD", "UV_IBCC"],
+  ["BOARD", "QR_IBCC"],
+  ["BOARD"],
 ];
 
 const CATEGORY_SETS: Record<string, string[][]> = {
   "Matric Tech": [
-    ["BORD", "UV_IDCC", "SPECIAL_MOOFA"],
-    ["BORD", "QR_IDCC", "SPECIAL_MOOFA"],
-    ["BORD", "UV_IDCC"],
-    ["BORD", "QR_IDCC"],
-    ["BORD"],
+    ["BOARD", "UV_IBCC", "SPECIAL_MOFA"],
+    ["BOARD", "QR_IBCC", "SPECIAL_MOFA"],
+    ["BOARD", "UV_IBCC"],
+    ["BOARD", "QR_IBCC"],
+    ["BOARD"],
   ],
   "DAE 3Y BBTE": BBTE_SETS,
   "DBA 3Y BBTE": BBTE_SETS,
   "1-2 Y BBTE": [
-    ["BORD", "BACK_NEVTCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
-    ["BORD", "CURRENT_NEVTCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
+    ["BOARD", "BACK_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
+    ["BOARD", "CURRENT_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
   ],
   "Medical Bmfq": [
-    ["BMFQ_VER", "MOH_ATTA", "SPECIAL_MOOFA"],
-    ["BMFQ_VER", "MOH_ATTA"],
-    ["BMFQ_VER"],
+    ["BMFQ_VERIFICATION", "MOH_ATTESTATION", "SPECIAL_MOFA"],
+    ["BMFQ_VERIFICATION", "MOH_ATTESTATION"],
+    ["BMFQ_VERIFICATION"],
   ],
   CPLS: [
-    ["CPLS_ATTA", "NEVTCC", "SPECIAL_MOOFA"],
-    ["CPLS_ATTA", "NEVTCC"],
-    ["CPLS_ATTA"],
+    ["CPLS_ATTESTATION", "NAVTTC", "SPECIAL_MOFA"],
+    ["CPLS_ATTESTATION", "NAVTTC"],
+    ["CPLS_ATTESTATION"],
   ],
   APAC: [
-    ["APAC_ATTA", "NEVTCC", "SPECIAL_MOOFA"],
-    ["APAC_ATTA", "NEVTCC"],
-    ["APAC_ATTA"],
+    ["APAC_ATTESTATION", "NAVTTC", "SPECIAL_MOFA"],
+    ["APAC_ATTESTATION", "NAVTTC"],
+    ["APAC_ATTESTATION"],
   ],
 };
 

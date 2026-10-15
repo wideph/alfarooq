@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, Check, Layers, Loader2, Plus, Printer, Stamp, Trash2 } from "lucide-react";
-import type { AdminNavUser } from "@/components/admin/AdminNav";
+import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import StatTile from "@/components/ui/StatTile";
@@ -15,6 +15,10 @@ import { type CaseDetail, type CategorySetWithSteps, inputClass, primaryBtnClass
 import type { ToastKind } from "@/components/Toast";
 
 type AttestationType = { id: string; name: string; isActive: boolean };
+
+// §W18: atta → attestation department rename (office:atta:write →
+// office:attestation-dept:write); auth.ts mid-flight — cast dono states mein safe.
+const ATTESTATION_DEPT_PERMISSION = "office:attestation-dept:write" as AdminPermission;
 
 type Props = {
   detail: CaseDetail;
@@ -44,7 +48,7 @@ export default function CaseAttestationsTab(props: Props) {
 function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Props) {
   const canSelect = adminCanAny(admin, ["office:cases:write"]);
   const canGenerate =
-    adminCanAny(admin, ["office:attestation:write", "office:atta:write"]) || admin.role === "cashier";
+    adminCanAny(admin, ["office:attestation:write", ATTESTATION_DEPT_PERMISSION]) || admin.role === "cashier";
   const [sets, setSets] = useState<CategorySetWithSteps[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -171,7 +175,7 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
   const canEditList = adminCanAny(admin, ["office:cases:write"]);
   const canStatus = adminCanAny(admin, ["office:attestation:write"]);
   // §N7: attestation department sirf steps aage barha sakta hai (PENDING → IN_PROGRESS → DONE).
-  const canAtta = !canStatus && adminCanAny(admin, ["office:atta:write"]);
+  const canAtta = !canStatus && adminCanAny(admin, [ATTESTATION_DEPT_PERMISSION]);
   const [types, setTypes] = useState<AttestationType[]>([]);
   const [addId, setAddId] = useState("");
   const [busy, setBusy] = useState(false);

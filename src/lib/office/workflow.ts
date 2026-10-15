@@ -10,20 +10,20 @@ import { toJson } from "@/lib/office/serializers";
 // helpers shared by the cases / files / remarks routes.
 // ---------------------------------------------------------------------------
 
-export const CASE_DEPARTMENTS = ["FILING", "PRINTING", "ATTA", "COURIER"] as const;
+export const CASE_DEPARTMENTS = ["FILING", "PRINTING", "ATTESTATION", "COURIER"] as const;
 export type CaseDepartment = (typeof CASE_DEPARTMENTS)[number];
 
 // Department → permission required to upload/delete its files.
 export const DEPARTMENT_PERMISSIONS: Record<CaseDepartment, AdminPermission> = {
   FILING: "office:filing:write",
   PRINTING: "office:printing:write",
-  ATTA: "office:atta:write",
+  ATTESTATION: "office:attestation-dept:write",
   COURIER: "office:courier:write",
 };
 
 // -- Targeted remarks (§N7) ---------------------------------------------------
 
-export const REMARK_TARGETS = ["ADMIN", "BOOKING", "FILING", "PRINTING", "ATTA", "COURIER"] as const;
+export const REMARK_TARGETS = ["ADMIN", "BOOKING", "FILING", "PRINTING", "ATTESTATION", "COURIER"] as const;
 export type RemarkTarget = (typeof REMARK_TARGETS)[number];
 
 export function roleToRemarkTarget(role?: string | null): RemarkTarget | null {
@@ -36,8 +36,8 @@ export function roleToRemarkTarget(role?: string | null): RemarkTarget | null {
       return "FILING";
     case "printing":
       return "PRINTING";
-    case "atta":
-      return "ATTA";
+    case "attestation_dept":
+      return "ATTESTATION";
     case "courier":
       return "COURIER";
     default:
@@ -45,18 +45,19 @@ export function roleToRemarkTarget(role?: string | null): RemarkTarget | null {
   }
 }
 
-// Who a role may address (§N7): booking office → admin/atta/printing, filing →
-// admin/booking/printing, printing/atta/courier → anyone, admin → anyone.
+// Who a role may address (§N7): booking office → admin/attestation/printing,
+// filing → admin/booking/printing, printing/attestation/courier → anyone,
+// admin → anyone.
 export function allowedRemarkTargets(role?: string | null): RemarkTarget[] {
   switch (role) {
     case "admin":
       return [...REMARK_TARGETS];
     case "booking_office":
-      return ["ADMIN", "ATTA", "PRINTING"];
+      return ["ADMIN", "ATTESTATION", "PRINTING"];
     case "filing":
       return ["ADMIN", "BOOKING", "PRINTING"];
     case "printing":
-    case "atta":
+    case "attestation_dept":
     case "courier":
       return [...REMARK_TARGETS];
     default:
@@ -66,7 +67,7 @@ export function allowedRemarkTargets(role?: string | null): RemarkTarget[] {
 
 // -- Department queues (§N7 list filters) -------------------------------------
 
-// ?dept=filing|printing|atta|courier on GET /api/office/cases. These are plain
+// ?dept=filing|printing|attestation|courier on GET /api/office/cases. These are plain
 // filters over the normal scope; `history` (filing only) shows cases that
 // already passed the filing stage. Status keys per §W11.1.
 export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhereInput | null {
@@ -92,7 +93,7 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
         : { status: "WAITING_FOR_FILE" };
     case "printing":
       return { status: { in: ["WAITING_FOR_PRINTING", "PRINTED"] } };
-    case "atta":
+    case "attestation":
       return { status: { in: ["PRINTED", "ATTESTATION"] } };
     case "courier":
       // §W11.1: courier stage starts when payment is complete
@@ -204,7 +205,7 @@ const COMPLETION_GUARD_STATUSES = [
 
 // A case becomes ATTESTATION_COMPLETE when (a) every attestation step of its
 // set is DONE (fallback when no set: every CaseAttestation of the case) AND
-// (b) the attestation department uploaded the mandatory final file (department=ATTA,
+// (b) the attestation department uploaded the mandatory final file (department=ATTESTATION,
 // stepKey=FINAL). Forward-only: never touches ATTESTATION_COMPLETE-or-later /
 // CANCELLED cases.
 export async function evaluateCaseCompletion(
@@ -229,7 +230,7 @@ export async function evaluateCaseCompletion(
   if (relevant.length === 0 || !relevant.every((a) => a.status === "DONE")) return false;
 
   const finalFile = await db.caseFile.findFirst({
-    where: { caseId, department: "ATTA", stepKey: "FINAL" },
+    where: { caseId, department: "ATTESTATION", stepKey: "FINAL" },
     select: { id: true },
   });
   if (!finalFile) return false;

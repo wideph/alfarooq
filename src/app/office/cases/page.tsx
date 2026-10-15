@@ -7,6 +7,7 @@ import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet, X } from "lucide-r
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import CaseStatusSelect from "@/components/office/case/CaseStatusSelect";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
+import DeptQueue, { type DeptQueueKey, type DeptQueueRow } from "@/components/office/case/DeptQueue";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
@@ -15,12 +16,16 @@ import { useToast } from "@/hooks/useToast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import type { AdminPermission } from "@/components/admin/AdminNav";
 
+// §W18: atta → attestation rename (permission office:attestation-dept:write);
+// auth.ts mid-flight hai — cast dono states mein compile hota hai.
+const ATTESTATION_DEPT_PERMISSION = "office:attestation-dept:write" as AdminPermission;
+
 // §N7 department queues (?dept=). Tab sirf tab dikhta hai jab user ke paas us
 // department ki write permission ho; admin / cashier ko saare tabs milte hain.
-const DEPT_TABS: Array<{ key: string; label: string; permission: AdminPermission }> = [
+const DEPT_TABS: Array<{ key: DeptQueueKey; label: string; permission: AdminPermission }> = [
   { key: "filing", label: "Filing queue", permission: "office:filing:write" },
   { key: "printing", label: "Printing queue", permission: "office:printing:write" },
-  { key: "atta", label: "Atta queue", permission: "office:atta:write" },
+  { key: "attestation", label: "Attestation queue", permission: ATTESTATION_DEPT_PERMISSION },
   { key: "courier", label: "Courier queue", permission: "office:courier:write" },
 ];
 
@@ -29,24 +34,11 @@ function canSeeDeptTab(admin: AdminNavUser, permission: AdminPermission) {
 }
 
 // Filing department ko stripped payload milta hai (no money/office fields),
-// is liye baqi fields optional hain.
-type CaseRow = {
-  id: string;
-  caseNumber: string;
+// is liye baqi fields optional hain. §W18: base row shape DeptQueue se aati hai
+// (slim cross-office rows limited: true — dept mode mein money kabhi render nahi).
+type CaseRow = DeptQueueRow & {
   clientName?: string;
-  rollNumber: string | null;
-  registrationNumber: string | null;
-  status: string;
-  currentAttestationId?: string | null;
-  isPrinted?: boolean;
-  expectedPrintingDate?: string | null;
-  createdAt?: string;
-  bookingOffice?: { id: string; name: string; type: string };
-  category: { id?: string; name: string } | null;
-  attestations?: Array<{ id: string; status: string; completedDate: string | null; attestationType: { name: string } }>;
   totals?: { received: number; remaining: number; extra: number; pendingCount: number; agreedAmount: number };
-  setName?: string | null;
-  isUrgent?: boolean;
   setMissingWarning?: boolean;
   hasUnseenWarning?: boolean;
   // §W14.2: expenses ka compact summary har row ke saath.
@@ -75,6 +67,8 @@ function CasesList() {
   const status = searchParams.get("status") || "";
   const officeId = searchParams.get("officeId") || "";
   const dept = searchParams.get("dept") || "";
+  // §W18: sirf jaiz dept keys par dept mode — unknown ?dept= normal list hi dikhata hai.
+  const deptTab = DEPT_TABS.find((tab) => tab.key === dept) || null;
   const history = searchParams.get("history") === "1";
   const page = Number(searchParams.get("page")) || 1;
 
@@ -422,6 +416,13 @@ function CasesList() {
             )}
           </div>
 
+          {/* §W18: dept mode apna work-appropriate column set use karta hai
+              (office chip hamesha, koi money/expense/status controls nahi);
+              normal list bilkul pehle jaisi rehti hai. */}
+          {deptTab ? (
+            <DeptQueue dept={deptTab.key} items={items} loading={loading} history={history} />
+          ) : (
+          <>
           {/* §W11.2 MOBILE: md se neeche compact cards (table ki jagah). */}
           <div className="space-y-2 md:hidden">
             {loading ? (
@@ -508,6 +509,8 @@ function CasesList() {
               </table>
             )}
           </div>
+          </>
+          )}
 
           {total > 50 && (
             <div className="flex justify-center gap-2">

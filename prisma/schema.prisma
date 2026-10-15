@@ -540,8 +540,8 @@ model CategorySet {
 model CategorySetStep {
   id      String @id @default(cuid())
   setId   String
-  // BORD | UV_IDCC | QR_IDCC | SPECIAL_MOOFA | SAUD_MBC | MOOFA_SAUD | BACK_NEVTCC |
-  // CURRENT_NEVTCC | BMFQ_VER | MOH_ATTA | CPLS_ATTA | APAC_ATTA | NEVTCC
+  // BOARD | UV_IBCC | QR_IBCC | SPECIAL_MOFA | SAUDI_EMBASSY | MOFA_SAUD | BACK_NAVTTC |
+  // CURRENT_NAVTTC | BMFQ_VERIFICATION | MOH_ATTESTATION | CPLS_ATTESTATION | APAC_ATTESTATION | NAVTTC
   stepKey String
   label   String
   order   Float  @default(0)
@@ -582,7 +582,7 @@ model BoardAttestationCounter {
 model CaseFile {
   id           String   @id @default(cuid())
   caseId       String
-  // FILING | PRINTING | ATTA | COURIER
+  // FILING | PRINTING | ATTESTATION | COURIER
   department   String
   stepKey      String?
   fileKey      String
@@ -614,7 +614,7 @@ model CaseRemark {
 model CaseRemarkRecipient {
   id       String    @id @default(cuid())
   remarkId String
-  // ADMIN | BOOKING | FILING | PRINTING | ATTA | COURIER
+  // ADMIN | BOOKING | FILING | PRINTING | ATTESTATION | COURIER
   target   String
   seenAt   DateTime?
 
@@ -683,7 +683,7 @@ model OfficeExpense {
 
 model DepartmentLink {
   id         String   @id @default(cuid())
-  // FILING | PRINTING | ATTA | COURIER | ... (department key)
+  // FILING | PRINTING | ATTESTATION | COURIER | ... (department key)
   department String
   label      String
   url        String

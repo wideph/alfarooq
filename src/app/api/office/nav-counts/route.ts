@@ -28,7 +28,7 @@ export async function GET() {
       case "printing":
         casesQuery = prisma.case.count({ where: { status: "WAITING_FOR_PRINTING" } });
         break;
-      case "atta":
+      case "attestation_dept":
         casesQuery = prisma.case.count({ where: { status: { in: ["PRINTED", "ATTESTATION"] } } });
         break;
       case "courier":

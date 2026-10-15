@@ -46,17 +46,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 const ATTESTATION_ORDER: Record<string, number> = { PENDING: 0, IN_PROGRESS: 1, DONE: 2 };
 
 // PATCH: attestation office (office:attestation:write) updates status / dates /
-// notes (R1.2). The atta department (office:atta:write) may only move a step
-// forward PENDING → IN_PROGRESS → DONE (with completedDate). Case auto-moves:
-// any IN_PROGRESS → ATTESTATION (+currentAttestationId); all set steps DONE +
-// FINAL atta file → ATTESTATION_COMPLETE (see evaluateCaseCompletion, §W11.1).
+// notes (R1.2). The attestation department (office:attestation-dept:write) may
+// only move a step forward PENDING → IN_PROGRESS → DONE (with completedDate).
+// Case auto-moves: any IN_PROGRESS → ATTESTATION (+currentAttestationId); all
+// set steps DONE + FINAL attestation file → ATTESTATION_COMPLETE (see
+// evaluateCaseCompletion, §W11.1).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
   const { id } = await params;
   const fullAccess = hasPermission(session, "office:attestation:write");
-  const attaOnly = !fullAccess && hasPermission(session, "office:atta:write");
-  if (!fullAccess && !attaOnly) return forbidden();
+  const attestationDeptOnly = !fullAccess && hasPermission(session, "office:attestation-dept:write");
+  if (!fullAccess && !attestationDeptOnly) return forbidden();
 
   try {
     const item = await findAccessibleCase(session, id, { attestations: true });
@@ -73,10 +74,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       notes?: string | null;
     } = {};
 
-    if (attaOnly) {
-      // Atta department: status-only, strictly forward.
+    if (attestationDeptOnly) {
+      // Attestation department: status-only, strictly forward.
       if (body.scheduledDate !== undefined || body.notes !== undefined) {
-        return forbidden("Atta department sirf step status badal sakta hai");
+        return forbidden("Attestation department sirf step status badal sakta hai");
       }
       if (body.status === undefined) return badRequest("Status zaroori hai");
       if (!ATTESTATION_STATUSES.includes(body.status as AttestationStatus)) {
@@ -113,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     // §W11.1: IN_PROGRESS → case ATTESTATION + currentAttestationId = ye step;
     // DONE (agar current tha) → pointer agle PENDING step par; phir
-    // evaluateCaseCompletion (sab DONE + FINAL atta file → ATTESTATION_COMPLETE).
+    // evaluateCaseCompletion (sab DONE + FINAL attestation file → ATTESTATION_COMPLETE).
     let nextStatus = item.status;
     if (data.status === "IN_PROGRESS") {
       if (
@@ -149,11 +150,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // W13.2: audit log + notifications response ke baad (status side effects
     // aur evaluateCaseCompletion request path mein hi rehte hain).
     after(async () => {
-      // §W11.8: attestation DONE → atta department + admins.
+      // §W11.8: attestation DONE → attestation department + admins.
       if (data.status === "DONE") {
         const link = `/office/cases/${id}`;
         const title = `Case ${item.caseNumber}: attestation done`;
-        await notifyRole("atta", { type: "attestation", title, link });
+        await notifyRole("attestation_dept", { type: "attestation", title, link });
         await notifyAdmins({ type: "attestation", title, link });
       }
 

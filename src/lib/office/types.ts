@@ -111,7 +111,7 @@ export type FilingCaseDetail = {
 // GET /api/office/cases/[id]/files item.
 export type CaseFileItem = {
   id: string;
-  department: "FILING" | "PRINTING" | "ATTA" | "COURIER";
+  department: "FILING" | "PRINTING" | "ATTESTATION" | "COURIER";
   stepKey: string | null;
   title: string | null;
   fileType: "pdf" | "image" | "video";

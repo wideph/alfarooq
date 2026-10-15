@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { findAccessibleCase } from "@/lib/office/case-access";
+import { deptPermissionsOf, findAccessibleCase } from "@/lib/office/case-access";
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { deleteOfficeFile, getOfficeFileSignedUrl, uploadDepartmentFile } from "@/lib/office/r2";
 import { cleanText, toJson } from "@/lib/office/serializers";
@@ -28,17 +28,30 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   try {
     const item = await findAccessibleCase(session, id);
-    if (!item) return notFound("Case nahi mila");
+    // §W18: caseScope block kare to department workers (kisi dept ki write
+    // permission) cross-office files dekh sakte hain — magar SIRF apne
+    // departments ki files.
+    const deptOnly = item ? [] : deptPermissionsOf(session);
+    if (!item) {
+      if (deptOnly.length === 0) return notFound("Case nahi mila");
+      const exists = await prisma.case.findFirst({ where: { id }, select: { id: true } });
+      if (!exists) return notFound("Case nahi mila");
+    }
 
     // §W11.6: booking office users ko FILING department ki files sirf tab
     // dikhen jab admin ne is case par permission di ho.
     const hideFilingFiles =
-      session.role === "booking_office" && !item.filingFilesVisibleToBooking;
+      item !== null &&
+      session.role === "booking_office" &&
+      !item.filingFilesVisibleToBooking;
 
     const files = await prisma.caseFile.findMany({
-      where: hideFilingFiles
-        ? { caseId: id, department: { not: "FILING" } }
-        : { caseId: id },
+      where:
+        deptOnly.length > 0
+          ? { caseId: id, department: { in: deptOnly } }
+          : hideFilingFiles
+            ? { caseId: id, department: { not: "FILING" } }
+            : { caseId: id },
       orderBy: { createdAt: "asc" },
     });
     const uploaderIds = [...new Set(files.map((file) => file.uploadedById))];
@@ -67,12 +80,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   }
 }
 
-// POST multipart: file + department (FILING|PRINTING|ATTA|COURIER) + optional
-// stepKey + title. Moves the case forward in the department workflow (§W11.1):
+// POST multipart: file + department (FILING|PRINTING|ATTESTATION|COURIER) +
+// optional stepKey + title. Moves the case forward in the department workflow (§W11.1):
 //   first FILING file   → WAITING_FOR_FILE → WAITING_FOR_PRINTING
 //   first PRINTING file → WAITING_FOR_PRINTING → PRINTED (+ isPrinted)
-//   ATTA step files     → optional per step; FINAL file + all set steps DONE
-//                         → ATTESTATION_COMPLETE (see evaluateCaseCompletion)
+//   ATTESTATION step files → optional per step; FINAL file + all set steps
+//                         DONE → ATTESTATION_COMPLETE (see evaluateCaseCompletion)
 //   COURIER slip        → WAITING_FOR_COURIER → DELIVERED
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
@@ -82,13 +95,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const formData = await request.formData();
     const department = String(formData.get("department") || "").toUpperCase() as CaseDepartment;
     if (!(CASE_DEPARTMENTS as readonly string[]).includes(department)) {
-      return badRequest("Department sahi nahi hai (FILING | PRINTING | ATTA | COURIER)");
+      return badRequest("Department sahi nahi hai (FILING | PRINTING | ATTESTATION | COURIER)");
     }
     if (!hasPermission(session, DEPARTMENT_PERMISSIONS[department])) {
       return forbidden("Is department ke files upload karne ki permission nahi hai");
     }
 
-    const item = await findAccessibleCase(session, id);
+    // §W18: full path jab caseScope allow kare (purana behavior); warna upar
+    // wali department write permission cross-office dept work authorize karti
+    // hai (maslan filing permission wala booking user kisi bhi office ke case
+    // par filing file upload kar sakta hai).
+    const item =
+      (await findAccessibleCase(session, id)) ??
+      (await prisma.case.findFirst({ where: { id } }));
     if (!item) return notFound("Case nahi mila");
     if (item.status === "CANCELLED") return badRequest("Cancelled case par file upload nahi ho sakti");
 
@@ -149,10 +168,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         await tx.case.update({ where: { id }, data: caseData });
       }
 
-      // ATTA uploads (step files or the mandatory FINAL file) may complete the
-      // attestation stage (→ ATTESTATION_COMPLETE).
+      // ATTESTATION uploads (step files or the mandatory FINAL file) may
+      // complete the attestation stage (→ ATTESTATION_COMPLETE).
       let completed = false;
-      if (department === "ATTA") {
+      if (department === "ATTESTATION") {
         completed = await evaluateCaseCompletion(id, tx);
         if (completed) nextStatus = "ATTESTATION_COMPLETE";
       }

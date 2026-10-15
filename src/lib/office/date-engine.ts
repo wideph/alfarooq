@@ -272,7 +272,7 @@ export function formatDdMmYy(date: Date): string {
 
 // --- Set orchestrator ---------------------------------------------------------
 
-type SetFamily = "UV" | "QR" | "BORD_ONLY" | "MEDICAL" | "ATTA";
+type SetFamily = "UV" | "QR" | "BOARD_ONLY" | "MEDICAL" | "ATTESTATION";
 
 export type StepComputation = {
   stepKey: string;
@@ -290,11 +290,11 @@ export type GenerateSetDatesResult = {
 };
 
 function detectFamily(stepKeys: string[]): SetFamily {
-  if (stepKeys.includes("BMFQ_VER")) return "MEDICAL";
-  if (stepKeys.includes("CPLS_ATTA") || stepKeys.includes("APAC_ATTA")) return "ATTA";
-  if (stepKeys.includes("UV_IDCC") || stepKeys.includes("BACK_NEVTCC")) return "UV";
-  if (stepKeys.includes("QR_IDCC") || stepKeys.includes("CURRENT_NEVTCC")) return "QR";
-  return "BORD_ONLY";
+  if (stepKeys.includes("BMFQ_VERIFICATION")) return "MEDICAL";
+  if (stepKeys.includes("CPLS_ATTESTATION") || stepKeys.includes("APAC_ATTESTATION")) return "ATTESTATION";
+  if (stepKeys.includes("UV_IBCC") || stepKeys.includes("BACK_NAVTTC")) return "UV";
+  if (stepKeys.includes("QR_IBCC") || stepKeys.includes("CURRENT_NAVTTC")) return "QR";
+  return "BOARD_ONLY";
 }
 
 const PENDING_NO_PAYMENT = "Pehli payment receive nahi hui — dates payment ke baad banenge";
@@ -349,11 +349,11 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     return true;
   };
 
-  // -- BORD (+ its UV/QR pair) -------------------------------------------------
-  const hasBoard = stepKeys.includes("BORD");
+  // -- BOARD (+ its UV/QR pair) -------------------------------------------------
+  const hasBoard = stepKeys.includes("BOARD");
   if (hasBoard) {
     const rNumberMode =
-      family === "UV" || secondKey === "UV_IDCC" || secondKey === "BACK_NEVTCC";
+      family === "UV" || secondKey === "UV_IBCC" || secondKey === "BACK_NAVTTC";
     if (rNumberMode) {
       const suffix = parseRollSuffix(item.rollNumber);
       const forcedYear = boardYearForSuffix(suffix);
@@ -403,19 +403,19 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
         }
       }
       if (boardDate) {
-        dates.set("BORD", boardDate);
+        dates.set("BOARD", boardDate);
         // UV ibcc / Back Navttc: working day ≥ 3 days after Board (same year).
-        const uvKey = stepKeys.includes("UV_IDCC") ? "UV_IDCC" : "BACK_NEVTCC";
+        const uvKey = stepKeys.includes("UV_IBCC") ? "UV_IBCC" : "BACK_NAVTTC";
         if (stepKeys.includes(uvKey)) {
           const uvDate = await firstWorkingDayOnOrAfter(addDays(boardDate, 3), {}, db);
           const crossedYear = uvDate.getUTCFullYear() !== boardDate.getUTCFullYear();
           dates.set(uvKey, uvDate);
           const pairNote = `Board pair: ${formatDateOnly(boardDate)}${crossedYear ? " (sal barh gaya)" : ""}`;
           notes.set(uvKey, pairNote);
-          notes.set("BORD", `${uvKey === "UV_IDCC" ? "UV ibcc" : "Back Navttc"} pair: ${formatDateOnly(uvDate)}`);
+          notes.set("BOARD", `${uvKey === "UV_IBCC" ? "UV ibcc" : "Back Navttc"} pair: ${formatDateOnly(uvDate)}`);
         }
       } else {
-        if (stepKeys.includes("UV_IDCC") || stepKeys.includes("BACK_NEVTCC")) {
+        if (stepKeys.includes("UV_IBCC") || stepKeys.includes("BACK_NAVTTC")) {
           // Pair cannot be computed without its Board date.
           if (forcedYear && !paymentDate) pendingReasons.add(PENDING_NO_PAYMENT);
         }
@@ -425,86 +425,86 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       // Board = first payment + 5 days → first working day (PAK + QUETTA rule).
       if (!needsPayment() && paymentDate) {
         const boardDate = await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" });
-        dates.set("BORD", boardDate);
+        dates.set("BOARD", boardDate);
       }
     }
 
     // QR code ibcc / Current Navttc = Board + 2 days → first Islamabad working day.
-    const qrKey = stepKeys.includes("QR_IDCC") ? "QR_IDCC" : "CURRENT_NEVTCC";
+    const qrKey = stepKeys.includes("QR_IBCC") ? "QR_IBCC" : "CURRENT_NAVTTC";
     if (stepKeys.includes(qrKey)) {
-      const boardDate = dates.get("BORD");
+      const boardDate = dates.get("BOARD");
       if (boardDate) dates.set(qrKey, await pkWorking(addDays(boardDate, 2), { city: "ISLAMABAD" }));
       else if (!pendingReasons.size) pendingReasons.add("Board date ke baghair QR ibcc nahi ban sakta");
     }
   }
 
-  // -- SPECIAL_MOOFA ------------------------------------------------------------
-  if (stepKeys.includes("SPECIAL_MOOFA")) {
+  // -- SPECIAL_MOFA ------------------------------------------------------------
+  if (stepKeys.includes("SPECIAL_MOFA")) {
     let candidate: Date | null = null;
-    if (family === "UV" || family === "BORD_ONLY") {
+    if (family === "UV" || family === "BOARD_ONLY") {
       // i-style: first payment + 7 days.
       if (!needsPayment() && paymentDate) candidate = addDays(paymentDate, 7);
     } else if (family === "MEDICAL") {
-      const moh = dates.get("MOH_ATTA");
+      const moh = dates.get("MOH_ATTESTATION");
       if (moh) candidate = addDays(moh, 1);
     } else {
       // ii-style / CPLS / APAC: previous step date + 1 day.
-      const prevKey = stepKeys[stepKeys.indexOf("SPECIAL_MOOFA") - 1];
+      const prevKey = stepKeys[stepKeys.indexOf("SPECIAL_MOFA") - 1];
       const prev = prevKey ? dates.get(prevKey) : null;
       if (prev) candidate = addDays(prev, 1);
     }
     if (candidate) {
       const result = await specialMofaCityDate(candidate, db);
-      dates.set("SPECIAL_MOOFA", result.date);
-      notes.set("SPECIAL_MOOFA", `City: ${result.city}`);
+      dates.set("SPECIAL_MOFA", result.date);
+      notes.set("SPECIAL_MOFA", `City: ${result.city}`);
     } else if (paymentDate && !pendingReasons.size) {
       pendingReasons.add("Special Mofa ka pichla step abhi pending hai");
     }
   }
 
-  // -- SAUD_MBC / MOOFA_SAUD -----------------------------------------------------
-  if (stepKeys.includes("SAUD_MBC")) {
-    const mofa = dates.get("SPECIAL_MOOFA");
+  // -- SAUDI_EMBASSY / MOFA_SAUD -----------------------------------------------------
+  if (stepKeys.includes("SAUDI_EMBASSY")) {
+    const mofa = dates.get("SPECIAL_MOFA");
     if (mofa) {
       const date = await saudiEmbassyDate(mofa, db);
-      dates.set("SAUD_MBC", date);
-      notes.set("SAUD_MBC", `Hijri: ${toHijri(date).formatted}`);
+      dates.set("SAUDI_EMBASSY", date);
+      notes.set("SAUDI_EMBASSY", `Hijri: ${toHijri(date).formatted}`);
     } else if (paymentDate) {
       pendingReasons.add("Saudi Embassy ke liye Special Mofa date chahiye");
     }
   }
-  if (stepKeys.includes("MOOFA_SAUD")) {
-    const saudiEmbassy = dates.get("SAUD_MBC");
+  if (stepKeys.includes("MOFA_SAUD")) {
+    const saudiEmbassy = dates.get("SAUDI_EMBASSY");
     if (saudiEmbassy) {
       const date = await mofaSaudiDate(saudiEmbassy, db);
-      dates.set("MOOFA_SAUD", date);
-      notes.set("MOOFA_SAUD", formatDdMmYy(date));
+      dates.set("MOFA_SAUD", date);
+      notes.set("MOFA_SAUD", formatDdMmYy(date));
     } else if (paymentDate) {
       pendingReasons.add("Mofa Saudi ke liye Saudi Embassy date chahiye");
     }
   }
 
   // -- Medical Bmfq ---------------------------------------------------------------
-  if (stepKeys.includes("BMFQ_VER")) {
+  if (stepKeys.includes("BMFQ_VERIFICATION")) {
     if (!needsPayment() && paymentDate) {
-      dates.set("BMFQ_VER", await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" }));
+      dates.set("BMFQ_VERIFICATION", await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" }));
     }
   }
-  if (stepKeys.includes("MOH_ATTA")) {
-    const bmfq = dates.get("BMFQ_VER");
-    if (bmfq) dates.set("MOH_ATTA", await pkWorking(addDays(bmfq, 2), { city: "ISLAMABAD" }));
+  if (stepKeys.includes("MOH_ATTESTATION")) {
+    const bmfq = dates.get("BMFQ_VERIFICATION");
+    if (bmfq) dates.set("MOH_ATTESTATION", await pkWorking(addDays(bmfq, 2), { city: "ISLAMABAD" }));
   }
 
   // -- CPLS / APAC -----------------------------------------------------------------
-  const attestationKey = stepKeys.includes("CPLS_ATTA") ? "CPLS_ATTA" : "APAC_ATTA";
+  const attestationKey = stepKeys.includes("CPLS_ATTESTATION") ? "CPLS_ATTESTATION" : "APAC_ATTESTATION";
   if (stepKeys.includes(attestationKey)) {
     if (!needsPayment() && paymentDate) {
       dates.set(attestationKey, await pkWorking(addDays(paymentDate, 3), { city: "ISLAMABAD" }));
     }
   }
-  if (stepKeys.includes("NEVTCC")) {
+  if (stepKeys.includes("NAVTTC")) {
     const attestation = dates.get(attestationKey);
-    if (attestation) dates.set("NEVTCC", await pkWorking(addDays(attestation, 1), { city: "ISLAMABAD" }));
+    if (attestation) dates.set("NAVTTC", await pkWorking(addDays(attestation, 1), { city: "ISLAMABAD" }));
   }
 
   const computations: StepComputation[] = steps.map((step) => ({
@@ -553,7 +553,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       }
     }
 
-    const boardDate = dates.get("BORD");
+    const boardDate = dates.get("BOARD");
     if (boardDate) {
       // Board Attestation Number is consumed once per case; never regenerate it.
       const current = await tx.case.findUnique({ where: { id: caseId }, select: { boardAttestationNumber: true } });

@@ -37,7 +37,7 @@ export async function notifyUsers(
   }
 }
 
-/** Ek role ke tamam ACTIVE users ko (filing | printing | atta | courier | booking_office | cashier | admin). */
+/** Ek role ke tamam ACTIVE users ko (filing | printing | attestation_dept | courier | booking_office | cashier | admin). */
 export async function notifyRole(role: string, n: NotificationInput): Promise<void> {
   try {
     const users = await prisma.admin.findMany({

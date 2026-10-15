@@ -80,7 +80,7 @@ export async function uploadOfficeFile(
 
 export const OFFICE_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
 
-// Department workflow files (§N7): printing proof and the atta final file may
+// Department workflow files (§N7): printing proof and the attestation final file may
 // be video; everything else stays pdf/image like payment slips.
 function getDepartmentFileType(mimeType: string, filename?: string): "pdf" | "image" | "video" | null {
   const base = getFileType(mimeType, filename);
