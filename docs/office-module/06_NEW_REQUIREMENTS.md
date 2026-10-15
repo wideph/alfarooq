@@ -482,3 +482,44 @@ New-case form: after category chosen, fetch /api/office/setup/sets?categoryId=
 and show optional "Set (optional)" dropdown in the attestation section; POST
 /api/office/cases accepts optional setId (connect) so dates engine + workflow
 work from creation.
+
+---
+
+# WAVE 15 (2026-10-09) — Office expense share-formula correction + booking nav
+
+## W15.1 — Office general expense: PER-SHARE allocation (owner rule)
+Owner rule: office general expense har user ke account se USKE SHARE ke
+mutabiq minus hona chahye. Old (wrong) formula: (a) pool subtracted ALL office
+expenses from EVERY case (N cases → expense counted N times), and (b) the
+EXPENSE debit was office-level (memberId null) so per-member due never moved.
+NEW formula:
+- finalizeProfitShare pool = received − case expenses ONLY (office expenses
+  REMOVED from pool entirely).
+- office-expenses POST for PROFIT_SHARE office: per-member EXPENSE DEBIT
+  entries, each = amount × memberPercent/100 (active members, percent>0),
+  remarks `Office expense share [<officeExpenseId>]: <description>`. If the
+  expense has memberId set → full amount to that member only. Admin remainder
+  is admin's own cost (no entry). FIXED_COMMISSION + SALARY behavior unchanged.
+- office-expenses DELETE: reverse/remove the per-member allocation rows
+  (identify via remarks tag) + existing reversal logic for other types.
+- The wave-14 refinalizeOfficeCases() call on office expense is REMOVED (pool
+  no longer depends on office expenses).
+
+## W15.2 — Retroactive live fix (owner: apply formula to old records)
+scripts/fix-office-expense-shares.ts (run once live):
+1. Delete old-format office-level EXPENSE DEBIT ledger rows of PROFIT_SHARE
+   offices (type=EXPENSE, direction=DEBIT, remarks LIKE 'Office expense:%' —
+   NOT 'Office expense share:%').
+2. For every existing OfficeExpense of a PROFIT_SHARE office: create per-member
+   allocations (percent split or full-to-memberId) with remarks
+   `Office expense share [<expenseId>]: <desc>` — skip if already allocated
+   (idempotent via remarks tag match per expense id).
+3. Re-finalize every PROFIT_SHARE case (new pool) → ADJUSTMENT rows restore
+   correct member credits (snapshots keep frozen percents).
+Run: DATABASE_URL=... npx tsx scripts/fix-office-expense-shares.ts
+
+## W15.3 — Booking office nav: Finance tab visible
+Booking-office users get payout notifications linking /office/finance but the
+OfficeNav has no Finance item for them (permission-gated). Fix: OfficeNav shows
+the Finance item when role === "booking_office" (scoped view already exists on
+the page).

@@ -50,7 +50,12 @@ export default function OfficeNav({
   onLogout: () => void;
 }) {
   const pathname = usePathname();
-  const visibleItems = navItems.filter((item) => adminCanAny(admin, item.permissions));
+  const visibleItems = navItems.filter((item) => {
+    // §W15.3 — booking-office users ko payout notifications /office/finance par
+    // link karte hain; Finance tab unke liye visible (scoped view page par hai).
+    if (item.href === "/office/finance" && admin?.role === "booking_office") return true;
+    return adminCanAny(admin, item.permissions);
+  });
   const isSuperAdmin = admin?.role === "admin";
   const counts = useOfficeNavCounts();
 

@@ -1,45 +1,25 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, type AdminSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { parseAmount } from "@/lib/office/money";
-import { finalizeProfitShare } from "@/lib/office/profit-share";
+import { parseAmount, round2 } from "@/lib/office/money";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
-
-// §W14.4 — office general expense add/delete ke baad us partner office ke
-// TAMAM PROFIT_SHARE cases (jin ki received > 0 hai) dobara finalize: pool
-// shrink/grow hota hai to shares auto adjust. Sequential loop; har case apne
-// try/catch mein — ek fail ho to baqi phir bhi chalein.
-async function refinalizeOfficeCases(bookingOfficeId: string, session: AdminSession) {
-  try {
-    const cases = await prisma.case.findMany({
-      where: { bookingOfficeId, payments: { some: { status: "RECEIVED" } } },
-      select: { id: true },
-    });
-    for (const item of cases) {
-      try {
-        await finalizeProfitShare(item.id, session);
-      } catch (error) {
-        console.error("[office] office-expense auto re-finalize fail", item.id, error);
-      }
-    }
-  } catch (error) {
-    console.error("[office] office-expense auto re-finalize list fail", bookingOfficeId, error);
-  }
-}
 
 // Office-level general expenses (OfficeExpense) — docs/office-module/06_NEW_REQUIREMENTS.md §N8.
 // Accounting per booking office type (LedgerEntry written in the SAME transaction):
 //   FIXED_COMMISSION → EXPENSE DEBIT on the office ledger (memberId when given) so it
 //     reduces the commission balance ("minus from that user's commission"). The
 //     company profit impact is zero — the debit only reduces the office payout.
-//   PROFIT_SHARE     → EXPENSE DEBIT on the office ledger; the expense is ALSO
-//     deducted from the case profit pool in finalizeProfitShare() (N8: partner
-//     office expenses come out of the whole before shares are distributed).
+//   PROFIT_SHARE     → §W15.1: PER-MEMBER EXPENSE DEBIT rows — har active member
+//     (profitPercent > 0) ke account se amount × percent/100 minus; agar expense
+//     par memberId hai to poora amount sirf us member par. Remarks tag
+//     `Office expense share [<expenseId>]: <description>` se identify hote hain.
+//     Profit pool ab office expenses se depend NAHI karta (pool = received −
+//     case expenses ONLY), is liye koi re-finalize nahi chalta.
 //   SALARY           → NO ledger debit. The expense is a company (admin) cost and
 //     is subtracted in the finance report (BR6-style) only.
 // Case expenses stay on CaseExpense and NEVER reduce commission (N8).
@@ -114,9 +94,51 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // §N8: SALARY office expenses are charged to the company (no office ledger
-      // debit); commission/partner offices get an EXPENSE debit on their ledger.
-      if (office.type !== "SALARY") {
+      // §N8/§W15.1: SALARY office expenses are charged to the company (no office
+      // ledger debit); commission offices get an office-level EXPENSE debit;
+      // partner (PROFIT_SHARE) offices get PER-MEMBER EXPENSE debits.
+      if (office.type === "PROFIT_SHARE") {
+        // §W15.1 — per-share allocation. memberId set ho to poora amount sirf
+        // us member par; warna tamam active members (percent > 0) par
+        // amount × percent/100. Admin remainder admin ki apni cost hai (koi
+        // entry nahi).
+        const remarks = `Office expense share [${created.id}]: ${description}`;
+        if (memberId) {
+          await tx.ledgerEntry.create({
+            data: {
+              bookingOfficeId,
+              memberId,
+              type: "EXPENSE",
+              direction: "DEBIT",
+              amount,
+              entryDate: expenseDate,
+              remarks,
+              createdById: session.adminId,
+            },
+          });
+        } else {
+          const members = await tx.bookingOfficeMember.findMany({
+            where: { bookingOfficeId, isActive: true, profitPercent: { gt: 0 } },
+            select: { id: true, profitPercent: true },
+          });
+          for (const member of members) {
+            const share = round2(amount.mul(member.profitPercent).div(100));
+            if (share.isZero()) continue;
+            await tx.ledgerEntry.create({
+              data: {
+                bookingOfficeId,
+                memberId: member.id,
+                type: "EXPENSE",
+                direction: "DEBIT",
+                amount: share,
+                entryDate: expenseDate,
+                remarks,
+                createdById: session.adminId,
+              },
+            });
+          }
+        }
+      } else if (office.type !== "SALARY") {
         await tx.ledgerEntry.create({
           data: {
             bookingOfficeId,
@@ -139,20 +161,18 @@ export async function POST(request: NextRequest) {
       return created;
     }, { maxWait: 10000, timeout: 30000 });
 
-    // §W14.4: partner office ka profit pool auto adjust (response ke baad).
-    after(async () => {
-      if (office.type !== "PROFIT_SHARE") return;
-      await refinalizeOfficeCases(bookingOfficeId, session);
-    });
-
+    // §W15.1 — pool ab office expenses par depend nahi karta; koi re-finalize
+    // nahi chalta (wave-14 refinalizeOfficeCases remove kar diya gaya).
     return NextResponse.json(toJson(expense), { status: 201 });
   } catch (error) {
     return serverError(error);
   }
 }
 
-// DELETE ?id= — super admin only. The ledger is never rewritten (BR1.5), so the
-// EXPENSE debit is neutralised with a reversing CREDIT on the same entryDate.
+// DELETE ?id= — super admin only. PROFIT_SHARE: isi transaction mein per-member
+// allocation rows DELETE hote hain (remarks tag se identify). Baqi types ke liye
+// the ledger is never rewritten (BR1.5), so the EXPENSE debit is neutralised
+// with a reversing CREDIT on the same entryDate.
 export async function DELETE(request: NextRequest) {
   const { session, denied } = await guardOffice("office:expenses:write");
   if (denied) return denied;
@@ -166,7 +186,16 @@ export async function DELETE(request: NextRequest) {
   if (!existing) return notFound("Expense nahi mila");
 
   await prisma.$transaction(async (tx) => {
-    if (existing.bookingOffice.type !== "SALARY") {
+    if (existing.bookingOffice.type === "PROFIT_SHARE") {
+      // §W15.1 — per-member allocation rows isi tx mein delete (remarks tag).
+      await tx.ledgerEntry.deleteMany({
+        where: {
+          bookingOfficeId: existing.bookingOfficeId,
+          type: "EXPENSE",
+          remarks: { startsWith: `Office expense share [${id}]:` },
+        },
+      });
+    } else if (existing.bookingOffice.type !== "SALARY") {
       await tx.ledgerEntry.create({
         data: {
           bookingOfficeId: existing.bookingOfficeId,
@@ -187,12 +216,6 @@ export async function DELETE(request: NextRequest) {
       tx
     );
   }, { maxWait: 10000, timeout: 30000 });
-
-  // §W14.4: partner office ke cases ka pool dobara finalize (response ke baad).
-  after(async () => {
-    if (existing.bookingOffice.type !== "PROFIT_SHARE") return;
-    await refinalizeOfficeCases(existing.bookingOfficeId, session);
-  });
 
   return NextResponse.json({ success: true });
 }

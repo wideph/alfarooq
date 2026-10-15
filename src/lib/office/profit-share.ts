@@ -8,20 +8,21 @@ import { todayPakistan } from "@/lib/office/serializers";
 // profit = received − case expenses; each active member gets profitPercent %.
 // Re-running creates ADJUSTMENT rows for any difference (never edits old rows).
 //
-// §N8 (06_NEW_REQUIREMENTS.md): partner (profit-share) office ke tamam general
-// office expenses (OfficeExpense) pool se PEHLE minus hote hain, phir profit
-// members ke profitPercent ke hisaab se bant-ta hai:
-//   profit pool = received − case expenses − office expenses
-// Office expenses are office-level (not per case), so the pool can never be
-// negative per case — it is floored at 0. The EXPENSE ledger debit written by
-// /api/office/office-expenses is separate from these share rows; re-finalize
-// stays idempotent because only PROFIT_SHARE/ADJUSTMENT rows are compared.
+// §W15.1 (06_NEW_REQUIREMENTS.md) — formula correction: office general
+// expenses pool mein SHAAMIL NAHI hote (purana formula har case pool se tamam
+// office expenses minus karta tha → N cases par N-times deduction). Ab pool:
+//   profit pool = received − case expenses ONLY
+// Office expense ab per-member EXPENSE DEBIT ledger rows ke zariye har member
+// ke account se uske share ke mutabiq minus hota hai (office-expenses route).
+// Re-finalize idempotent rehta hai (sirf PROFIT_SHARE/ADJUSTMENT rows compare).
 
 const SHARE_TYPES = ["PROFIT_SHARE", "ADJUSTMENT"];
 
 export type ProfitShareSummary = {
   received: number;
   expenses: number;
+  // §W15.1 — office expenses pool se hataye gaye; field response-compat ke liye
+  // hai aur hamesha 0 hai (per-member EXPENSE debits ledger mein hain).
   officeExpenses: number;
   profit: number;
   // §W11.4 — members ke percents ka total (baqi 100 − percentSum admin ka hissa).
@@ -44,8 +45,6 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
             // §W12.6 — ALL members (not just active): the snapshot may reference
             // a member who is now inactive; their share is still honored.
             members: true,
-            // §N8 — partner office general expenses, deducted from the pool.
-            expenses: { select: { amount: true } },
           },
         },
         payments: { where: { status: "RECEIVED" }, select: { amount: true } },
@@ -62,9 +61,8 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
     const received = sum(item.payments.map((p) => p.amount));
     if (received.isZero()) throw new Error("Abhi koi payment receive nahi hui");
     const expenses = sum(item.expenses.map((e) => e.amount));
-    const officeExpenses = sum(item.bookingOffice.expenses.map((e) => e.amount));
-    // §N8: pool = received − case expenses − office expenses (floor 0).
-    const profit = Prisma.Decimal.max(received.minus(expenses).minus(officeExpenses), 0);
+    // §W15.1: pool = received − case expenses ONLY (office expenses REMOVED).
+    const profit = Prisma.Decimal.max(received.minus(expenses), 0);
     const entryDate = todayPakistan();
 
     // §W12.6 — profitShareSnapshot (Json {memberId: percent}): pehli distribution
@@ -142,7 +140,8 @@ export async function finalizeProfitShare(caseId: string, session: AdminSession)
     return {
       received: toNumber(received),
       expenses: toNumber(expenses),
-      officeExpenses: toNumber(officeExpenses),
+      // §W15.1 — office expenses pool ka hissa nahi; per-member debits ledger mein.
+      officeExpenses: 0,
       profit: toNumber(profit),
       percentSum: toNumber(percentSum),
       adminShare: toNumber(adminShare),

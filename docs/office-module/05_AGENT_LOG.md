@@ -989,3 +989,24 @@ Next step for the next agent:
 - Status note optional; set-missing warning scoped to PRINTED/ATTESTATION;
   new-case form optional set select per category (setId on create).
 - PayoutRequest migration applied live; tsc 0, lint 0, build exit 0. Pushed 1e6d171.
+
+## Wave 15 (2026-10-09) — Office expense share-formula correction + booking nav
+- **W15.1 — Formula correction:** finalizeProfitShare pool ab
+  `received − case expenses` ONLY (office expenses pool se REMOVED — purana
+  formula har case par N-times deduct karta tha). office-expenses POST ab
+  PROFIT_SHARE office par per-member EXPENSE DEBIT rows likhta hai
+  (amount × profitPercent/100; memberId set ho to full amount us member ko;
+  remarks tag `Office expense share [<expenseId>]: <desc>`). DELETE in rows ko
+  same tx mein delete karta hai; FIXED_COMMISSION/SALARY behavior unchanged.
+  Wave-14 ka refinalizeOfficeCases() after() remove (pool ab office expenses
+  par depend nahi karta).
+- **W15.2 — Live fix:** scripts/fix-office-expense-shares.ts live run hua —
+  step 1: 1 purani office-level EXPENSE debit row delete; step 2: 1 expense
+  (135330 "Meta Ad") per-member allocate (2 members @ 25% → 33,832.5 each);
+  step 3: 6/6 PROFIT_SHARE cases re-finalize. Re-run idempotent (0/0 skip).
+  Member balances (Haroon Diploma Services): AW D aur Fan −44,182.5 → **8,370
+  each** (25% shares of new pool sum 1,208,810 − per-share expense 33,832.5 −
+  payouts 260,000); office-level (memberId null) balance −135,330 → 0.
+- **W15.3 — Booking nav:** OfficeNav Finance tab ab role==="booking_office"
+  ke liye bhi visible (scoped view page par already tha).
+- tsc 0 errors.
