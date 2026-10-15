@@ -4,6 +4,7 @@ import { addDays, formatDateOnly } from "@/lib/office/serializers";
 import { toHijri } from "@/lib/office/hijri";
 import { nextBoardAttestationNumber } from "@/lib/office/board-attestation";
 import { boardYearForSuffix, parseRollSuffix } from "@/lib/office/rnumber";
+import { revalidateOfficeSetup } from "@/lib/office/setup-cache";
 import {
   aiChooseMofaCity,
   aiResearchWorkingDates,
@@ -566,6 +567,14 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     }
     return attestationNumber;
   }, { maxWait: 10000, timeout: 30000 });
+
+  // §W20: upsert ne naya AttestationType banaya ho sakta hai — setup cache
+  // invalidate (best-effort; generateSetDates after() se bhi call hota hai).
+  try {
+    revalidateOfficeSetup();
+  } catch (error) {
+    console.error("[office] setup cache revalidate fail", error);
+  }
 
   return {
     status: pendingReasons.size ? "pending" : "ok",

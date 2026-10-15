@@ -4,6 +4,7 @@ import { hasPermission } from "@/lib/auth";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { cleanText, toJson } from "@/lib/office/serializers";
+import { getOfficeDepartmentLinks, revalidateOfficeSetup } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -19,11 +20,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const showAll = searchParams.get("all") === "1" && hasPermission(session, "office:setup:write");
 
-  const links = await prisma.departmentLink.findMany({
-    where: showAll ? {} : { isActive: true },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-  });
-  return NextResponse.json(toJson(links));
+  // §W20: cached (60s + tag invalidation); isActive filter in-memory.
+  const all = await getOfficeDepartmentLinks();
+  const links = showAll ? all : all.filter((link) => link.isActive);
+  return NextResponse.json(links);
 }
 
 function readLinkBody(body: Record<string, unknown>) {
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         isActive: body.isActive === undefined ? true : body.isActive !== false,
       },
     });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "department_link.create",
       entity: "DepartmentLink",
@@ -98,6 +99,7 @@ export async function PATCH(request: NextRequest) {
     if (body.isActive !== undefined) data.isActive = body.isActive !== false;
 
     const link = await prisma.departmentLink.update({ where: { id }, data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "department_link.update",
       entity: "DepartmentLink",
@@ -119,6 +121,7 @@ export async function DELETE(request: NextRequest) {
   const existing = await prisma.departmentLink.findUnique({ where: { id } });
   if (!existing) return notFound("Link nahi mila");
   await prisma.departmentLink.delete({ where: { id } });
+  revalidateOfficeSetup();
   await logOfficeAction(session, {
     action: "department_link.delete",
     entity: "DepartmentLink",

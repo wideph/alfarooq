@@ -4,6 +4,7 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount } from "@/lib/office/money";
 import { toJson, cleanText } from "@/lib/office/serializers";
+import { getOfficeCategories, revalidateOfficeSetup } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -11,10 +12,9 @@ export async function GET() {
   const { denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
 
-  const categories = await prisma.caseCategory.findMany({
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-  });
-  return NextResponse.json(toJson(categories));
+  // §W20: cached (60s + tag invalidation) — response shape wahi hai.
+  const categories = await getOfficeCategories();
+  return NextResponse.json(categories);
 }
 
 function readBody(body: Record<string, unknown>) {
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     const parsed = readBody(await request.json());
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const category = await prisma.caseCategory.create({ data: parsed.data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "category.create",
       entity: "CaseCategory",
@@ -66,6 +67,7 @@ export async function PUT(request: NextRequest) {
     const parsed = readBody(body);
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const category = await prisma.caseCategory.update({ where: { id }, data: parsed.data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "category.update",
       entity: "CaseCategory",
@@ -91,6 +93,7 @@ export async function DELETE(request: NextRequest) {
   if (!existing) return notFound("Category nahi mili");
   if (existing._count.cases > 0) return badRequest("Is category ke cases hain. Inactive karein.");
   await prisma.caseCategory.delete({ where: { id } });
+  revalidateOfficeSetup();
   await logOfficeAction(session, {
     action: "category.delete",
     entity: "CaseCategory",

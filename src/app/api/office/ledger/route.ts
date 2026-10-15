@@ -8,6 +8,7 @@ import { memberBalance, memberBalances, officeBalances } from "@/lib/office/ledg
 import { parseAmount } from "@/lib/office/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/office/permissions";
 import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
+import { findCachedOffice } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -97,15 +98,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const bookingOfficeId = typeof body.bookingOfficeId === "string" ? body.bookingOfficeId : "";
-    const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
+    const memberId = typeof body.memberId === "string" && body.memberId ? body.memberId : null;
+    // §W20: office cached directory se; member check parallel (independent).
+    const [office, member] = await Promise.all([
+      findCachedOffice(bookingOfficeId),
+      memberId
+        ? prisma.bookingOfficeMember.findFirst({ where: { id: memberId, bookingOfficeId } })
+        : Promise.resolve(null),
+    ]);
     if (!office) return notFound("Booking office nahi mila");
     if (office.type === "SALARY") return badRequest("Salary office ko payout nahi, salary entry lagti hai");
-
-    const memberId = typeof body.memberId === "string" && body.memberId ? body.memberId : null;
-    if (memberId) {
-      const member = await prisma.bookingOfficeMember.findFirst({ where: { id: memberId, bookingOfficeId } });
-      if (!member) return notFound("Member nahi mila");
-    }
+    if (memberId && !member) return notFound("Member nahi mila");
 
     const amount = parseAmount(body.amount, { allowZero: false });
     if (amount === null) return badRequest("Amount sahi nahi hai");

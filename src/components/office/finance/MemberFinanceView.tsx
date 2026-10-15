@@ -74,7 +74,8 @@ export default function MemberFinanceView({ admin }: { admin: AdminNavUser }) {
     void load();
   }, [load]);
 
-  useLiveRefresh(useCallback(() => void load(true), [load]));
+  // §W20 (P2): promise return → hook in-flight dedup.
+  useLiveRefresh(useCallback(() => load(true), [load]));
 
   async function decide(id: string, action: "accept" | "reject") {
     setBusy(id);
@@ -85,7 +86,8 @@ export default function MemberFinanceView({ admin }: { admin: AdminNavUser }) {
         action === "accept" ? "Payout accept ho gayi — ledger men aa gayi" : "Payout request reject kar di gayi",
         "success"
       );
-      await load(true);
+      // §W20 (P2): POST ke baad office:changed event 300ms mein silent reload
+      // kar deta hai — explicit load(true) duplicate fetch thi, hata di.
     } else {
       setMessage(res.error, "error");
     }

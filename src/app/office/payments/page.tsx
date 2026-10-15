@@ -84,7 +84,8 @@ export default function OfficePaymentsPage() {
   }, [load]);
 
   // §W11.5: payments list live (silent background refresh, spinner flash nahi).
-  useLiveRefresh(useCallback(() => void load(true), [load]));
+  // §W20 (P2): promise return → hook in-flight dedup kar sakta hai.
+  useLiveRefresh(useCallback(() => load(true), [load]));
 
   async function patch(payment: PaymentRow, body: Record<string, unknown>) {
     setBusy(payment.id);
@@ -99,7 +100,9 @@ export default function OfficePaymentsPage() {
       if (res.data.needsExtraDecision) {
         setPopup({ caseId: payment.case.id, caseNumber: payment.case.caseNumber, extra: res.data.needsExtraDecision });
       }
-      await load();
+      // §W20 (P2): PATCH ke baad office:changed event 300ms mein silent reload
+      // kar deta hai — yahan full load() (spinner flash + doosri fetch) ki
+      // zaroorat nahi.
     } else {
       setMessage(res.error, "error");
     }

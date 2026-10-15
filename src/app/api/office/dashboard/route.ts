@@ -43,21 +43,31 @@ export async function GET() {
     const isAdmin = session.role === "admin";
     const isBookingOffice = session.role === "booking_office";
 
-    const offices = await prisma.bookingOffice.findMany({
-      where: isBookingOffice
-        ? { id: session.bookingOfficeId || "__none__" }
-        : { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        _count: { select: { members: { where: { isActive: true } } } },
-      },
-      orderBy: { name: "asc" },
-    });
+    // §W20: offices list aur viewer ka apna member record independent hain —
+    // ek hi batch mein (pehle ownMember doosre batch ka hissa tha jabke wo
+    // officeIds par depend nahi karta → 1 extra round-trip).
+    const [offices, ownMember] = await Promise.all([
+      prisma.bookingOffice.findMany({
+        where: isBookingOffice
+          ? { id: session.bookingOfficeId || "__none__" }
+          : { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          _count: { select: { members: { where: { isActive: true } } } },
+        },
+        orderBy: { name: "asc" },
+      }),
+      // Viewer ka apna member record (due ke liye); admin ka aksar nahi hota.
+      prisma.bookingOfficeMember.findUnique({
+        where: { adminId: session.adminId },
+        select: { id: true, bookingOfficeId: true },
+      }),
+    ]);
     const officeIds = offices.map((office) => office.id);
 
-    const [statusGroups, caseRows, members, ledgerGroups, ownMember] = await Promise.all([
+    const [statusGroups, caseRows, members, ledgerGroups] = await Promise.all([
       prisma.case.groupBy({
         by: ["bookingOfficeId", "status"],
         where: { bookingOfficeId: { in: officeIds } },
@@ -82,11 +92,6 @@ export async function GET() {
         by: ["memberId", "type", "direction"],
         where: { bookingOfficeId: { in: officeIds }, memberId: { not: null } },
         _sum: { amount: true },
-      }),
-      // Viewer ka apna member record (due ke liye); admin ka aksar nahi hota.
-      prisma.bookingOfficeMember.findUnique({
-        where: { adminId: session.adminId },
-        select: { id: true, bookingOfficeId: true },
       }),
     ]);
 

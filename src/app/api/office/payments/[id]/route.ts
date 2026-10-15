@@ -89,8 +89,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const caseId = existing.caseId;
       // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
       // auto-distribute (idempotent). Kabhi throw nahi karta.
-      await autoDistributeOnPaymentReceived(caseId, session);
-      ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
+      // §W20: auto-distribute (ledger) aur workflow activation (case status)
+      // independent hain — parallel (dono kabhi throw nahi karte).
+      [, { datesNeeded }] = await Promise.all([
+        autoDistributeOnPaymentReceived(caseId, session),
+        activateWorkflowOnFirstPayment(caseId),
+      ]);
     }
 
     // W13.2: audit log + notifications + AI date generation sab response ke

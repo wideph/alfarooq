@@ -4,6 +4,7 @@ import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/gua
 import { logOfficeAction } from "@/lib/office/audit";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 import { HOLIDAY_SCOPES, type HolidayScope } from "@/lib/office/date-engine";
+import { getOfficeHolidayClosures, revalidateOfficeSetup } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -17,21 +18,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get("year"));
     const scope = searchParams.get("scope");
-    const rows = await prisma.holidayClosure.findMany({
-      where: {
-        ...(Number.isFinite(year) && year > 1900
-          ? {
-              date: {
-                gte: new Date(Date.UTC(year, 0, 1)),
-                lt: new Date(Date.UTC(year + 1, 0, 1)),
-              },
-            }
-          : {}),
-        ...(scope ? { scope } : {}),
-      },
-      orderBy: [{ date: "asc" }, { scope: "asc" }],
-    });
-    return NextResponse.json(toJson(rows));
+    // §W20: cached (60s + tag invalidation); year/scope filters in-memory.
+    // Cached dates ISO strings hain (UTC midnight) — lexicographic compare
+    // wahi range deta hai jo pehle Date range deta tha.
+    const all = await getOfficeHolidayClosures();
+    const hasYear = Number.isFinite(year) && year > 1900;
+    const rows = all.filter(
+      (row) =>
+        (!hasYear || (row.date >= `${year}-01-01` && row.date < `${year + 1}-01-01`)) &&
+        (!scope || row.scope === scope)
+    );
+    return NextResponse.json(rows);
   } catch (error) {
     return serverError(error);
   }
@@ -56,6 +53,7 @@ export async function POST(request: NextRequest) {
       update: { reason: parsed.data.reason },
       create: parsed.data,
     });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "holiday.create",
       entity: "HolidayClosure",
@@ -79,6 +77,7 @@ export async function PATCH(request: NextRequest) {
     const parsed = readBody(body);
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const row = await prisma.holidayClosure.update({ where: { id }, data: parsed.data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "holiday.update",
       entity: "HolidayClosure",
@@ -101,6 +100,7 @@ export async function DELETE(request: NextRequest) {
     const existing = await prisma.holidayClosure.findUnique({ where: { id } });
     if (!existing) return notFound("Holiday nahi mili");
     await prisma.holidayClosure.delete({ where: { id } });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "holiday.delete",
       entity: "HolidayClosure",

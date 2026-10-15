@@ -10,6 +10,7 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
 import { cleanText } from "@/lib/office/serializers";
+import { getOfficeCategories } from "@/lib/office/setup-cache";
 import { parseCaseInput } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
@@ -72,7 +73,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (body.categoryId !== undefined) {
       const categoryId = typeof body.categoryId === "string" && body.categoryId ? body.categoryId : null;
       if (categoryId) {
-        const category = await prisma.caseCategory.findUnique({ where: { id: categoryId } });
+        // §W20: categories static hain — cached list se validate (DB round-trip
+        // bach gayi); sirf existence check tha, isActive pehle bhi nahi dekhte the.
+        const category = (await getOfficeCategories()).find((row) => row.id === categoryId) ?? null;
         if (!category) return badRequest("Category nahi mili");
         data.category = { connect: { id: categoryId } };
       } else {
@@ -175,28 +178,27 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const paymentIds = existing.payments.map((payment) => payment.id);
     const remarkIds = existing.remarks.map((remark) => remark.id);
 
-    // Dependency order: children first, case row last.
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.ledgerEntry.deleteMany({
-          where: { OR: [{ caseId: id }, { paymentId: { in: paymentIds } }] },
-        });
-        await tx.caseExpense.deleteMany({ where: { caseId: id } });
-        await tx.caseAttestation.deleteMany({ where: { caseId: id } });
-        if (remarkIds.length) {
-          await tx.caseRemarkRecipient.deleteMany({ where: { remarkId: { in: remarkIds } } });
-        }
-        await tx.caseRemark.deleteMany({ where: { caseId: id } });
-        await tx.caseContact.deleteMany({ where: { caseId: id } });
-        await tx.caseAddress.deleteMany({ where: { caseId: id } });
-        await tx.discountRequest.deleteMany({ where: { caseId: id } });
-        await tx.bonusRequest.deleteMany({ where: { caseId: id } });
-        await tx.caseFile.deleteMany({ where: { caseId: id } });
-        await tx.payment.deleteMany({ where: { caseId: id } });
-        await tx.case.delete({ where: { id } });
-      },
-      { maxWait: 10000, timeout: 30000 }
-    );
+    // Dependency order: children first, case row last. §W20-R5 (review #4):
+    // interactive tx ke 12 sequential round-trips (cross-region par ~2-4s) ki
+    // jagah batch array form — order preserved, ~1 round-trip.
+    await prisma.$transaction([
+      prisma.ledgerEntry.deleteMany({
+        where: { OR: [{ caseId: id }, { paymentId: { in: paymentIds } }] },
+      }),
+      prisma.caseExpense.deleteMany({ where: { caseId: id } }),
+      prisma.caseAttestation.deleteMany({ where: { caseId: id } }),
+      ...(remarkIds.length
+        ? [prisma.caseRemarkRecipient.deleteMany({ where: { remarkId: { in: remarkIds } } })]
+        : []),
+      prisma.caseRemark.deleteMany({ where: { caseId: id } }),
+      prisma.caseContact.deleteMany({ where: { caseId: id } }),
+      prisma.caseAddress.deleteMany({ where: { caseId: id } }),
+      prisma.discountRequest.deleteMany({ where: { caseId: id } }),
+      prisma.bonusRequest.deleteMany({ where: { caseId: id } }),
+      prisma.caseFile.deleteMany({ where: { caseId: id } }),
+      prisma.payment.deleteMany({ where: { caseId: id } }),
+      prisma.case.delete({ where: { id } }),
+    ]);
 
     // After commit (best-effort): R2 objects, then audit + notification rows
     // for this case. Audit rows wipe hone ke baad "case.delete" ka audit row

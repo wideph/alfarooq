@@ -13,6 +13,12 @@ import { notifyAdmins } from "@/lib/office/notifications";
 import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import {
+  findCachedOffice,
+  getOfficeAttestationTypes,
+  getOfficeCategories,
+  getOfficeCategorySets,
+} from "@/lib/office/setup-cache";
+import {
   deptQueueWhere,
   isFilingLimited,
   parseCaseInput,
@@ -213,7 +219,16 @@ export async function POST(request: NextRequest) {
           ? body.bookingOfficeId
           : "";
     if (!bookingOfficeId) return badRequest("Booking office select karein");
-    const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
+    // §W20: office / category / set / attestation-type static data hain —
+    // cached loaders (60s + tag invalidation) ek hi parallel batch mein
+    // (pehle ye 4 alag sequential DB round-trips thi). Checks ka order aur
+    // error messages bilkul wahi hain.
+    const [office, categories, categorySets, attestationTypes] = await Promise.all([
+      findCachedOffice(bookingOfficeId),
+      getOfficeCategories(),
+      getOfficeCategorySets(),
+      getOfficeAttestationTypes(),
+    ]);
     if (!office || !office.isActive) return badRequest("Booking office nahi mila ya inactive hai");
 
     // §N7: client name is optional; at least one of Roll Number / Registration
@@ -226,14 +241,14 @@ export async function POST(request: NextRequest) {
     // Category ab LAZMI hai (F4) — select karna zaroori, aur active honi chahiye.
     const categoryId = typeof body.categoryId === "string" ? body.categoryId.trim() : "";
     if (!categoryId) return badRequest("Category select karna lazmi hai");
-    const category = await prisma.caseCategory.findUnique({ where: { id: categoryId } });
+    const category = categories.find((row) => row.id === categoryId) ?? null;
     if (!category || !category.isActive) return badRequest("Category nahi mili ya inactive hai");
 
     // §W14.9: optional set — diya ho to usi category ka hona chahiye taake
     // dates engine + workflow creation se hi set par chalein.
     const setId = typeof body.setId === "string" && body.setId.trim() ? body.setId.trim() : "";
     if (setId) {
-      const set = await prisma.categorySet.findUnique({ where: { id: setId } });
+      const set = categorySets.find((row) => row.id === setId) ?? null;
       if (!set || !set.isActive) return badRequest("Set of Attestations nahi mila ya inactive hai");
       if (set.categoryId !== categoryId) return badRequest("Set of Attestations is category ka nahi hai");
     }
@@ -248,8 +263,10 @@ export async function POST(request: NextRequest) {
       ? [...new Set((body.attestationTypeIds as unknown[]).filter((id): id is string => typeof id === "string"))]
       : [];
     if (attestationTypeIds.length > 0) {
-      const count = await prisma.attestationType.count({ where: { id: { in: attestationTypeIds } } });
-      if (count !== attestationTypeIds.length) return badRequest("Koi attestation type nahi mila");
+      const knownTypeIds = new Set(attestationTypes.map((row) => row.id));
+      if (!attestationTypeIds.every((typeId) => knownTypeIds.has(typeId))) {
+        return badRequest("Koi attestation type nahi mila");
+      }
     }
 
     const contacts = (Array.isArray(body.contacts) ? body.contacts : [])

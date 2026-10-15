@@ -156,8 +156,12 @@ export async function POST(request: NextRequest) {
     if (status === "RECEIVED") {
       // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
       // auto-distribute (idempotent). Business write: request path mein.
-      await autoDistributeOnPaymentReceived(caseId, session);
-      ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
+      // §W20: auto-distribute (ledger) aur workflow activation (case status)
+      // independent hain aur dono kabhi throw nahi karte — parallel.
+      [, { datesNeeded }] = await Promise.all([
+        autoDistributeOnPaymentReceived(caseId, session),
+        activateWorkflowOnFirstPayment(caseId),
+      ]);
     }
 
     // W13.2: audit log + notifications + AI date generation (DeepSeek, can

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { guardOffice, serverError } from "@/lib/office/guard";
 import { toJson } from "@/lib/office/serializers";
 import { dimmedSetNames } from "@/lib/office/rnumber";
+import { getOfficeCategories, getOfficeCategorySets } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -17,18 +17,17 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get("categoryId") || "";
     const rollNumber = searchParams.get("rollNumber");
 
-    const category = categoryId
-      ? await prisma.caseCategory.findUnique({ where: { id: categoryId }, select: { name: true } })
-      : null;
+    // §W20: dono reads cached (60s + tag invalidation); category/isActive
+    // filters in-memory — order aur shape pehle jaisi hi.
+    const [categories, allSets] = await Promise.all([
+      categoryId ? getOfficeCategories() : Promise.resolve(null),
+      getOfficeCategorySets(),
+    ]);
+    const category = categories?.find((row) => row.id === categoryId) ?? null;
 
-    const sets = await prisma.categorySet.findMany({
-      where: {
-        isActive: true,
-        ...(categoryId ? { categoryId } : {}),
-      },
-      orderBy: [{ order: "asc" }, { name: "asc" }],
-      include: { steps: { orderBy: { order: "asc" } } },
-    });
+    const sets = allSets.filter(
+      (set) => set.isActive && (!categoryId || set.categoryId === categoryId)
+    );
 
     const withDim = rollNumber
       ? dimmedSetNames(category?.name, rollNumber, sets)

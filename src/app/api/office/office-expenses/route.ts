@@ -5,6 +5,7 @@ import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { parseAmount, round2, toNumber } from "@/lib/office/money";
+import { findCachedOffice } from "@/lib/office/setup-cache";
 import { addDays, cleanText, formatDateOnly, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -111,14 +112,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const bookingOfficeId = typeof body.bookingOfficeId === "string" ? body.bookingOfficeId : "";
-    const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
-    if (!office) return notFound("Booking office nahi mila");
-
     const memberId = typeof body.memberId === "string" && body.memberId ? body.memberId : null;
-    if (memberId) {
-      const member = await prisma.bookingOfficeMember.findFirst({ where: { id: memberId, bookingOfficeId } });
-      if (!member) return notFound("Member nahi mila");
-    }
+    // §W20: office cached directory se; member check usi ke parallel (dono
+    // independent hain — pehle 2 sequential round-trips thi).
+    const [office, member] = await Promise.all([
+      findCachedOffice(bookingOfficeId),
+      memberId
+        ? prisma.bookingOfficeMember.findFirst({ where: { id: memberId, bookingOfficeId } })
+        : Promise.resolve(null),
+    ]);
+    if (!office) return notFound("Booking office nahi mila");
+    if (memberId && !member) return notFound("Member nahi mila");
 
     const amount = parseAmount(body.amount, { allowZero: false });
     if (amount === null) return badRequest("Amount sahi nahi hai");
@@ -169,21 +173,22 @@ export async function POST(request: NextRequest) {
             where: { bookingOfficeId, isActive: true, profitPercent: { gt: 0 } },
             select: { id: true, profitPercent: true },
           });
-          for (const member of members) {
-            const share = round2(amount.mul(member.profitPercent).div(100));
-            if (share.isZero()) continue;
-            await tx.ledgerEntry.create({
-              data: {
-                bookingOfficeId,
-                memberId: member.id,
-                type: "EXPENSE",
-                direction: "DEBIT",
-                amount: share,
-                entryDate: expenseDate,
-                remarks,
-                createdById: session.adminId,
-              },
-            });
+          // §W20: per-member share rows ek hi createMany mein (pehle har member
+          // ke liye alag INSERT round-trip tha).
+          const shareRows = members
+            .map((member) => ({
+              bookingOfficeId,
+              memberId: member.id,
+              type: "EXPENSE",
+              direction: "DEBIT",
+              amount: round2(amount.mul(member.profitPercent).div(100)),
+              entryDate: expenseDate,
+              remarks,
+              createdById: session.adminId,
+            }))
+            .filter((row) => !row.amount.isZero());
+          if (shareRows.length > 0) {
+            await tx.ledgerEntry.createMany({ data: shareRows });
           }
         }
       } else if (office.type !== "SALARY") {

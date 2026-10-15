@@ -5,6 +5,7 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { toJson, cleanText } from "@/lib/office/serializers";
 import { BOOKING_OFFICE_TYPES, type BookingOfficeType } from "@/lib/office/permissions";
 import { createOfficeUser, hashOfficeUserPassword, validateOfficeUser, type OfficeUserInput } from "@/lib/office/office-users";
+import { revalidateOfficeSetup } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
       return office.id;
     }, { maxWait: 10000, timeout: 30000 });
 
+    revalidateOfficeSetup();
     const fresh = await prisma.bookingOffice.findUnique({
       where: { id: officeId },
       include: officeInclude,
@@ -146,6 +148,7 @@ export async function PUT(request: NextRequest) {
       include: officeInclude,
     });
 
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "booking_office.update",
       entity: "BookingOffice",
@@ -176,6 +179,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   await prisma.bookingOffice.delete({ where: { id } });
+  revalidateOfficeSetup();
   await logOfficeAction(session, {
     action: "booking_office.delete",
     entity: "BookingOffice",

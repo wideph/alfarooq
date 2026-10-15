@@ -608,3 +608,19 @@ Owner: (1) internal step keys bhi rename karo (BORD→BOARD, UV_IDCC→UV_IBCC, 
 - OfficeNav: Filing/Printing/Attestation/Courier tabs by permission → /office/cases?dept=<key>.
 - Dept queue polish: office chip/column, per-dept relevant columns (filing: files pending; printing: expected date/isPrinted; attestation: current step; courier: courier number), upload CTA, clear empty states, "Attestation queue" label.
 - Case detail limited view (cross-office dept worker): slim header + relevant info + apne department ka upload; koi money data nahi.
+
+---
+
+## WAVE 20 — Badge instant-load fix + 5-round speed program (2026-10-11)
+
+Owner: (1) dept tab counts click/focus ke baghair nahi dikhte — bina kisi interaction ke foran show hon. (2) Admin ke liye DB + R2 se har cheez BOHOT slow; actions bhi slow — time minimum, 5 optimization loops.
+
+### Root cause (badge)
+`useLiveRefresh` mount par `run()` kabhi nahi karta — sirf interval (30s) / focus / office:changed. Pehla fetch 30s baad ya pehle click/focus par hota hai. Fix: `immediate` option + useOfficeNavCounts mein enable.
+
+### 5 rounds
+- R1: badge immediate fix + hot-path DB indexes (migration) + middleware audit.
+- R2: read routes — sequential awaits → Promise.all, slim includes (cases list/detail, dashboard, finance/users, nav-counts, notifications).
+- R3: R2 signed URLs parallel/batch + longer cache; setup/static data unstable_cache + mutation invalidation; client double-fetch removal.
+- R4: mutations — tx round-trips kam (createMany/updateMany/batch), client optimistic updates jahan safe.
+- R5: final audit sweep + bench before/after + verify (tsc 0, lint 0, build 0) + push.

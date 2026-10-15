@@ -44,7 +44,9 @@ export function useOfficeNavCounts(enabled = true): OfficeNavCounts | null {
     if (res.ok) setCounts(res.data);
   }, [enabled]);
 
-  useLiveRefresh(load, { intervalMs: 30000 });
+  // §W20 (P2): immediate — nav bubbles ka data sirf isi hook se aata hai;
+  // bina immediate ke count 30s baad ya click/focus par hi dikhta tha.
+  useLiveRefresh(load, { intervalMs: 30000, immediate: true });
   return counts;
 }
 
@@ -90,7 +92,9 @@ export default function NotificationBell() {
   }, []);
 
   // 20s polling + focus + office:changed (mutations ke foran baad).
-  useLiveRefresh(load, { intervalMs: 20000 });
+  // §W20 (P2): immediate — unread badge bina click ke page load par hi dikhe
+  // (is component ka initial data bhi sirf isi hook se aata hai).
+  useLiveRefresh(load, { intervalMs: 20000, immediate: true });
 
   const unread = data?.unread ?? 0;
 

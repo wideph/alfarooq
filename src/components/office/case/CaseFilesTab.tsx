@@ -22,6 +22,7 @@ import CaseFileViewer, { type ViewableFile } from "@/components/office/case/Case
 import { formatDateTime, officeFetch } from "@/lib/office/client";
 import { type CaseFileItem, type CategorySetWithSteps, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
+import { announceOfficeChange } from "@/lib/office/live";
 
 // docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (filing
 // files dekhe + printed proof), ATTESTATION (per set-step optional + FINAL lazmi),
@@ -122,6 +123,7 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     if (stepKey) fd.append("stepKey", stepKey);
     if (title.trim()) fd.append("title", title.trim());
     const res = await fetch(`/api/office/cases/${detail.id}/files`, { method: "POST", body: fd });
+    if (res.ok) announceOfficeChange();
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       onMessage("File upload ho gayi");

@@ -1035,3 +1035,13 @@ Next step for the next agent:
 - nav-counts response + `deptCounts {filing, printing, attestation, courier}` — ek hi groupBy query (WAITING_FOR_FILE / WAITING_FOR_PRINTING / PRINTED+ATTESTATION / WAITING_FOR_COURIER); scoping wave-18 queue visibility ke mutabiq (admin/cashier ya dept permission → all offices; baghair permission → 0).
 - OfficeNav dept tabs pe amber NavCountBubble (0 pe hidden, 99+ cap) — koi extra fetch nahi, wohi 30s poll.
 - Verify: tsc 0, lint 0, build exit 0 (real DB).
+
+## WAVE 20 (2026-10-11) — Badge instant-load + 5-round speed program
+- Badge bug: useLiveRefresh mount par kabhi run nahi karta tha (pehla fetch 30s/click pe) — `immediate` option + nav-counts/bell mein enable; ab counts page load par FORAN.
+- R1: 6 hot-path indexes (Case(office,created), Payment(caseId,status), LedgerEntry(member,type,direction), Notification(user,created), CaseFile(case,dept), CaseRemarkRecipient(target,seenAt)) — live applied + stale attas index renamed.
+- R2: dashboard/finance batch round-trips kam (8 parallel, 0 extra).
+- R3: R2 presign verified local (no network); setup-cache.ts (unstable_cache 60s + revalidateTag on all setup mutations) — categories/types/sets/dept-links/holidays/offices ab warm-cache se.
+- R4: cases POST validations 4 sequential→1 cached batch; office-expenses allocation loop→createMany; payments autoDistribute+activateWorkflow parallel; ledger/payouts/salaries/bonus office lookups cached.
+- R5 (reviewer audit): useLiveRefresh hung-fetch watchdog (45s) + queued-trigger; 4 raw-fetch mutations pe announceOfficeChange; case DELETE cascade 12 sequential→$transaction array (~1 round-trip); working-day fan-out 8-chunks. Reviewer verdict GO.
+- Frontend dedup: har hook in-flight dedup; double post-mutation reloads removed (event-driven single silent refresh); case detail reload promise-sharing.
+- Verify: tsc 0, lint 0, build exit 0 (real DB).

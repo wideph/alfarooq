@@ -121,13 +121,13 @@ function FinanceDashboard({
   }, [loadUsers, loadReport, loadExpenses, loadPayoutRequests]);
 
   // Live refresh (silent — koi spinner flash nahi) after any office mutation.
+  // §W20 (P2): combined promise return hota hai taake hook in-flight dedup
+  // kar sake (overlapping triggers par 4 endpoints dobara fetch na hon).
   useLiveRefresh(
-    useCallback(() => {
-      void loadUsers(true);
-      void loadReport();
-      void loadExpenses();
-      void loadPayoutRequests();
-    }, [loadUsers, loadReport, loadExpenses, loadPayoutRequests])
+    useCallback(
+      () => Promise.all([loadUsers(true), loadReport(), loadExpenses(), loadPayoutRequests()]),
+      [loadUsers, loadReport, loadExpenses, loadPayoutRequests]
+    )
   );
 
   // KPI numbers — received + expenses report se (all-time), wasool/due users
@@ -201,10 +201,11 @@ function FinanceDashboard({
         offices={offices}
         canAdd={isSuperAdmin || canWriteExpenses}
         canDelete={isSuperAdmin}
+        // §W20 (P2): add/delete ke baad office:changed event 300ms mein in
+        // tamam sections (+ payout requests) ka silent reload khud karta hai —
+        // yahan explicit triple reload duplicate fetches thi, hata di.
         onChanged={() => {
-          void loadExpenses();
-          void loadReport();
-          void loadUsers(true);
+          // office:changed → useLiveRefresh reloads everything above.
         }}
         onToast={setMessage}
       />

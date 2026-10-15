@@ -6,6 +6,7 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { notifyAdmins, notifyUsers } from "@/lib/office/notifications";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, todayPakistan, toJson } from "@/lib/office/serializers";
+import { findCachedOffice } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -56,17 +57,20 @@ export async function POST(request: NextRequest) {
           ? body.bookingOfficeId
           : "";
     if (!bookingOfficeId) return badRequest("Booking office select karein");
-    const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
+    const caseId = typeof body.caseId === "string" && body.caseId ? body.caseId : null;
+    // §W20: office cached directory se; case link check parallel (independent).
+    const [office, linked] = await Promise.all([
+      findCachedOffice(bookingOfficeId),
+      caseId
+        ? prisma.case.findFirst({ where: { id: caseId, bookingOfficeId }, select: { id: true } })
+        : Promise.resolve(null),
+    ]);
     if (!office || !office.isActive) return badRequest("Booking office nahi mila ya inactive hai");
 
     const amount = parseAmount(body.amount, { allowZero: false });
     if (amount === null) return badRequest("Amount sahi nahi hai");
 
-    const caseId = typeof body.caseId === "string" && body.caseId ? body.caseId : null;
-    if (caseId) {
-      const linked = await prisma.case.findFirst({ where: { id: caseId, bookingOfficeId } });
-      if (!linked) return badRequest("Case is booking office ka nahi hai");
-    }
+    if (caseId && !linked) return badRequest("Case is booking office ka nahi hai");
 
     const created = await prisma.bonusRequest.create({
       data: {

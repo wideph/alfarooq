@@ -143,6 +143,12 @@ export async function refreshOpenCasesPrintingDates() {
     where: { status: { notIn: CLOSED_STATUSES }, expectedPrintingDate: { not: null } },
     select: { id: true },
   });
-  for (const item of cases) await refreshExpectedPrintingDate(item.id);
+  // §W20: har case ka refresh independent hai — parallel (pehle N sequential
+  // round-trips). §W20-R5 (review #5): unbounded fan-out pool/AI burst na kare,
+  // is liye 8-8 ke chunks mein.
+  const CHUNK = 8;
+  for (let i = 0; i < cases.length; i += CHUNK) {
+    await Promise.all(cases.slice(i, i + CHUNK).map((item) => refreshExpectedPrintingDate(item.id)));
+  }
   return cases.length;
 }

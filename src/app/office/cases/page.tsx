@@ -141,7 +141,8 @@ function CasesList() {
 
   // §W11.5: list live rehti hai — 15s polling + window focus + office:changed
   // (background refresh silent hota hai, koi spinner flash nahi).
-  useLiveRefresh(useCallback(() => void load(true), [load]));
+  // §W20 (P2): promise return hota hai taake hook in-flight dedup kar sake.
+  useLiveRefresh(useCallback(() => load(true), [load]));
 
   useEffect(() => {
     officeFetch<Office[]>("/api/office/setup/booking-offices").then((res) => {
@@ -195,7 +196,11 @@ function CasesList() {
               status={item.status}
               currentAttestationId={item.currentAttestationId}
               attestations={item.attestations}
-              onChanged={() => void load(true)}
+              // §W20 (P2): alag explicit reload duplicate fetch tha, hata diya.
+              onChanged={() => {
+                // Status PATCH ke baad officeFetch ka office:changed event
+                // khud 300ms mein list reload kar deta hai (useLiveRefresh).
+              }}
               size="sm"
             />
           </span>

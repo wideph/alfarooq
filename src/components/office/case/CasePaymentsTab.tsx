@@ -23,6 +23,7 @@ import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } f
 import { PAYMENT_METHODS } from "@/lib/office/permissions";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
+import { announceOfficeChange } from "@/lib/office/live";
 
 type VerifyResult = { needsExtraDecision: number | null };
 
@@ -125,6 +126,8 @@ function PaymentsPanel({ detail, admin, onReload, onUpdated, onMessage }: TabPro
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
     if (slip) fd.append("slip", slip);
     const res = await fetch("/api/office/payments", { method: "POST", body: fd });
+    // §W20-R5: raw fetch office:changed announce nahi karta — badges/lists foran fresh rakho.
+    if (res.ok) announceOfficeChange();
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       onMessage(form.status === "RECEIVED" ? "Payment record ho gayi (received)" : "Payment slip submit ho gayi; cashier verify karega");

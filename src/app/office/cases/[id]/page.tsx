@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { CreditCard, FolderOpen, History, LayoutGrid, MessageSquare, Stamp } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
@@ -45,18 +45,30 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
 
-  const reload = useCallback(async () => {
-    const res = await officeFetch<CaseDetail | DeptLimitedResponse>(`/api/office/cases/${id}`);
-    if (res.ok) {
-      const data = res.data as DeptLimitedResponse;
-      if (data && data.limited === true && Array.isArray(data.depts) && data.detail) {
-        setLimited(data);
-        setDetail(null);
-      } else {
-        setDetail(res.data as CaseDetail);
-        setLimited(null);
-      }
-    } else setError(res.error);
+  // §W20 (P2): mutation ke baad tab components explicit `onReload()` karte
+  // hain AUR officeFetch ka office:changed event bhi 300ms par reload trigger
+  // karta hai — dono mil kar same endpoint ki duplicate fetch. In-flight
+  // promise share kar ke overlapping callers ek hi fetch use karte hain.
+  const reloadInFlightRef = useRef<Promise<void> | null>(null);
+  const reload = useCallback(() => {
+    if (reloadInFlightRef.current) return reloadInFlightRef.current;
+    const pending = (async () => {
+      const res = await officeFetch<CaseDetail | DeptLimitedResponse>(`/api/office/cases/${id}`);
+      if (res.ok) {
+        const data = res.data as DeptLimitedResponse;
+        if (data && data.limited === true && Array.isArray(data.depts) && data.detail) {
+          setLimited(data);
+          setDetail(null);
+        } else {
+          setDetail(res.data as CaseDetail);
+          setLimited(null);
+        }
+      } else setError(res.error);
+    })().finally(() => {
+      if (reloadInFlightRef.current === pending) reloadInFlightRef.current = null;
+    });
+    reloadInFlightRef.current = pending;
+    return pending;
   }, [id]);
 
   useEffect(() => {

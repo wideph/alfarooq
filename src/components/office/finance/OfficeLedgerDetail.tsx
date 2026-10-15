@@ -60,11 +60,9 @@ export default function OfficeLedgerDetail({ officeId }: { officeId: string }) {
     void loadLedger();
   }, [loadLedger]);
 
+  // §W20 (P2): combined promise return → hook in-flight dedup.
   useLiveRefresh(
-    useCallback(() => {
-      void loadMembers();
-      void loadLedger(true);
-    }, [loadMembers, loadLedger])
+    useCallback(() => Promise.all([loadMembers(), loadLedger(true)]), [loadMembers, loadLedger])
   );
 
   const officeName = members?.[0]?.officeName || ledger?.items[0]?.bookingOffice.name || "Office";

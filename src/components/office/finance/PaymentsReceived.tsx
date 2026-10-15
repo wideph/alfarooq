@@ -27,7 +27,8 @@ export default function PaymentsReceived() {
     void load(page);
   }, [page, load]);
 
-  useLiveRefresh(useCallback(() => void load(page, true), [load, page]));
+  // §W20 (P2): promise return → hook in-flight dedup.
+  useLiveRefresh(useCallback(() => load(page, true), [load, page]));
 
   const totalPages = payments ? Math.max(1, Math.ceil(payments.total / payments.pageSize)) : 1;
 

@@ -3,16 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { toJson, cleanText } from "@/lib/office/serializers";
+import { getOfficeAttestationTypes, revalidateOfficeSetup } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
 export async function GET() {
   const { denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
-  const types = await prisma.attestationType.findMany({
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-  });
-  return NextResponse.json(toJson(types));
+  // §W20: cached (60s + tag invalidation) — response shape wahi hai.
+  const types = await getOfficeAttestationTypes();
+  return NextResponse.json(types);
 }
 
 function readBody(body: Record<string, unknown>) {
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const parsed = readBody(await request.json());
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const type = await prisma.attestationType.create({ data: parsed.data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "attestation_type.create",
       entity: "AttestationType",
@@ -58,6 +59,7 @@ export async function PUT(request: NextRequest) {
     const parsed = readBody(body);
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const type = await prisma.attestationType.update({ where: { id }, data: parsed.data });
+    revalidateOfficeSetup();
     await logOfficeAction(session, {
       action: "attestation_type.update",
       entity: "AttestationType",
@@ -85,6 +87,7 @@ export async function DELETE(request: NextRequest) {
     return badRequest("Ye attestation cases mein use ho rahi hai. Inactive karein.");
   }
   await prisma.attestationType.delete({ where: { id } });
+  revalidateOfficeSetup();
   await logOfficeAction(session, {
     action: "attestation_type.delete",
     entity: "AttestationType",

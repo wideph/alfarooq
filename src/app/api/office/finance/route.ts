@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { totalLiabilities } from "@/lib/office/ledger";
+import { getOfficeDirectory } from "@/lib/office/setup-cache";
 import { toNumber } from "@/lib/office/money";
 import { addDays, formatDateOnly, parseDateOnly, todayPakistan } from "@/lib/office/serializers";
 
@@ -62,7 +63,9 @@ export async function GET(request: NextRequest) {
     const fromMonth = formatDateOnly(from).slice(0, 7);
     const toMonth = formatDateOnly(to).slice(0, 7);
 
-    const [payments, shares, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities] = await Promise.all([
+    // §W20: offices list cached directory se (pehle report queries ke BAAD ek
+    // alag sequential round-trip thi) — ab sab ek hi parallel batch mein.
+    const [payments, shares, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices] = await Promise.all([
       prisma.payment.findMany({
         where: { status: "RECEIVED", paymentDate: inRange },
         select: { amount: true, paymentDate: true, case: { select: { bookingOfficeId: true } } },
@@ -88,6 +91,7 @@ export async function GET(request: NextRequest) {
         select: { amount: true, expenseDate: true, bookingOfficeId: true },
       }),
       totalLiabilities(),
+      getOfficeDirectory(),
     ]);
 
     const salaries = salariesRaw.filter((entry) => {
@@ -104,7 +108,6 @@ export async function GET(request: NextRequest) {
       return days[key];
     };
 
-    const offices = await prisma.bookingOffice.findMany({ select: { id: true, name: true, type: true } });
     const officeType: Record<string, string> = Object.fromEntries(offices.map((o) => [o.id, o.type]));
     const perOffice: Record<string, { income: Prisma.Decimal; commissions: Prisma.Decimal; salaries: Prisma.Decimal; officeExpenses: Prisma.Decimal }> = {};
     const office = (id: string) => {

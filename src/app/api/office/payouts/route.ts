@@ -8,6 +8,7 @@ import { notifyUsers } from "@/lib/office/notifications";
 import { parseAmount, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
+import { findCachedOffice } from "@/lib/office/setup-cache";
 
 export const preferredRegion = ["sin1"];
 
@@ -78,13 +79,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const bookingOfficeId = typeof body.bookingOfficeId === "string" ? body.bookingOfficeId : "";
-    const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
-    if (!office) return notFound("Booking office nahi mila");
-
     const memberId = typeof body.memberId === "string" ? body.memberId : "";
-    const member = await prisma.bookingOfficeMember.findFirst({
-      where: { id: memberId, bookingOfficeId },
-    });
+    // §W20: office cached directory se; member check parallel (independent).
+    const [office, member] = await Promise.all([
+      findCachedOffice(bookingOfficeId),
+      prisma.bookingOfficeMember.findFirst({
+        where: { id: memberId, bookingOfficeId },
+      }),
+    ]);
+    if (!office) return notFound("Booking office nahi mila");
     if (!member) return badRequest("Member is office ka nahi hai");
 
     const amount = parseAmount(body.amount, { allowZero: false });

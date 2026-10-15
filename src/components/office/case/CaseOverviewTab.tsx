@@ -25,6 +25,7 @@ import CaseFileViewer from "@/components/office/case/CaseFileViewer";
 import { formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
+import { announceOfficeChange } from "@/lib/office/live";
 
 type TabProps = {
   detail: CaseDetail;
@@ -92,6 +93,7 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
       Object.entries(form).forEach(([key, value]) => fd.append(key, value));
       fd.append("clientPicture", picture);
       const res = await fetch(`/api/office/cases/${detail.id}`, { method: "PATCH", body: fd });
+      if (res.ok) announceOfficeChange();
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         onUpdated(data as CaseDetail);

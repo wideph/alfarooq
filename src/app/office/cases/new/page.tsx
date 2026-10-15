@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { officeFetch } from "@/lib/office/client";
+import { announceOfficeChange } from "@/lib/office/live";
 
 type Office = { id: string; name: string; type: string; isActive: boolean };
 type Category = { id: string; name: string; defaultAmount: number | null; isActive: boolean };
@@ -130,6 +131,7 @@ export default function NewCasePage() {
     fd.append("attestationTypeIds", JSON.stringify(form.attestationTypeIds));
     if (picture) fd.append("clientPicture", picture);
     const res = await fetch("/api/office/cases", { method: "POST", body: fd });
+    if (res.ok) announceOfficeChange();
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.id) {
       router.push(`/office/cases/${data.id}`);

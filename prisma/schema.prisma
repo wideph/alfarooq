@@ -341,6 +341,7 @@ model Case {
   bonusRequests    BonusRequest[]
 
   @@index([bookingOfficeId, status])
+  @@index([bookingOfficeId, createdAt])
   @@index([status])
   @@index([createdAt])
   @@index([rollNumber])
@@ -412,6 +413,7 @@ model Payment {
   ledger LedgerEntry[]
 
   @@index([caseId])
+  @@index([caseId, status])
   @@index([status])
   @@index([paymentDate])
 }
@@ -454,6 +456,7 @@ model LedgerEntry {
 
   @@index([bookingOfficeId, entryDate])
   @@index([memberId])
+  @@index([memberId, type, direction])
   @@index([caseId])
   @@index([entryDate])
 }
@@ -594,6 +597,7 @@ model CaseFile {
   case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
+  @@index([caseId, department])
   @@index([department])
 }
 
@@ -621,6 +625,7 @@ model CaseRemarkRecipient {
   remark CaseRemark @relation(fields: [remarkId], references: [id], onDelete: Cascade)
 
   @@unique([remarkId, target])
+  @@index([target, seenAt])
 }
 
 model DiscountRequest {
@@ -707,6 +712,7 @@ model Notification {
   user      Admin     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
 
