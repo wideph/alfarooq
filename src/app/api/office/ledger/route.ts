@@ -13,16 +13,34 @@ export const preferredRegion = ["sin1"];
 
 // GET ?officeId=&memberId=&from=&to=&page=
 // Cashier / super admin (office:ledger:read) see every office; a booking
-// office login sees only its own office account.
+// office login sees only its own office account. W16 privacy: a booking_office
+// login WITHOUT office:ledger:read is pinned to its OWN member record —
+// memberId query param for any other member is ignored, and memberBalances
+// only exposes its own balance (dusre members ka money data kabhi nahi).
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
   const isBookingOffice = session.role === "booking_office";
-  if (!isBookingOffice && !hasPermission(session, "office:ledger:read")) return forbidden();
+  const canReadAll = hasPermission(session, "office:ledger:read");
+  if (!isBookingOffice && !canReadAll) return forbidden();
 
   const { searchParams } = new URL(request.url);
   const officeId = isBookingOffice ? session.bookingOfficeId || "" : searchParams.get("officeId") || "";
-  const memberId = searchParams.get("memberId") || "";
+  let memberId = searchParams.get("memberId") || "";
+
+  // Restricted booking_office viewer → force own member id.
+  let ownMemberId: string | null = null;
+  if (isBookingOffice && !canReadAll) {
+    const ownMember = await prisma.bookingOfficeMember.findFirst({
+      where: {
+        adminId: session.adminId,
+        bookingOfficeId: session.bookingOfficeId || "__none__",
+      },
+      select: { id: true },
+    });
+    ownMemberId = ownMember?.id ?? "__none__";
+    memberId = ownMemberId;
+  }
   const from = parseDateOnly(searchParams.get("from"));
   const to = parseDateOnly(searchParams.get("to"));
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
@@ -64,7 +82,10 @@ export async function GET(request: NextRequest) {
     page,
     pageSize,
     officeBalances: balances,
-    memberBalances: members,
+    // Restricted booking_office viewer: sirf apna balance expose hota hai.
+    memberBalances: ownMemberId
+      ? { [ownMemberId]: (members as Record<string, number>)[ownMemberId] ?? 0 }
+      : members,
     memberBalance: singleMemberBalance,
   });
 }

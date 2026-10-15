@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { parseAmount, round2 } from "@/lib/office/money";
-import { addDays, cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
+import { parseAmount, round2, toNumber } from "@/lib/office/money";
+import { addDays, cleanText, formatDateOnly, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
 
@@ -24,8 +24,12 @@ export const preferredRegion = ["sin1"];
 //     is subtracted in the finance report (BR6-style) only.
 // Case expenses stay on CaseExpense and NEVER reduce commission (N8).
 
-// GET ?bookingOfficeId=&from=&to= — office:ledger:read; a booking_office login
-// only sees its own office (same scoping as /api/office/ledger).
+// GET ?officeId=&from=&to= — office:ledger:read (admin/cashier: sab ya
+// officeId se filter); a booking_office login only sees its own office
+// (officeId param ignore hota hai). Response: { ok, expenses: [...] } with
+// per-member `allocations` derived from the §W15.1 EXPENSE ledger rows
+// (remarks tag `Office expense share [<expenseId>]: ...`). FIXED_COMMISSION
+// office-level expenses have no per-member rows → allocations [].
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const bookingOfficeId = isBookingOffice
-    ? session.bookingOfficeId || ""
+    ? session.bookingOfficeId || "__none__"
     : searchParams.get("bookingOfficeId") || searchParams.get("officeId") || "";
   const from = parseDateOnly(searchParams.get("from"));
   const to = parseDateOnly(searchParams.get("to"));
@@ -49,10 +53,55 @@ export async function GET(request: NextRequest) {
     take: 300,
     include: {
       bookingOffice: { select: { id: true, name: true, type: true } },
-      member: { select: { id: true, name: true } },
     },
   });
-  return NextResponse.json(toJson(items));
+
+  // Per-member split: ONE query over the allocation ledger rows of the
+  // returned offices, bucketed by the [<expenseId>] tag in remarks.
+  const officeIds = [...new Set(items.map((item) => item.bookingOfficeId))];
+  const allocationRows = officeIds.length
+    ? await prisma.ledgerEntry.findMany({
+        where: {
+          bookingOfficeId: { in: officeIds },
+          type: "EXPENSE",
+          direction: "DEBIT",
+          remarks: { startsWith: "Office expense share [" },
+        },
+        select: {
+          amount: true,
+          remarks: true,
+          member: { select: { id: true, name: true } },
+        },
+      })
+    : [];
+
+  const wanted = new Set(items.map((item) => item.id));
+  const allocationsByExpense = new Map<string, Array<{ memberId: string | null; memberName: string | null; amount: number }>>();
+  for (const row of allocationRows) {
+    const match = /\[([^\]]+)\]/.exec(row.remarks || "");
+    if (!match || !wanted.has(match[1])) continue;
+    const list = allocationsByExpense.get(match[1]) ?? [];
+    list.push({
+      memberId: row.member?.id ?? null,
+      memberName: row.member?.name ?? null,
+      amount: toNumber(row.amount),
+    });
+    allocationsByExpense.set(match[1], list);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    expenses: items.map((item) => ({
+      id: item.id,
+      officeId: item.bookingOffice.id,
+      officeName: item.bookingOffice.name,
+      officeType: item.bookingOffice.type,
+      entryDate: formatDateOnly(item.expenseDate),
+      description: item.description,
+      amount: toNumber(item.amount),
+      allocations: allocationsByExpense.get(item.id) ?? [],
+    })),
+  });
 }
 
 // POST { bookingOfficeId, memberId?, amount, description, expenseDate }
@@ -73,8 +122,7 @@ export async function POST(request: NextRequest) {
 
     const amount = parseAmount(body.amount, { allowZero: false });
     if (amount === null) return badRequest("Amount sahi nahi hai");
-    const description = cleanText(body.description, 300);
-    if (!description) return badRequest("Expense ki tafseel likhein");
+    const description = cleanText(body.description, 300) || "Office expense";
     const expenseDate = parseDateOnly(body.expenseDate);
     if (!expenseDate) return badRequest("Date zaroori hai");
 

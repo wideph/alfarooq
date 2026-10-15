@@ -3,18 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { guardOffice, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
+import { SET_WARNING_STATUSES } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
-// Statuses jahan set select hona zaroori hai — in mein setId null ho to
-// admin ke liye "set missing" warning (§W11.7).
-const SET_MISSING_STATUSES = [
-  "PRINTED",
-  "ATTESTATION",
-  "ATTESTATION_COMPLETE",
-  "WAITING_FOR_COURIER",
-  "DELIVERED",
-] as const;
+// Set-missing warning SIRF SET_WARNING_STATUSES (PRINTED + ATTESTATION —
+// §W14.8, src/lib/office/workflow.ts) ke dauraan; stale local list NA use
+// karein warna badge atak jata hai (§W11.7).
 
 // GET — navbar badges ke liye ONE aggregated call (har logged-in user 30s
 // polling karta hai, is liye sirf count queries, sab parallel). §W11.7.
@@ -57,7 +52,7 @@ export async function GET() {
               where: { remarks: { some: { recipients: { some: { target: "ADMIN", seenAt: null } } } } },
             }),
             prisma.case.count({
-              where: { setId: null, status: { in: [...SET_MISSING_STATUSES] } },
+              where: { setId: null, status: { in: [...SET_WARNING_STATUSES] } },
             }),
           ]);
           return unseenRemarks + setMissing;

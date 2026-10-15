@@ -1010,3 +1010,13 @@ Next step for the next agent:
 - **W15.3 — Booking nav:** OfficeNav Finance tab ab role==="booking_office"
   ke liye bhi visible (scoped view page par already tha).
 - tsc 0 errors.
+
+## WAVE 16 (2026-10-11) — Finance perfection: due formula, privacy, multi-office clarity
+- **Due bug**: finance/users + [memberId] — due = earning − expenseShare − wasool (EXPENSE debits pehle ignore ho rahe thay). Live verify: AW D & Fan dono due = 8,370.00 (wave-15 hand-verified number se exact match).
+- **Badge bug**: nav-counts set-missing ab workflow.SET_WARNING_STATUSES import karta hai (PRINTED/ATTESTATION only). Live: 5 galat count → 0.
+- **Privacy**: booking_office user sirf apna member data (finance/users own rows, [memberId] own only 403, ledger memberId force + memberBalances narrowed, office-expenses own office only, dashboard duesTotal=ownDue).
+- **Finance page full rewrite** (Agent F): KPI strip → Offices cards → Users' accounts (office-wise grouped, expense share red, Pay modal) → pending payouts (status-only) → payments received → office expenses with per-member split. UserDrawer: Earning − Expense − Wasool = Due equation + 3 lists. Non-admin: MemberFinanceView (Mera account + accept/reject + own office expenses). [officeId] ledger admin-only + member summary strip.
+- **Dashboard full rewrite** (Agent D): /office = "Offices" overview — admin totals strip + office cards (status chips, pending/received/dues) ; non-admin sirf "Mera due". Nav tab "Dashboard" → "Offices". Cases link ?officeId= (existing filter).
+- **Integration fix**: office-expenses POST description optional (default "Office expense") — W14.1 consistency.
+- No schema change; live DB verified clean (no null-member legacy rows).
+- Verify: tsc 0, next lint 0, next build exit 0 (real DATABASE_URL). Commit: (this wave).

@@ -28,7 +28,9 @@ const navItems: Array<{
   // §W11.7: amber count bubble — nav-counts ke kis field se.
   countKey?: "cases" | "payments";
 }> = [
-  { href: "/office", label: "Dashboard", icon: LayoutDashboard, permissions: ["office:cases:read"] },
+  // §W16: /office ab multi-office overview hai — label "Offices" taake tab ka
+  // maqsad wazeh ho (pehle "Dashboard" tha, jo confusing tha).
+  { href: "/office", label: "Offices", icon: LayoutDashboard, permissions: ["office:cases:read"] },
   { href: "/office/cases", label: "Cases", icon: Briefcase, permissions: ["office:cases:read"], countKey: "cases" },
   {
     href: "/office/payments",

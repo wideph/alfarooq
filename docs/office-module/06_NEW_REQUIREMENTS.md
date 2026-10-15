@@ -523,3 +523,47 @@ Booking-office users get payout notifications linking /office/finance but the
 OfficeNav has no Finance item for them (permission-gated). Fix: OfficeNav shows
 the Finance item when role === "booking_office" (scoped view already exists on
 the page).
+
+---
+
+## WAVE 16 — Finance perfection: sahi hisab, privacy, multi-office clarity (2026-10-11)
+
+Owner: (1) admin finance tab har office type (FIXED_COMMISSION / PROFIT_SHARE / SALARY) ke liye perfect aur non-confusing. (2) Cases badge set-missing count attestation-complete ke baad bhi 3 pe atka — warning to fix ho gayi thi, count nahi. (3) office ka user doosre user ka money data NA dekhe (na earning na due). (4) user ka DUE abhi bhi galat — office general expenses share ke mutabiq minus nahi ho rahe. (5) pora office section review — kuch confusing/galat na rahe. (6) multiple offices ke liye design clear. (7) admin navbar "Office" tab ka purpose clear ho aur contents mutabiq hon. (8) world-class polish.
+
+Root causes found:
+- finance/users `due = earning − wasool` mein EXPENSE debits (wave-15 per-share office expense allocations) shamil nahi — due galat.
+- nav-counts SET_MISSING_STATUSES purani list (ATTESTATION_COMPLETE+ bhi shamil) — W14.8 warning sirf PRINTED/ATTESTATION pe hai; badge diverge.
+- booking scoped finance view (BookingOfficeLedgerView) tamam members ke balances + tamam payouts + tamam offices ke expenses dikhata tha — privacy leak.
+- office-expenses GET non-admin ko tamam offices ke expenses deta tha — leak.
+- /office dashboard + admin nav tab ka maqsad unclear; multi-office view nahi.
+
+### Schema — KOI CHANGE NAHI (live DB verified 2026-10-11)
+- Live DB clean hai: tamam LedgerEntry rows ka memberId mojood (koi legacy office-level commission rows nahi — sirf PROFIT_SHARE / ADJUSTMENT / EXPENSE / PAYOUT types), Case.profitShareSnapshot pehle se member-ID keyed hai. Is liye na migration chahye, na backfill. Wave 16 sirf API + UI ki wave hai.
+
+### W16.1 Due = earning − expense share − wasool (finance/users)
+- Per member-row: `earning` = net CREDIT−DEBIT over EARNING_TYPES **excluding EXPENSE**; `expenseShare` = EXPENSE debits total; `wasool` = PAYOUT debits; **`due = earning − expenseShare − wasool`** (round2). Row mein `officeName`, `officeType` bhi.
+- SALARY type members: earning/expense/wasool/due sab ledger-driven (aam tor pe 0) + UI mein "Salary" chip — confusion zero.
+- Non-admin (booking_office) session ko SIRF apni member rows return hon (doosron ka data kabhi nahi).
+
+### W16.2 Member drill-down mein expenses bhi (finance/users/[memberId])
+- Response mein `expenses: []` (EXPENSE debit rows: date, description, amount) aur summary mein `expenseShare`; `due = earning − expenseShare − wasool`.
+
+### W16.3 Badge fix (nav-counts)
+- SET_MISSING_STATUSES = ["PRINTED", "ATTESTATION"] — workflow.SET_WARNING_STATUSES ke bilkul mutabiq (single source: import from workflow).
+
+### W16.4 Privacy scoping (booking office)
+- `/api/office/office-expenses` GET: non-admin sirf apni office ke expenses.
+- Booking finance page: koi memberBalances doosron ke nahi — sirf apna account card + apne payouts + apni office ke expenses (read-only).
+- Ledger detail page admin-only; booking ko link nahi.
+
+### W16.5 Finance page redesign (multi-office clear)
+- Admin: KPI strip (received / expenses / dues) → "Offices" cards (per office: type chip, received, expense, due total, [Ledger] link) → "Users' accounts" office-wise grouped table (user | earning | expenses | wasool | due | Pay) → Pending payouts → Payments received → Office general expenses card (expense row mein per-member split show).
+- Non-admin: sirf "Mera account" card (earning − expenses − wasool = due) + apni payout history + apni office ke expenses.
+- UserDrawer: credits breakdown + expense deductions + payout history + due.
+
+### W16.6 /office dashboard = Offices overview
+- Har visible office ka card: name+type, cases by status (mini), pending payments count+amount, total received, members dues total; card click → /office/cases?bookingOfficeId= (admin) ya scoped list; "Finance" link per office. Non-admin ko bhi apni offices ke cards (cases info only, paisa sirf apna).
+
+### Files
+- APIs: finance/users, finance/users/[memberId], office-expenses, nav-counts, ledger (booking privacy), dashboard
+- Pages: office/finance/page.tsx (rewrite + drawer + expenses card), office/finance/[officeId]/page.tsx, office/page.tsx (rewrite), components/office/OfficeNav.tsx
