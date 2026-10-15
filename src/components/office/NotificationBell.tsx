@@ -30,6 +30,9 @@ export type OfficeNavCounts = {
   payments: number;
   requests: number;
   unreadNotifications: number;
+  // §W19: department tabs (Filing/Printing/Attestation/Courier) ke pending
+  // counts — sirf visible/permitted depts non-zero hote hain.
+  deptCounts: { filing: number; printing: number; attestation: number; courier: number };
 };
 
 export function useOfficeNavCounts(enabled = true): OfficeNavCounts | null {

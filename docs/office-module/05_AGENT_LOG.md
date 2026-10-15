@@ -1030,3 +1030,8 @@ Next step for the next agent:
 - Privacy: cross-office rows slim (no money/contacts), limited flag; files filtered to user's depts.
 - Slim rows mein createdAt + currentAttestationId (integration patch).
 - Verify: tsc 0, lint 0, build exit 0 (real DB).
+
+## WAVE 19 (2026-10-11) — Department tabs pe pending-count badges
+- nav-counts response + `deptCounts {filing, printing, attestation, courier}` — ek hi groupBy query (WAITING_FOR_FILE / WAITING_FOR_PRINTING / PRINTED+ATTESTATION / WAITING_FOR_COURIER); scoping wave-18 queue visibility ke mutabiq (admin/cashier ya dept permission → all offices; baghair permission → 0).
+- OfficeNav dept tabs pe amber NavCountBubble (0 pe hidden, 99+ cap) — koi extra fetch nahi, wohi 30s poll.
+- Verify: tsc 0, lint 0, build exit 0 (real DB).

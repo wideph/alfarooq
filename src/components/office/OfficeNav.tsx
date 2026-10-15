@@ -103,7 +103,17 @@ function NavLinks({ admin }: { admin: AdminNavUser | null }) {
           >
             <Icon className="h-4 w-4" />
             <span className="hidden md:inline">{item.label}</span>
-            <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />
+            {/* §W19: dept tabs par pending count — nav-counts ke deptCounts se
+                (usi 30s polling, koi alag fetch nahi). 0 par bubble chhupa. */}
+            <NavCountBubble
+              count={
+                item.countKey
+                  ? counts?.[item.countKey]
+                  : item.dept
+                    ? counts?.deptCounts?.[item.dept]
+                    : null
+              }
+            />
           </Link>
         );
       })}

@@ -1,11 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth";
+import { hasPermission, type AdminPermission } from "@/lib/auth";
 import { guardOffice, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
 import { SET_WARNING_STATUSES } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
+
+// §W19: department nav tabs (Filing/Printing/Attestation/Courier) ke PENDING
+// counts — deptQueueWhere (workflow.ts) ke pending-work statuses ke mutabiq
+// (printing queue PRINTED ko dikhati bhi hai magar pending kaam sirf
+// WAITING_FOR_PRINTING hai; attestation pending = PRINTED + ATTESTATION).
+const DEPT_COUNT_PERMISSIONS = {
+  filing: "office:filing:write",
+  printing: "office:printing:write",
+  attestation: "office:attestation-dept:write",
+  courier: "office:courier:write",
+} as const satisfies Record<string, AdminPermission>;
+
+type DeptCountKey = keyof typeof DEPT_COUNT_PERMISSIONS;
+
+const DEPT_COUNT_STATUSES = [
+  "WAITING_FOR_FILE",
+  "WAITING_FOR_PRINTING",
+  "PRINTED",
+  "ATTESTATION",
+  "WAITING_FOR_COURIER",
+] as const;
+
+const DEPT_COUNT_STATUS_TO_DEPT: Record<string, DeptCountKey> = {
+  WAITING_FOR_FILE: "filing",
+  WAITING_FOR_PRINTING: "printing",
+  PRINTED: "attestation",
+  ATTESTATION: "attestation",
+  WAITING_FOR_COURIER: "courier",
+};
 
 // Set-missing warning SIRF SET_WARNING_STATUSES (PRINTED + ATTESTATION —
 // §W14.8, src/lib/office/workflow.ts) ke dauraan; stale local list NA use
@@ -85,14 +114,40 @@ export async function GET() {
       where: { userId: session.adminId, readAt: null },
     });
 
-    const [cases, payments, requests, unreadNotifications] = await Promise.all([
+    // §W19: dept tabs ke pending counts. Scoping wave-18 queue visibility ke
+    // mutabiq — admin/cashier (nav par tabs cashier ko bhi dikhte hain) ya jis
+    // dept ki write permission ho, us dept ka count TAMAM offices par (un ka
+    // dept queue bhi cross-office hota hai; caseScope nahi lagta). Baghair
+    // permission ke dept ka count 0 rehta hai (shape stable). Sab kuch ONE
+    // groupBy query se; kisi dept ki permission nahi to query hi skip.
+    const seesAllOffices = role === "admin" || role === "cashier";
+    const permittedDepts = (Object.keys(DEPT_COUNT_PERMISSIONS) as DeptCountKey[]).filter(
+      (dept) => seesAllOffices || hasPermission(session, DEPT_COUNT_PERMISSIONS[dept])
+    );
+    const deptCountsQuery =
+      permittedDepts.length > 0
+        ? prisma.case.groupBy({
+            by: ["status"],
+            where: { status: { in: [...DEPT_COUNT_STATUSES] } },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]);
+
+    const [cases, payments, requests, unreadNotifications, deptStatusRows] = await Promise.all([
       casesQuery,
       paymentsQuery,
       requestsQuery,
       unreadQuery,
+      deptCountsQuery,
     ]);
 
-    return NextResponse.json({ cases, payments, requests, unreadNotifications });
+    const deptCounts: Record<DeptCountKey, number> = { filing: 0, printing: 0, attestation: 0, courier: 0 };
+    for (const row of deptStatusRows) {
+      const dept = DEPT_COUNT_STATUS_TO_DEPT[row.status];
+      if (dept && permittedDepts.includes(dept)) deptCounts[dept] += row._count._all;
+    }
+
+    return NextResponse.json({ cases, payments, requests, unreadNotifications, deptCounts });
   } catch (error) {
     return serverError(error);
   }
