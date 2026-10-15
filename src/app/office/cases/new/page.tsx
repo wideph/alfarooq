@@ -54,7 +54,7 @@ export default function NewCasePage() {
   }, []);
 
   // §W14.9: category select hone par us category ke sets fetch ho jate hain —
-  // "Set (optional)" dropdown attestation section men dikhta hai.
+  // "Set of Attestations (optional)" dropdown attestation section men dikhta hai.
   const [sets, setSets] = useState<CategorySet[]>([]);
   const [setsLoading, setSetsLoading] = useState(false);
 
@@ -102,9 +102,9 @@ export default function NewCasePage() {
 
   async function submit() {
     setError("");
-    // §N7: r-number ya reg-number — in men se aik lazmi hai (client-side check).
+    // §N7: Roll Number ya Registration Number — in men se aik lazmi hai (client-side check).
     if (!hasRorReg) {
-      setError("r-number ya reg-number lazmi hai (in men se aik lazmi hai)");
+      setError("Roll Number ya Registration Number lazmi hai (in men se aik lazmi hai)");
       return;
     }
     // F4: category lazmi hai — submit se pehle client-side check.
@@ -186,11 +186,11 @@ export default function NewCasePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">R-number (roll number)</label>
+                <label className="block text-xs text-slate-500 mb-1">Roll Number</label>
                 <input className={input} value={form.rollNumber} onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Reg-number (registration)</label>
+                <label className="block text-xs text-slate-500 mb-1">Registration Number</label>
                 <input
                   className={input}
                   value={form.registrationNumber}
@@ -199,7 +199,7 @@ export default function NewCasePage() {
               </div>
             </div>
             <p className={`text-xs ${hasRorReg ? "text-slate-400" : "text-amber-600 font-semibold"}`}>
-              R-number ya reg-number — in men se aik lazmi hai
+              Roll Number ya Registration Number — in men se aik lazmi hai
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -245,14 +245,14 @@ export default function NewCasePage() {
             {/* §W14.9: category chunne ke baad optional set select. */}
             {form.categoryId && (
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Set (optional)</label>
+                <label className="block text-xs text-slate-500 mb-1">Set of Attestations (optional)</label>
                 <select
                   className={input}
                   value={form.setId}
                   onChange={(e) => setForm({ ...form, setId: e.target.value })}
                   disabled={setsLoading}
                 >
-                  <option value="">{setsLoading ? "Sets load ho rahe hain…" : "Set ke baghair"}</option>
+                  <option value="">{setsLoading ? "Sets of Attestations load ho rahe hain…" : "Set of Attestations ke baghair"}</option>
                   {sets.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
@@ -262,7 +262,7 @@ export default function NewCasePage() {
               </div>
             )}
             {types.length === 0 ? (
-              <p className="text-sm text-slate-400">Koi attestation type set nahi hai (Setup se add karein)</p>
+              <p className="text-sm text-slate-400">Koi Set of Attestations nahi hai (Setup se add karein)</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {types.map((t) => (

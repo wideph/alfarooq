@@ -118,33 +118,33 @@ Done:
   HolidayClosure table (scopes PAKISTAN/ISLAMABAD/QUETTA/GUJRAT/LAHORE/EMBASSIES_ISB/SAUDI),
   weekends PK Sat+Sun / Saudi Fri+Sat. Exports `isPakistanWorkingDay(date, city?)`,
   `isSaudiWorkingDay`, `firstWorkingDayOnOrAfter`, `firstWorkingDayAfterOffset`,
-  `specialMoofaCityDate` (Islamabad → Gujrat → Lahore priority, city stored),
-  `saudMbcDate` (+2, ISB working day on Tue/Wed/Thu/Fri, no EMBASSIES_ISB closure),
-  `moofaSaudDate` (+4, Saudi working day Sun–Wed), `formatDdMmYy`, and the
+  `specialMofaCityDate` (Islamabad → Gujrat → Lahore priority, city stored),
+  `saudiEmbassyDate` (+2, ISB working day on Tue/Wed/Thu/Fri, no EMBASSIES_ISB closure),
+  `mofaSaudDate` (+4, Saudi working day Sun–Wed), `formatDdMmYy`, and the
   orchestrator `generateSetDates(caseId)`.
-- `generateSetDates`: computes every set step per §N5 (r-number mode for
-  UV_IDCC/BACK_NEVTCC 2nd-step sets + M Tech (i)/(iii): suffix 19/20/21 → year
+- `generateSetDates`: computes every set step per §N5 (Roll Number mode for
+  UV_IDCC/BACK_NEVTCC 2nd-step sets + Matric Tech (i)/(iii): suffix 19/20/21 → year
   2020/2021/2022 via payment month/day in that year, else random pick from
-  WorkingDatePool year=2019 excluding Sat/Sun; UV/Back-Nevtcc paired ≥3 days later,
-  pair noted on both steps. QR/CURRENT_NEVTCC family + Bord-only (v)/(vii): Bord =
-  payment+5 (PAK+QUETTA rule), QR = Bord+2 (ISB). Special Moofa: i-style payment+7,
-  ii-style prev+1, Medical MOH_ATTA+1, CPLS/APAC nevtcc+1. Medical/CPLS/APAC
+  WorkingDatePool year=2019 excluding Sat/Sun; UV/Back-Navttc paired ≥3 days later,
+  pair noted on both steps. QR/CURRENT_NEVTCC family + Board-only (v)/(vii): Board =
+  payment+5 (PAK+QUETTA rule), QR = Board+2 (ISB). Special Mofa: i-style payment+7,
+  ii-style prev+1, Medical MOH_ATTA+1, CPLS/APAC Navttc+1. Medical/CPLS/APAC
   formulas per §N5). Upserts AttestationType by label + CaseAttestation
-  (caseId+typeId); sets Board Attas Number once per case (never re-consumes the
+  (caseId+typeId); sets Board Attestation Number once per case (never re-consumes the
   counter). Missing first RECEIVED payment / empty 2019 pool → steps stay pending,
   `pending` status + Roman-Urdu reasons returned, never throws.
 - Deviation (documented in code): regeneration keeps an existing step's status
   (IN_PROGRESS/DONE) and keeps the old date when the new computation is pending —
-  brief said "status PENDING" but wiping atta-department progress on regenerate
+  brief said "status PENDING" but wiping attestation-department progress on regenerate
   would break N7. Confirm with owner.
 - `src/lib/office/hijri.ts` (NEW): tabular (civil) Hijri conversion, comment notes
-  ±1 day approximation. `src/lib/office/board-attas.ts` (NEW): atomic
-  BoardAttasCounter increment (upsert+increment in tx), format
+  ±1 day approximation. `src/lib/office/board-attestation.ts` (NEW): atomic
+  BoardAttestationCounter increment (upsert+increment in tx), format
   `[year last digit][MM][count pad-3, grows past 999]`, leading `0`→`8`.
   `src/lib/office/rnumber.ts` (NEW): `parseRollSuffix`, `boardYearForSuffix`
   (19→2020, 20→2021, 21→2022, else null = 2019 pool), dim rule for categories
-  "Dip BBTE DAE 3Y"/"BBTE DBA 3Y" suffix 22..29 → set names containing "(i)"
-  dimmed, reason "Ye set is r-number ke liye available nahi".
+  "DAE 3Y BBTE"/"DBA 3Y BBTE" suffix 22..29 → set names containing "(i)"
+  dimmed, reason "Ye set is Roll Number ke liye available nahi".
 - APIs (all guardOffice + logOfficeAction, `NextResponse.json({error})` on failure):
   `GET /api/office/setup/sets` (?categoryId, ?rollNumber → per-set dimmed info,
   office:cases:read); `POST|DELETE /api/office/cases/[id]/set` (office:cases:write +
@@ -168,7 +168,7 @@ Half-done / caveats:
 - Nothing executed against a real DB (same as previous entries).
 - UI for set selection / holidays / date-pool panels not in scope (comes later).
 Files touched:
-- src/lib/office/{date-engine,hijri,board-attas,rnumber}.ts (NEW),
+- src/lib/office/{date-engine,hijri,board-attestation,rnumber}.ts (NEW),
   src/app/api/office/setup/sets/route.ts (NEW),
   src/app/api/office/cases/[id]/set/route.ts (NEW),
   src/app/api/office/cases/[id]/generate-dates/route.ts (NEW),
@@ -179,9 +179,9 @@ Files touched:
 Next step for the next agent:
 - N7/N10 UI: case set-selection dropdown consuming GET /api/office/setup/sets
   (?categoryId&rollNumber, honour `dimmed`), holidays + date-pool admin panels,
-  atta-department step UI over CaseAttestation scheduledDate/notes.
+  attestation-department step UI over CaseAttestation scheduledDate/notes.
 Open questions (for the owner):
-- Suffix 19/20/21: brief fixes only the Bord/UV YEAR (2020/2021/2022); engine uses
+- Suffix 19/20/21: brief fixes only the Board/UV YEAR (2020/2021/2022); engine uses
   the first payment's month/day inside that year → first working day. Confirm.
 - Regenerate keeps DONE/IN_PROGRESS step status (see Deviation above). Confirm.
 
@@ -210,8 +210,8 @@ Done:
   with delete, manual date add (POST), "Suggest dates" button
   (GET ?year=Y&suggest=1) rendering candidate chips with one-click add
   (POST per date) plus a "Sab add karein" loop button that stops on the first
-  API error and shows it as-is. Required note about random Bord-date picks
-  when r-number last digits are not 19–29.
+  API error and shows it as-is. Required note about random Board-date picks
+  when Roll Number last digits are not 19–29.
 - `src/components/office/SetupPanels.tsx` — only re-exports the two new
   default-export panels (`HolidayPanel`, `DatePoolPanel`) so page imports stay
   in one place; no existing panel touched.
@@ -237,7 +237,7 @@ Files touched:
 
 Next step for the next agent:
 - N7/N10 UI remaining: case set-selection dropdown (GET /api/office/setup/sets),
-  atta-department step UI over CaseAttestation scheduledDate/notes.
+  attestation-department step UI over CaseAttestation scheduledDate/notes.
 
 ## Entry — Wave 5: §N8/N9 finance rules + department links (backend, subagent)
 
@@ -292,7 +292,7 @@ Done:
   printing/atta/courier/admin→any), `deptQueueWhere` (?dept=filing|printing|
   atta|courier, filing `history=1`), `setMissingWarning` (status PRINTED+ &
   setId null), `unseenWarningCaseIds`, `serializeFilingCase` (stripped payload:
-  id/caseNumber/category name/r-number/reg-number/notes/status/setName/client
+  id/caseNumber/category name/Roll Number/Registration Number/notes/status/setName/client
   picture signed URL only), `evaluateCaseCompletion` (all set-step
   CaseAttestations DONE — fallback: ALL CaseAttestations DONE when no set — AND
   an ATTA file with stepKey=FINAL ⇒ status COMPLETED; forward-only),
@@ -309,8 +309,8 @@ Done:
   `serializeFilingCase` (no money fields at all). `serializeCaseRow` gains
   setName/setMissingWarning/hasUnseenWarning.
 - `cases/route.ts`: GET `?dept=` queues + urgent-first ordering + warnings;
-  POST clientName OPTIONAL (""), r-number OR reg-number required (400
-  "r-number ya reg-number lazmi hai"), agreedAmountRemarks/courierNumber/
+  POST clientName OPTIONAL (""), Roll Number OR Registration Number required (400
+  "Roll Number ya Registration Number lazmi hai"), agreedAmountRemarks/courierNumber/
   isUrgent/clientPicture (multipart→R2).
 - `cases/[id]/route.ts` PATCH: same fields + clientPicture replace (old R2
   object deleted), combined roll/reg check against existing values.
@@ -321,7 +321,7 @@ Done:
   COURIER→DELIVERED); DELETE ?id= uploader's department or admin.
 - `cases/[id]/attestations/route.ts` PATCH: office:atta:write can move steps
   forward-only PENDING→IN_PROGRESS→DONE (+completedDate), status/notes/date
-  edits stay with office:attestation:write; COMPLETED now requires FINAL atta
+  edits stay with office:attestation:write; COMPLETED now requires FINAL attestation
   file (evaluateCaseCompletion), ATTESTATION auto-move kept.
 - `cases/[id]/remarks/route.ts` (NEW): POST {text,targets[]} role-limited;
   GET visibility = admin-all / targeted-at-my-department / created-by-me, with
@@ -345,7 +345,7 @@ Done:
   (comment only, no migration needed — types are plain strings).
 Status transition table (auto): first RECEIVED payment ⇒ WAITING_FOR_FILE ⇒
 first FILING file ⇒ WAITING_FOR_PRINTING ⇒ first PRINTING file ⇒ PRINTED ⇒
-atta step IN_PROGRESS ⇒ ATTESTATION ⇒ all set steps DONE + FINAL ATTA file ⇒
+attestation step IN_PROGRESS ⇒ ATTESTATION ⇒ all set steps DONE + FINAL ATTA file ⇒
 COMPLETED ⇒ COURIER file ⇒ DELIVERED. CANCELLED stays admin-only.
 Half-done / caveats:
 - Courier queue "payment clear" simplified per brief: status COMPLETED +
@@ -400,8 +400,8 @@ scope only: `src/app/office/cases/**` + `src/components/office/case/**`,
 plus two additive shared-lib edits; NOT committed).
 
 Done:
-- Case CREATE (`cases/new/page.tsx`): client name ab optional; r-number +
-  reg-number fields with note "R-number ya reg-number — in men se aik lazmi
+- Case CREATE (`cases/new/page.tsx`): client name ab optional; Roll Number +
+  Registration Number fields with note "Roll Number ya Registration Number — in men se aik lazmi
   hai" + client-side validation (submit disabled/error); remarks textarea;
   agreed amount remarks; client picture (image) file input; submit hamesha
   multipart FormData (parseCaseInput ke mutabiq, arrays JSON strings);
@@ -425,15 +425,15 @@ Done:
   ke liye) + printed proof upload (image/pdf/video). ATTA: per-set-step
   optional upload (stepKey dropdown selected set ke steps se) + alag
   highlighted "Final file (lazmi)" uploader (stepKey=FINAL). COURIER:
-  printing+atta files "Dekhein" se in-app viewer mein + courier slip upload.
+  printing+attestation files "Dekhein" se in-app viewer mein + courier slip upload.
   Upload sirf us dept ki write permission par (admin sab); lists sab ke liye
   read-only; delete own-dept/admin. Upload ke baad detail reload (status
   workflow aage barhta hai).
 - NEW `case/CaseSetCard.tsx`: GET setup/sets?categoryId&rollNumber se sets;
   dimmed sets opacity-50 + cursor-not-allowed + reason tooltip/text (select
   bhi disabled); select = POST cases/[id]/set; selected set ke steps with
-  scheduledDate/status/notes (detail.attestations se label match) + Bord
-  step par Board Attas # chip; "Dates generate karein" button
+  scheduledDate/status/notes (detail.attestations se label match) + Board
+  step par Board Attestation # chip; "Dates generate karein" button
   (office:attestation:write / office:atta:write / cashier — API khud guard
   karta hai) → POST generate-dates, pendingReasons amber box mein.
 - NEW `case/CaseRemarksCard.tsx`: visible remarks list (creator name+role,
@@ -459,21 +459,21 @@ Done:
   par ye render karta hai.
 - CaseHeader: URGENT badge + "Urgent karein/hatayein" toggle
   (office:cases:write, PATCH isUrgent); red banner jab setMissingWarning;
-  Board Attas # chip; set name header line mein.
+  Board Attestation # chip; set name header line mein.
 - CaseInfoCard: courierNumber row + edit; clientName optional (r/reg lazmi
   validation); client picture thumbnail (click → viewer) + edit mode mein
   picture replace (multipart PATCH); Set row.
 - CaseMoneyCard: agreed amount ke sath remarks view/edit
   (PATCH agreedAmountRemarks, office:cases:write).
 - CaseAttestations: atta role (office:atta:write, bina attestation:write)
-  per-step "Shuru karein"/"Done karein" forward-only buttons; Bord step par
-  Board Attas # chip; scheduledDate + notes pehle se show.
+  per-step "Shuru karein"/"Done karein" forward-only buttons; Board step par
+  Board Attestation # chip; scheduledDate + notes pehle se show.
 - CaseExpensesLedger: expenses card ko `id="expenses"` anchor (list ke
   Expense quick action ke liye).
 - Shared additive edits (owned scope se bahar, sirf additive):
   `src/lib/office/types.ts` — CaseDetail gains setId/set/setName/
   setMissingWarning/hasUnseenWarning/isUrgent/courierNumber/
-  agreedAmountRemarks/boardAttasNumber/clientPictureUrl/clientPictureType +
+  agreedAmountRemarks/boardAttestationNumber/clientPictureUrl/clientPictureType +
   new types FilingCaseDetail/CaseFileItem/CategorySetWithSteps/
   CaseRemarkItem/DiscountRequestItem/BonusRequestItem.
   `src/lib/office/labels.ts` — STATUS_LABELS/STYLES mein WAITING_FOR_FILE +
@@ -490,14 +490,14 @@ Caveats:
 - Courier queue "payment clear" backend simplification waisi hi (Wave-4).
 Next step for the next agent:
 - Real DB ke sath poora N7 flow smoke test (create → payment receive →
-  filing files → printing → atta steps + FINAL → courier slip), aur owner se
+  filing files → printing → attestation steps + FINAL → courier slip), aur owner se
   confirm: cashier/atta ko generate-dates permission deni hai ya button
   ghata dein.
 
 ## [2026-10-08] Agent: Kimi (orchestrator + 7 coder waves) — Wave 2 COMPLETE (06_NEW_REQUIREMENTS.md N1–N11)
 Done (all waves, typecheck+lint green in /tmp/final clean env, prisma validate green):
 - N1 AdminNav direct office items; N2 office creation with inline users/roles API+UI; N3 floating buttons hidden on /admin+/office.
-- N4 roles filing/printing/atta/courier + permissions; N5/N6 date engine (date-engine.ts, hijri.ts, board-attas.ts, rnumber.ts) + set APIs + holidays/date-pool CRUD + setup panels; N7 dept workflow (files, statuses, remarks, urgent, queues, filing-limited view, courier in-app viewer); N8 discount/bonus flows + office expenses accounting; N9 finance rules + isolation (office:cases:read-all) + DepartmentLink APIs/UI; N10 seed updated; N11 `impossible` file in repo root.
+- N4 roles filing/printing/atta/courier + permissions; N5/N6 date engine (date-engine.ts, hijri.ts, board-attestation.ts, rnumber.ts) + set APIs + holidays/date-pool CRUD + setup panels; N7 dept workflow (files, statuses, remarks, urgent, queues, filing-limited view, courier in-app viewer); N8 discount/bonus flows + office expenses accounting; N9 finance rules + isolation (office:cases:read-all) + DepartmentLink APIs/UI; N10 seed updated; N11 `impossible` file in repo root.
 - Integration fix by orchestrator: generate-dates route now allows atta/payments:verify; BotChatWidget lint warning fixed.
 Verification: `npm run typecheck` exit 0, `npm run lint` exit 0, `npx prisma validate` valid. `next build` NOT run (needs real DATABASE_URL at prerender — pre-existing).
 Next step (owner): on real DB run `npx prisma migrate deploy` + `npm run db:seed:office`, fill 2019 pool via Setup panel, smoke-test full chain. See repo-root `impossible` file for limitations.
@@ -516,7 +516,7 @@ Done:
   (Islamabad/Quetta/Gujrat/Lahore closure due to incident/preparation/strike/
   local holiday) / EMBASSY (embassies in Islamabad closed/suspended) / SAUDI
   (Fri+Sat weekend + Founding Day 22 Feb, Eids, National Day 23 Sep);
-  `aiChooseMoofaCity` (AI returns {city, reason}, priority Islamabad → Gujrat →
+  `aiChooseMofaCity` (AI returns {city, reason}, priority Islamabad → Gujrat →
   Lahore, admin table cross-check, skipped cities recorded as closures);
   `aiResearchWorkingDates(year, count, excludeDates)` batch researcher with
   validation (right year, Mon–Fri, not excluded, not a known PAKISTAN closure).
@@ -528,13 +528,13 @@ Done:
   key missing / call fail / invalid JSON → deterministic weekend + table rule
   (console.warn ke sath).
 - `src/lib/office/date-engine.ts` AI-FIRST: har step formula (BORD dono
-  families, UV/QR idcc, SPECIAL_MOOFA city via AI, SAUD_MBC Islamabad+embassy+
+  families, UV/QR ibcc, SPECIAL_MOOFA city via AI, SAUD_MBC Islamabad+embassy+
   Tue–Fri, MOOFA_SAUD Saudi Sun–Wed, BMFQ_VER/MOH_ATTA/CPLS_ATTA/APAC_ATTA/
   NEVTCC) ab har candidate day ko ai-dates se validate karta hai (scopes
   parallel Promise.all — ek window ≈ ek AI round-trip). Purane pure functions
   (loadClosures/isBlockedDay/firstWorkingDayWith) fallback layer ke tor par
   rakhe gaye. generateSetDates signature/contract waisa hi (pending reasons,
-  transaction persist, board attas sirf aik dafa). 2019 random pick se PEHLE agar
+  transaction persist, board attestation sirf aik dafa). 2019 random pick se PEHLE agar
   pool < 30 → aiResearchWorkingDates se auto-fill + WorkingDatePool upsert.
 - `src/app/api/office/setup/date-pool/route.ts`: GET ?suggest=1 ab AI-first
   (source:"AI" suggestions), fail par purana deterministic scan fallback.
@@ -705,7 +705,7 @@ Done:
   sirf jahan null), phir evaluateCaseCompletion(id, tx) jo FINAL file dekh kar
   status=COMPLETED karta hai. Audit: action "case.attestations.complete-all".
   Response: `{ status, attestations }` (attestations with attestationType).
-- F3 Moofa Saud Sunday HATA DIYA: date-engine.ts `moofaSaudDate` ab sirf
+- F3 Mofa Saudi Sunday HATA DIYA: date-engine.ts `mofaSaudDate` ab sirf
   Mon/Tue/Wed allow karta hai (`allowedWeekdays: [1, 2, 3]` — pehle
   [0,1,2,3] Sun..Wed tha). Comment bhi update. Baqi engine identical.
 - F4 category lazmi: cases POST mein categoryId ab REQUIRED — 400 "Category
@@ -742,9 +742,9 @@ Verification (ENV RULE — repo par npm install NAHI):
   page.tsx mid-edit ek transient VerifyResult error dikhaya tha — unka fix
   aane ke baad re-sync karke dobara typecheck green. NOT committed.
 Next step for the next agent:
-- Live smoke: admin status change with note (audit log mein note), atta
+- Live smoke: admin status change with note (audit log mein note), attestation
   complete-all button flow (FINAL file ke baghair 400), list-page expense
-  modal (admin + cashier), moofaSaud regenerated dates Mon–Wed only.
+  modal (admin + cashier), mofaSaud regenerated dates Mon–Wed only.
 
 ## [2026-10-08 20:05] Agent: Kimi (perf engineer, subagent) — Wave 9: admin panel speed (region pinning + JWT fast auth + session cache + mobile/skeleton pass)
 
@@ -813,7 +813,7 @@ unedited.
 New structure (page.tsx rewrite):
 - Sticky top command bar (CaseCommandBar): back button, case number + URGENT
   badge + colored status pill + printed chip, client name, category / set /
-  board-attas chips; right: role-aware actions (urgent toggle, extra-amount
+  board-attestation chips; right: role-aware actions (urgent toggle, extra-amount
   decide button + ExtraAmountPopup).
 - CaseStepper: New → Payment → File → Printing → Attestation → Completed →
   Delivered, case.status se derived, done = emerald check, current = primary
@@ -828,7 +828,7 @@ New structure (page.tsx rewrite):
   accept/edit strip, add-payment form + verify queue + slip links, commission
   change + extra-share % + remaining claim), Attestations & Dates (set picker
   dimmed logic, generate-dates, merged steps table: status select / sched+done
-  dates / atta forward buttons / remove-PENDING / add-attestation, printed
+  dates / attestation forward buttons / remove-PENDING / add-attestation, printed
   toggle + manual case status, expected-printing tile), Files (per-department
   collapsible sections, upload rows, ATTA per-step + prominent FINAL uploader,
   in-app CaseFileViewer, NAYA green "Saari attestations complete karein" button
@@ -857,7 +857,7 @@ payments add (multipart + slip) + verify received/not-received/bogus + date/
 amount inline edit + delete rules + needsExtraDecision popup, set select
 (dimmed + reason) + generate-dates + pendingReasons, printed toggle + manual
 status (CANCELLED admin-only), per-attestation status/dates/notes display +
-atta forward-only buttons + remove PENDING + add attestation, board attas
+attestation forward-only buttons + remove PENDING + add attestation, board attestation
 chips, expected printing date, files 4 departments (printing sees filing
 files, courier sees printing+atta in viewer) + upload + FINAL + delete rules,
 remarks list/create/mark-seen, expenses add/remove + total, ledger entries,
@@ -1020,3 +1020,6 @@ Next step for the next agent:
 - **Integration fix**: office-expenses POST description optional (default "Office expense") — W14.1 consistency.
 - No schema change; live DB verified clean (no null-member legacy rows).
 - Verify: tsc 0, next lint 0, next build exit 0 (real DATABASE_URL). Commit: (this wave).
+
+## WAVE 17 (2026-10-11) — Terminology rename (code + DB + AI date formula)
+- Poora project rename per owner map; live DB categories/attestation types/sets/steps renamed; boardAttasNumber→boardAttestationNumber migration. Details in 06 §WAVE 17.

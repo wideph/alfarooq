@@ -82,7 +82,7 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
 
   async function save() {
     if (!hasRorReg) {
-      onMessage("r-number ya reg-number lazmi hai (in men se aik lazmi hai)", "error");
+      onMessage("Roll Number ya Registration Number lazmi hai (in men se aik lazmi hai)", "error");
       return;
     }
     setSaving(true);
@@ -139,11 +139,11 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
             </button>
           )}
           <dl className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-3">
-            <Row label="Roll number (r-number)" value={detail.rollNumber} />
-            <Row label="Registration number" value={detail.registrationNumber} />
+            <Row label="Roll Number" value={detail.rollNumber} />
+            <Row label="Registration Number" value={detail.registrationNumber} />
             <Row label="Category" value={detail.category?.name} />
             <Row label="Courier number" value={detail.courierNumber} />
-            <Row label="Set" value={detail.setName} />
+            <Row label="Set of Attestations" value={detail.setName} />
             <Row label="Booking office" value={detail.bookingOffice.name} />
             <div className="col-span-2 md:col-span-3">
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Notes / remarks</dt>
@@ -164,13 +164,13 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
               className={inputClass}
               value={form.rollNumber}
               onChange={(e) => setForm({ ...form, rollNumber: e.target.value })}
-              placeholder="R-number (roll)"
+              placeholder="Roll Number"
             />
             <input
               className={inputClass}
               value={form.registrationNumber}
               onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
-              placeholder="Reg-number (registration)"
+              placeholder="Registration Number"
             />
             <select
               className={inputClass}
@@ -199,7 +199,7 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
             />
           </div>
           <p className={`text-xs ${hasRorReg ? "text-slate-400" : "font-semibold text-amber-600"}`}>
-            R-number ya reg-number — in men se aik lazmi hai
+            Roll Number ya Registration Number — in men se aik lazmi hai
           </p>
           <textarea
             className={inputClass}

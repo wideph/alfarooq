@@ -353,9 +353,9 @@ export function embassyOpenVerdict(date: Date, db: Db = prisma, timeoutMs?: numb
   return aiVerdict(formatDateOnly(dayOnly(date)), { kind: "EMBASSY" }, db, timeoutMs);
 }
 
-// --- City choice (Special Moofa) --------------------------------------------
+// --- City choice (Special Mofa) --------------------------------------------
 
-export const MOOFA_CITY_PRIORITY: CityName[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
+export const MOFA_CITY_PRIORITY: CityName[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
 
 /**
  * AI picks the first open city (priority Islamabad → Gujrat → Lahore) for the
@@ -363,7 +363,7 @@ export const MOOFA_CITY_PRIORITY: CityName[] = ["ISLAMABAD", "GUJRAT", "LAHORE"]
  * (admin rows always win); on AI failure the deterministic table rule picks
  * the first city without a closure row.
  */
-export async function aiChooseMoofaCity(
+export async function aiChooseMofaCity(
   dateInput: Date,
   db: Db = prisma
 ): Promise<{ city: CityName; reason: string | null; source: "AI" | "MANUAL" | "FALLBACK" }> {
@@ -371,10 +371,10 @@ export async function aiChooseMoofaCity(
   const key = formatDateOnly(date);
 
   const rows = await db.holidayClosure.findMany({
-    where: { date, scope: { in: [...MOOFA_CITY_PRIORITY] } },
+    where: { date, scope: { in: [...MOFA_CITY_PRIORITY] } },
   });
   const closedCities = new Set(rows.map((row) => row.scope));
-  const firstTableOpen = MOOFA_CITY_PRIORITY.find((c) => !closedCities.has(c)) ?? MOOFA_CITY_PRIORITY[0];
+  const firstTableOpen = MOFA_CITY_PRIORITY.find((c) => !closedCities.has(c)) ?? MOFA_CITY_PRIORITY[0];
 
   const settings = await loadBotSettings(db);
   if (!settings) {
@@ -386,7 +386,7 @@ export async function aiChooseMoofaCity(
   const user = [
     `On ${key} (${WEEKDAYS[date.getUTCDay()]}), was there any known closure (incident,`,
     `security preparation, strike, protest, local holiday announcement) in`,
-    `${MOOFA_CITY_PRIORITY.join(", ")}? If no known closure, the answer is ISLAMABAD`,
+    `${MOFA_CITY_PRIORITY.join(", ")}? If no known closure, the answer is ISLAMABAD`,
     "(the first city in priority order). Reply immediately with exactly:",
     '{"city":"ISLAMABAD|GUJRAT|LAHORE","reason":"short reason"}',
   ].join(" ");
@@ -396,7 +396,7 @@ export async function aiChooseMoofaCity(
     const raw = await callBotJson(settings, system, user, '{"city"', 4000, AI_DATES_VERDICT_TIMEOUT_MS);
     const parsed = JSON.parse(raw) as { city?: string; reason?: string };
     const city = String(parsed.city || "").toUpperCase() as CityName;
-    if (!MOOFA_CITY_PRIORITY.includes(city)) throw new Error(`AI city invalid: ${parsed.city}`);
+    if (!MOFA_CITY_PRIORITY.includes(city)) throw new Error(`AI city invalid: ${parsed.city}`);
     // Admin table always wins over the AI pick.
     if (closedCities.has(city)) {
       return { city: firstTableOpen, reason: "Admin table ne is city ko band mark kiya hai", source: "MANUAL" };
@@ -404,8 +404,8 @@ export async function aiChooseMoofaCity(
     // Record the AI's finding: every city ranked before the chosen one was
     // closed that day — upsert it so the admin panel shows it (editable/
     // deletable); existing admin rows are never touched (update: {}).
-    const chosenIdx = MOOFA_CITY_PRIORITY.indexOf(city);
-    for (const skipped of MOOFA_CITY_PRIORITY.slice(0, chosenIdx)) {
+    const chosenIdx = MOFA_CITY_PRIORITY.indexOf(city);
+    for (const skipped of MOFA_CITY_PRIORITY.slice(0, chosenIdx)) {
       await db.holidayClosure.upsert({
         where: { date_scope: { date, scope: skipped } },
         update: {},
@@ -417,7 +417,7 @@ export async function aiChooseMoofaCity(
     console.warn("[ai-dates] city choice AI fail", key, error instanceof Error ? error.message : error);
     // Middle layer: derive the choice from per-city AI closure scans (still
     // AI-researched, and cached) before giving up to the plain table rule.
-    for (const city of MOOFA_CITY_PRIORITY) {
+    for (const city of MOFA_CITY_PRIORITY) {
       if (closedCities.has(city)) continue;
       const verdict = await cityOpenVerdict(date, city, db);
       if (verdict.open) return { city, reason: verdict.reason, source: verdict.source };

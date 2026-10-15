@@ -229,10 +229,10 @@ function CasesList() {
           )}
           {item.setMissingWarning && (
             <span
-              title="Is case ka set select nahi kiya gaya"
+              title="Is case ka Set of Attestations select nahi kiya gaya"
               className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700"
             >
-              <AlertTriangle className="w-3 h-3" /> Set missing
+              <AlertTriangle className="w-3 h-3" /> Set of Attestations missing
             </span>
           )}
           {item.hasUnseenWarning && (

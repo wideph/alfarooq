@@ -2,10 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { addDays, formatDateOnly } from "@/lib/office/serializers";
 import { toHijri } from "@/lib/office/hijri";
-import { nextBoardAttasNumber } from "@/lib/office/board-attas";
+import { nextBoardAttestationNumber } from "@/lib/office/board-attestation";
 import { boardYearForSuffix, parseRollSuffix } from "@/lib/office/rnumber";
 import {
-  aiChooseMoofaCity,
+  aiChooseMofaCity,
   aiResearchWorkingDates,
   cityOpenVerdict,
   embassyOpenVerdict,
@@ -215,52 +215,52 @@ export async function firstWorkingDayAfterOffset(
 
 // --- Specialised formulas (§N5) ----------------------------------------------
 
-export const MOOFA_CITY_PRIORITY: CityScope[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
+export const MOFA_CITY_PRIORITY: CityScope[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
 
-// Special Moofa: first Pakistan working day on/after candidate (AI decides),
+// Special Mofa: first Pakistan working day on/after candidate (AI decides),
 // then the AI picks the first open city (priority Islamabad → Gujrat → Lahore),
 // cross-checked against the admin HolidayClosure table. If all three cities are
 // closed that day, fall back to the earliest city-specific AI-checked working
 // day so a date is always returned.
-export async function specialMoofaCityDate(
+export async function specialMofaCityDate(
   candidate: Date,
   db: Db = prisma
 ): Promise<{ date: Date; city: CityScope }> {
   const start = dayOnly(candidate);
   const base = await firstWorkingDayAi(start, "PK", {}, db);
 
-  const choice = await aiChooseMoofaCity(base, db);
+  const choice = await aiChooseMofaCity(base, db);
   const chosenCheck = await cityOpenVerdict(base, choice.city, db);
   if (chosenCheck.open) return { date: base, city: choice.city };
 
   // All three cities closed on the base date (or admin overrode the AI pick):
   // earliest city-specific working day.
   let best: { date: Date; city: CityScope } = {
-    date: await firstWorkingDayAi(start, "PK", { city: MOOFA_CITY_PRIORITY[0] }, db),
-    city: MOOFA_CITY_PRIORITY[0],
+    date: await firstWorkingDayAi(start, "PK", { city: MOFA_CITY_PRIORITY[0] }, db),
+    city: MOFA_CITY_PRIORITY[0],
   };
-  for (const city of MOOFA_CITY_PRIORITY.slice(1)) {
+  for (const city of MOFA_CITY_PRIORITY.slice(1)) {
     const date = await firstWorkingDayAi(start, "PK", { city }, db);
     if (date < best.date) best = { date, city };
   }
   return best;
 }
 
-// Saud MBC: Special Moofa + 2 → first Islamabad working day on Tue/Wed/Thu/Fri
+// Saudi Embassy: Special Mofa + 2 → first Islamabad working day on Tue/Wed/Thu/Fri
 // with no EMBASSIES_ISB closure that date.
-export async function saudMbcDate(specialMoofaDate: Date, db: Db = prisma): Promise<Date> {
+export async function saudiEmbassyDate(specialMofaDate: Date, db: Db = prisma): Promise<Date> {
   return firstWorkingDayAfterOffset(
-    specialMoofaDate,
+    specialMofaDate,
     2,
     { city: "ISLAMABAD", extraScopes: ["EMBASSIES_ISB"], allowedWeekdays: [2, 3, 4, 5] },
     db
   );
 }
 
-// Moofa Saud: Saud MBC + 4 → first Saudi working day on Mon/Tue/Wed
+// Mofa Saudi: Saudi Embassy + 4 → first Saudi working day on Mon/Tue/Wed
 // (Sunday HATA diya gaya — sirf Monday, Tuesday, Wednesday allowed).
-export async function moofaSaudDate(saudMbc: Date, db: Db = prisma): Promise<Date> {
-  return firstWorkingDayAfterOffset(saudMbc, 4, { country: "SA", allowedWeekdays: [1, 2, 3] }, db);
+export async function mofaSaudiDate(saudiEmbassy: Date, db: Db = prisma): Promise<Date> {
+  return firstWorkingDayAfterOffset(saudiEmbassy, 4, { country: "SA", allowedWeekdays: [1, 2, 3] }, db);
 }
 
 export function formatDdMmYy(date: Date): string {
@@ -286,7 +286,7 @@ export type GenerateSetDatesResult = {
   status: "ok" | "pending";
   pendingReasons: string[];
   steps: StepComputation[];
-  boardAttasNumber: string | null;
+  boardAttestationNumber: string | null;
 };
 
 function detectFamily(stepKeys: string[]): SetFamily {
@@ -316,7 +316,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   });
   if (!item) throw new Error("Case nahi mila");
   if (!item.set || item.set.steps.length === 0) {
-    return { status: "pending", pendingReasons: ["Set select nahi hua"], steps: [], boardAttasNumber: null };
+    return { status: "pending", pendingReasons: ["Set of Attestations select nahi hua"], steps: [], boardAttestationNumber: null };
   }
 
   const steps = item.set.steps;
@@ -336,7 +336,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   const notes = new Map<string, string>();
 
   // Preload closures for the whole window we may touch (payment-based formulas
-  // reach ~payment+20 days; r-number years can be anywhere, so those steps load
+  // reach ~payment+20 days; Roll Number years can be anywhere, so those steps load
   // their own windows via the async helpers).
   const windowStart = paymentDate ?? new Date(Date.UTC(2019, 0, 1));
   const closures = await loadClosures(db, windowStart, 400);
@@ -350,21 +350,21 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   };
 
   // -- BORD (+ its UV/QR pair) -------------------------------------------------
-  const hasBord = stepKeys.includes("BORD");
-  if (hasBord) {
+  const hasBoard = stepKeys.includes("BORD");
+  if (hasBoard) {
     const rNumberMode =
       family === "UV" || secondKey === "UV_IDCC" || secondKey === "BACK_NEVTCC";
     if (rNumberMode) {
       const suffix = parseRollSuffix(item.rollNumber);
       const forcedYear = boardYearForSuffix(suffix);
-      let bordDate: Date | null = null;
+      let boardDate: Date | null = null;
       if (forcedYear) {
         // Suffix 19/20/21 → that year. The brief fixes only the YEAR; we use the
         // first payment's month/day in that year (deterministic), then the first
-        // working day on/after it. Without a payment the Bord date stays pending.
+        // working day on/after it. Without a payment the Board date stays pending.
         if (!needsPayment() && paymentDate) {
           const base = new Date(Date.UTC(forcedYear, paymentDate.getUTCMonth(), paymentDate.getUTCDate()));
-          bordDate = await firstWorkingDayOnOrAfter(base, {}, db);
+          boardDate = await firstWorkingDayOnOrAfter(base, {}, db);
         }
       } else {
         // Any other suffix → random pick from the 2019 working-date pool.
@@ -399,42 +399,42 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
         if (candidates.length === 0) {
           pendingReasons.add(PENDING_POOL_EMPTY);
         } else {
-          bordDate = candidates[Math.floor(Math.random() * candidates.length)];
+          boardDate = candidates[Math.floor(Math.random() * candidates.length)];
         }
       }
-      if (bordDate) {
-        dates.set("BORD", bordDate);
-        // UV idcc / Back Nevtcc: working day ≥ 3 days after Bord (same year).
+      if (boardDate) {
+        dates.set("BORD", boardDate);
+        // UV ibcc / Back Navttc: working day ≥ 3 days after Board (same year).
         const uvKey = stepKeys.includes("UV_IDCC") ? "UV_IDCC" : "BACK_NEVTCC";
         if (stepKeys.includes(uvKey)) {
-          const uvDate = await firstWorkingDayOnOrAfter(addDays(bordDate, 3), {}, db);
-          const crossedYear = uvDate.getUTCFullYear() !== bordDate.getUTCFullYear();
+          const uvDate = await firstWorkingDayOnOrAfter(addDays(boardDate, 3), {}, db);
+          const crossedYear = uvDate.getUTCFullYear() !== boardDate.getUTCFullYear();
           dates.set(uvKey, uvDate);
-          const pairNote = `Bord pair: ${formatDateOnly(bordDate)}${crossedYear ? " (sal barh gaya)" : ""}`;
+          const pairNote = `Board pair: ${formatDateOnly(boardDate)}${crossedYear ? " (sal barh gaya)" : ""}`;
           notes.set(uvKey, pairNote);
-          notes.set("BORD", `${uvKey === "UV_IDCC" ? "UV idcc" : "Back Nevtcc"} pair: ${formatDateOnly(uvDate)}`);
+          notes.set("BORD", `${uvKey === "UV_IDCC" ? "UV ibcc" : "Back Navttc"} pair: ${formatDateOnly(uvDate)}`);
         }
       } else {
         if (stepKeys.includes("UV_IDCC") || stepKeys.includes("BACK_NEVTCC")) {
-          // Pair cannot be computed without its Bord date.
+          // Pair cannot be computed without its Board date.
           if (forcedYear && !paymentDate) pendingReasons.add(PENDING_NO_PAYMENT);
         }
       }
     } else {
-      // Set-(ii) family (QR / Current Nevtcc) and Bord-only sets (v)/(vii):
-      // Bord = first payment + 5 days → first working day (PAK + QUETTA rule).
+      // Set-(ii) family (QR / Current Navttc) and Board-only sets (v)/(vii):
+      // Board = first payment + 5 days → first working day (PAK + QUETTA rule).
       if (!needsPayment() && paymentDate) {
-        const bordDate = await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" });
-        dates.set("BORD", bordDate);
+        const boardDate = await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" });
+        dates.set("BORD", boardDate);
       }
     }
 
-    // QR code idcc / Current Nevtcc = Bord + 2 days → first Islamabad working day.
+    // QR code ibcc / Current Navttc = Board + 2 days → first Islamabad working day.
     const qrKey = stepKeys.includes("QR_IDCC") ? "QR_IDCC" : "CURRENT_NEVTCC";
     if (stepKeys.includes(qrKey)) {
-      const bordDate = dates.get("BORD");
-      if (bordDate) dates.set(qrKey, await pkWorking(addDays(bordDate, 2), { city: "ISLAMABAD" }));
-      else if (!pendingReasons.size) pendingReasons.add("Bord date ke baghair QR idcc nahi ban sakta");
+      const boardDate = dates.get("BORD");
+      if (boardDate) dates.set(qrKey, await pkWorking(addDays(boardDate, 2), { city: "ISLAMABAD" }));
+      else if (!pendingReasons.size) pendingReasons.add("Board date ke baghair QR ibcc nahi ban sakta");
     }
   }
 
@@ -454,33 +454,33 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       if (prev) candidate = addDays(prev, 1);
     }
     if (candidate) {
-      const result = await specialMoofaCityDate(candidate, db);
+      const result = await specialMofaCityDate(candidate, db);
       dates.set("SPECIAL_MOOFA", result.date);
       notes.set("SPECIAL_MOOFA", `City: ${result.city}`);
     } else if (paymentDate && !pendingReasons.size) {
-      pendingReasons.add("Special Moofa ka pichla step abhi pending hai");
+      pendingReasons.add("Special Mofa ka pichla step abhi pending hai");
     }
   }
 
   // -- SAUD_MBC / MOOFA_SAUD -----------------------------------------------------
   if (stepKeys.includes("SAUD_MBC")) {
-    const moofa = dates.get("SPECIAL_MOOFA");
-    if (moofa) {
-      const date = await saudMbcDate(moofa, db);
+    const mofa = dates.get("SPECIAL_MOOFA");
+    if (mofa) {
+      const date = await saudiEmbassyDate(mofa, db);
       dates.set("SAUD_MBC", date);
       notes.set("SAUD_MBC", `Hijri: ${toHijri(date).formatted}`);
     } else if (paymentDate) {
-      pendingReasons.add("Saud MBC ke liye Special Moofa date chahiye");
+      pendingReasons.add("Saudi Embassy ke liye Special Mofa date chahiye");
     }
   }
   if (stepKeys.includes("MOOFA_SAUD")) {
-    const saudMbc = dates.get("SAUD_MBC");
-    if (saudMbc) {
-      const date = await moofaSaudDate(saudMbc, db);
+    const saudiEmbassy = dates.get("SAUD_MBC");
+    if (saudiEmbassy) {
+      const date = await mofaSaudiDate(saudiEmbassy, db);
       dates.set("MOOFA_SAUD", date);
       notes.set("MOOFA_SAUD", formatDdMmYy(date));
     } else if (paymentDate) {
-      pendingReasons.add("Moofa Saud ke liye Saud MBC date chahiye");
+      pendingReasons.add("Mofa Saudi ke liye Saudi Embassy date chahiye");
     }
   }
 
@@ -496,15 +496,15 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   }
 
   // -- CPLS / APAC -----------------------------------------------------------------
-  const attaKey = stepKeys.includes("CPLS_ATTA") ? "CPLS_ATTA" : "APAC_ATTA";
-  if (stepKeys.includes(attaKey)) {
+  const attestationKey = stepKeys.includes("CPLS_ATTA") ? "CPLS_ATTA" : "APAC_ATTA";
+  if (stepKeys.includes(attestationKey)) {
     if (!needsPayment() && paymentDate) {
-      dates.set(attaKey, await pkWorking(addDays(paymentDate, 3), { city: "ISLAMABAD" }));
+      dates.set(attestationKey, await pkWorking(addDays(paymentDate, 3), { city: "ISLAMABAD" }));
     }
   }
   if (stepKeys.includes("NEVTCC")) {
-    const atta = dates.get(attaKey);
-    if (atta) dates.set("NEVTCC", await pkWorking(addDays(atta, 1), { city: "ISLAMABAD" }));
+    const attestation = dates.get(attestationKey);
+    if (attestation) dates.set("NEVTCC", await pkWorking(addDays(attestation, 1), { city: "ISLAMABAD" }));
   }
 
   const computations: StepComputation[] = steps.map((step) => ({
@@ -516,8 +516,8 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   }));
 
   // -- Persist -------------------------------------------------------------------
-  const boardAttasNumber = await prisma.$transaction(async (tx) => {
-    let attasNumber: string | null = null;
+  const boardAttestationNumber = await prisma.$transaction(async (tx) => {
+    let attestationNumber: string | null = null;
     for (const step of computations) {
       const type = await tx.attestationType.upsert({
         where: { name: step.label },
@@ -539,7 +539,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
           },
         });
       } else {
-        // Regeneration refreshes dates/notes but never wipes atta-department
+        // Regeneration refreshes dates/notes but never wipes attestation-department
         // progress: an existing status (IN_PROGRESS / DONE) is kept, and an
         // existing date is kept when the new computation had to stay pending.
         await tx.caseAttestation.update({
@@ -553,24 +553,24 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       }
     }
 
-    const bordDate = dates.get("BORD");
-    if (bordDate) {
-      // Board Attas Number is consumed once per case; never regenerate it.
-      const current = await tx.case.findUnique({ where: { id: caseId }, select: { boardAttasNumber: true } });
-      if (current && !current.boardAttasNumber) {
-        attasNumber = await nextBoardAttasNumber(bordDate, tx);
-        await tx.case.update({ where: { id: caseId }, data: { boardAttasNumber: attasNumber } });
+    const boardDate = dates.get("BORD");
+    if (boardDate) {
+      // Board Attestation Number is consumed once per case; never regenerate it.
+      const current = await tx.case.findUnique({ where: { id: caseId }, select: { boardAttestationNumber: true } });
+      if (current && !current.boardAttestationNumber) {
+        attestationNumber = await nextBoardAttestationNumber(boardDate, tx);
+        await tx.case.update({ where: { id: caseId }, data: { boardAttestationNumber: attestationNumber } });
       } else {
-        attasNumber = current?.boardAttasNumber ?? null;
+        attestationNumber = current?.boardAttestationNumber ?? null;
       }
     }
-    return attasNumber;
+    return attestationNumber;
   }, { maxWait: 10000, timeout: 30000 });
 
   return {
     status: pendingReasons.size ? "pending" : "ok",
     pendingReasons: [...pendingReasons],
     steps: computations,
-    boardAttasNumber,
+    boardAttestationNumber,
   };
 }

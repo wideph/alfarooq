@@ -10,7 +10,7 @@ export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// Admin / cashier / attestation office / atta department: (re)generate the set
+// Admin / cashier / attestation office / attestation department: (re)generate the set
 // dates of a case. Missing inputs (no RECEIVED payment, empty 2019 pool) never
 // fail the request: those steps just stay pending and the reason is returned (§N5/N6).
 export async function POST(_request: NextRequest, { params }: RouteParams) {
@@ -25,7 +25,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
     const item = await findAccessibleCase(session, id);
     if (!item) return notFound("Case nahi mila");
-    if (!item.setId) return badRequest("Pehle set select karein");
+    if (!item.setId) return badRequest("Pehle Set of Attestations select karein");
 
     const result = await generateSetDates(id);
     await logOfficeAction(session, {
@@ -35,7 +35,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       after: {
         status: result.status,
         pendingReasons: result.pendingReasons,
-        boardAttasNumber: result.boardAttasNumber,
+        boardAttestationNumber: result.boardAttestationNumber,
         steps: result.steps.map((step) => ({
           stepKey: step.stepKey,
           scheduledDate: step.scheduledDate,

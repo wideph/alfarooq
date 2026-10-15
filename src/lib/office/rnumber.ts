@@ -1,9 +1,9 @@
-// docs/office-module/06 §N5 — r-number (roll number) last-2-digit logic.
+// docs/office-module/06 §N5 — Roll Number last-2-digit logic.
 
-// Categories whose set selection is affected by the r-number suffix.
-export const RNUMBER_DIMMED_CATEGORIES = ["Dip BBTE DAE 3Y", "BBTE DBA 3Y"] as const;
+// Categories whose set selection is affected by the Roll Number suffix.
+export const RNUMBER_DIMMED_CATEGORIES = ["DAE 3Y BBTE", "DBA 3Y BBTE"] as const;
 
-export const DIMMED_REASON = "Ye set is r-number ke liye available nahi";
+export const DIMMED_REASON = "Ye Set of Attestations is Roll Number ke liye available nahi";
 
 // Last 2 characters of the roll number when both are digits, else null.
 export function parseRollSuffix(rollNumber: string | null | undefined): number | null {
@@ -15,7 +15,7 @@ export function parseRollSuffix(rollNumber: string | null | undefined): number |
   return Number(lastTwo);
 }
 
-// Suffix → forced Bord/UV-idcc year (§N5: 19→2020, 20→2021, 21→2022).
+// Suffix → forced Board/UV-ibcc year (§N5: 19→2020, 20→2021, 21→2022).
 // null means "use the 2019 WorkingDatePool random pick".
 export function boardYearForSuffix(suffix: number | null): number | null {
   if (suffix === 19) return 2020;
@@ -25,12 +25,12 @@ export function boardYearForSuffix(suffix: number | null): number | null {
 }
 
 // A set is dimmed for suffixes 22..29 when it is the full set-(i) family
-// (first set, contains the Saud MBC chain) of an r-number category.
+// (first set, contains the Saudi Embassy chain) of a Roll Number category.
 export function isSetDimmed(categoryName: string | null | undefined, rollNumber: string | null | undefined, setName: string): boolean {
   if (!categoryName || !(RNUMBER_DIMMED_CATEGORIES as readonly string[]).includes(categoryName)) return false;
   const suffix = parseRollSuffix(rollNumber);
   if (suffix === null || suffix < 22 || suffix > 29) return false;
-  // Set names are seeded as "Set (i): Bord + UV idcc + ..." — index-0 full set.
+  // Set names are seeded as "Set of Attestations (i): Board + UV ibcc + ..." — index-0 full set.
   return setName.includes("(i)");
 }
 

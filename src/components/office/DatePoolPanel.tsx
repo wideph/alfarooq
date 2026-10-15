@@ -6,7 +6,7 @@ import { formatDate, officeFetch } from "@/lib/office/client";
 import type { ToastKind } from "@/components/Toast";
 
 // Admin panel for the WorkingDatePool table (§N6) — e.g. the 2019 pool used
-// for random Bord-date picks. The API enforces: max `limit` entries per year,
+// for random Board-date picks. The API enforces: max `limit` entries per year,
 // every entry a real Pakistan working day (no weekend / PAKISTAN holiday).
 
 type PoolRow = { id: string; date: string; year: number; note: string | null };
@@ -125,7 +125,7 @@ export default function DatePoolPanel({ onMessage }: { onMessage: (message: stri
       </div>
       <div className="p-5 sm:p-6 space-y-4">
         <p className="text-xs text-slate-500">
-          System in men se random date Bord ke liye use karta hai jab r-number ke last digits 19-29
+          System in men se random date Board ke liye use karta hai jab Roll Number ke last digits 19-29
           na hon.
         </p>
 

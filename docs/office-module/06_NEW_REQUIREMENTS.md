@@ -33,10 +33,10 @@ Super admin can grant ANY user ANY combination of department permissions
 
 ## N5. Category sets (document attestation sets)
 Categories (seed exactly, keep existing ones):
-1. `M Tech`
-2. `Dip BBTE DAE 3Y`
-3. `BBTE DBA 3Y`
-4. `BBTE Dip 1-2`
+1. `Matric Tech`
+2. `DAE 3Y BBTE`
+3. `DBA 3Y BBTE`
+4. `1-2 Y BBTE`
 5. `Medical Bmfq`
 6. `CPLS`
 7. `APAC`
@@ -44,89 +44,89 @@ Categories (seed exactly, keep existing ones):
 Each category has **sets**; each set is an ordered list of **steps**. Steps and their
 meaning (all dates are working-day computed, see N6):
 
-Steps glossary: `Bord` (board attestation; generates Board Attas Number), `UV idcc`,
-`QR code idcc`, `Special Moofa` (with city), `Saud MBC` (Islamic/hijri date also shown),
-`Moofa Saud` (Saudi working day, dd-mm-yy solar), `Back Nevtcc`, `Current Nevtcc`,
-`bmfq ver`, `MoH atta`, `CPLS atta`, `nevtcc`, `APAC atta`.
+Steps glossary: `Board` (board attestation; generates Board Attestation Number), `UV ibcc`,
+`QR code ibcc`, `Special Mofa` (with city), `Saudi Embassy` (Islamic/hijri date also shown),
+`Mofa Saudi` (Saudi working day, dd-mm-yy solar), `Back Navttc`, `Current Navttc`,
+`bmfq verification`, `MoH attestation`, `CPLS attestation`, `Navttc`, `APAC attestation`.
 
-### M Tech (uses Category-4 formulas)
-- (i) Bord + UV idcc + Special Moofa — formulas of set 4(i) for Bord/UV idcc/Special Moofa
-- (ii) Bord + QR code idcc + Special Moofa — formulas of set 4(ii)
-- (iii) Bord + UV idcc
-- (iv) Bord + QR code idcc
-- (v) Bord
+### Matric Tech (uses Category-4 formulas)
+- (i) Board + UV ibcc + Special Mofa — formulas of set 4(i) for Board/UV ibcc/Special Mofa
+- (ii) Board + QR code ibcc + Special Mofa — formulas of set 4(ii)
+- (iii) Board + UV ibcc
+- (iv) Board + QR code ibcc
+- (v) Board
 
-### Dip BBTE DAE 3Y (= "category 4")
-- (i) Bord + UV idcc + Special Moofa + Saud MBC + Moofa Saud
-- (ii) Bord + QR code idcc + Special Moofa + Saud MBC + Moofa Saud
-- (iii) Bord + UV idcc + Special Moofa
-- (iv) Bord + QR code idcc + Special Moofa
-- (v) Bord + UV idcc
-- (vi) Bord + QR code idcc
-- (vii) Bord
+### DAE 3Y BBTE (= "category 4")
+- (i) Board + UV ibcc + Special Mofa + Saudi Embassy + Mofa Saudi
+- (ii) Board + QR code ibcc + Special Mofa + Saudi Embassy + Mofa Saudi
+- (iii) Board + UV ibcc + Special Mofa
+- (iv) Board + QR code ibcc + Special Mofa
+- (v) Board + UV ibcc
+- (vi) Board + QR code ibcc
+- (vii) Board
 
-R-number (roll number) last-2-digit logic for sets of this category:
-- last two digits ∈ {22..29}: set (i)/(v-style full sets) are shown DIMMED (disabled) to
+Roll Number (roll number) last-2-digit logic for sets of this category:
+- last two digits ∈ {22..29}: Set of Attestations (i)/(v-style full sets) are shown DIMMED (disabled) to
   the record creator.
-- last two digits ∈ {19, 20, 21}: Bord + UV idcc dates are in year 2020 / 2021 / 2022
+- last two digits ∈ {19, 20, 21}: Board + UV ibcc dates are in year 2020 / 2021 / 2022
   respectively.
-- otherwise (any other suffix incl. 19–21 handled above): Bord date = a random pick from
+- otherwise (any other suffix incl. 19–21 handled above): Board date = a random pick from
   the **2019 working-date pool** (admin-editable list of 2019 working dates; system
   collects up to 30 and then uses them randomly; admin can edit/delete entries).
-  UV idcc = a working date in the same year, ≥ 3 days after the Bord date (paired and
-  recorded with the Bord date).
+  UV ibcc = a working date in the same year, ≥ 3 days after the Board date (paired and
+  recorded with the Board date).
 
-Board Attas Number (auto-generated when a Bord step date is assigned):
-`[last digit of bord-date year][month 2 digits][3-digit global sequential count]`
+Board Attestation Number (auto-generated when a Board step date is assigned):
+`[last digit of Board-date year][month 2 digits][3-digit global sequential count]`
 = 6 digits total. If it would start with `0`, replace that leading `0` with `8`.
-Global counter across ALL cases (model `BoardAttasCounter`).
+Global counter across ALL cases (model `BoardAttestationCounter`).
 
-Special Moofa date: first available working day **7 days after the FIRST payment date**
+Special Mofa date: first available working day **7 days after the FIRST payment date**
 (payment date + 7 → first working day). Must not be a Pakistan holiday; city = Islamabad
 unless Islamabad is marked closed that day (holiday/closure table) → then Gujrat, else
 Lahore (first open city, priority Islamabad → Gujrat → Lahore). City name stored with date.
 
-Saud MBC date: 2 days after Special Moofa → first available **Islamabad** working day
+Saudi Embassy date: 2 days after Special Mofa → first available **Islamabad** working day
 falling on **Tue/Wed/Thu/Fri** (and Islamabad not marked closed / embassy-closure flag in
 holiday table). Hijri (Islamic) date also computed (tabular calendar) and shown.
 
-Moofa Saud date: 4 days after Saud MBC → first **Saudi Arabia working day**
+Mofa Saudi date: 4 days after Saudi Embassy → first **Saudi Arabia working day**
 (Saudi weekend = Fri+Sat) falling on **Mon/Tue/Wed** (Sunday removed per owner, 2026-10-08);
 stored/displayed as `dd-mm-yy`.
 
-Set (ii) formulas (QR code idcc variant):
-- Bord date = first available working day **5 days after first payment date**; must not
+Set of Attestations (ii) formulas (QR code ibcc variant):
+- Board date = first available working day **5 days after first payment date**; must not
   be a Pakistan holiday and **Quetta** must not be marked closed that day.
-- QR code idcc = Bord + 2 days → first available **Islamabad** working day.
-- Special Moofa = QR idcc + 1 day → first available day among Islamabad/Gujrat/Lahore
+- QR code ibcc = Board + 2 days → first available **Islamabad** working day.
+- Special Mofa = QR ibcc + 1 day → first available day among Islamabad/Gujrat/Lahore
   (priority Islamabad first, city stored).
-- Saud MBC / Moofa Saud same as set (i).
+- Saudi Embassy / Mofa Saudi same as set (i).
 
-### BBTE DBA 3Y
-Same 7 sets (i–vii) and same formulas as Dip BBTE DAE 3Y.
+### DBA 3Y BBTE
+Same 7 sets (i–vii) and same formulas as DAE 3Y BBTE.
 
-### BBTE Dip 1-2
-- (i) Bord + Back Nevtcc + Special Moofa + Saud MBC + Moofa Saud — formulas of set 4(i)
-  with `Back Nevtcc` in place of `UV idcc`.
-- (ii) Bord + Current Nevtcc + Special Moofa + Saud MBC + Moofa Saud — formulas of set
-  4(ii) with `Current Nevtcc` in place of `QR code idcc`.
+### 1-2 Y BBTE
+- (i) Board + Back Navttc + Special Mofa + Saudi Embassy + Mofa Saudi — formulas of set 4(i)
+  with `Back Navttc` in place of `UV ibcc`.
+- (ii) Board + Current Navttc + Special Mofa + Saudi Embassy + Mofa Saudi — formulas of set
+  4(ii) with `Current Navttc` in place of `QR code ibcc`.
 
 ### Medical Bmfq
-- (i) bmfq ver + MoH atta + Special Moofa: bmfq ver = first payment + 5 days → first
-  working day (Pakistan holiday-free, Quetta not closed). MoH atta = bmfq ver + 2 days →
-  first Islamabad working day. Special Moofa = MoH atta + 1 day → first available of the
+- (i) bmfq verification + MoH attestation + Special Mofa: bmfq verification = first payment + 5 days → first
+  working day (Pakistan holiday-free, Quetta not closed). MoH attestation = bmfq verification + 2 days →
+  first Islamabad working day. Special Mofa = MoH attestation + 1 day → first available of the
   3 cities (priority Islamabad).
-- (ii) bmfq ver + MoH atta (same first two formulas).
-- (iii) bmfq ver only.
+- (ii) bmfq verification + MoH attestation (same first two formulas).
+- (iii) bmfq verification only.
 
 ### CPLS
-- (i) CPLS atta + nevtcc + special moofa: CPLS atta = first payment + 3 days → first
-  working day (Pakistan holiday-free, Islamabad not closed). nevtcc = CPLS atta + 1 day →
-  first Islamabad working day. special moofa = nevtcc + 1 day → 3-city rule.
-- (ii) CPLS atta + nevtcc. (iii) CPLS atta only.
+- (i) CPLS attestation + Navttc + special mofa: CPLS attestation = first payment + 3 days → first
+  working day (Pakistan holiday-free, Islamabad not closed). Navttc = CPLS attestation + 1 day →
+  first Islamabad working day. special mofa = Navttc + 1 day → 3-city rule.
+- (ii) CPLS attestation + Navttc. (iii) CPLS attestation only.
 
 ### APAC
-Same as CPLS with `APAC atta` in place of `CPLS atta`.
+Same as CPLS with `APAC attestation` in place of `CPLS attestation`.
 
 ## N6. Working-day engine
 - Pakistan weekend: Sat+Sun. Saudi weekend: Fri+Sat.
@@ -136,13 +136,13 @@ Same as CPLS with `APAC atta` in place of `CPLS atta`.
   1 May, Defence Day 6 Sep, Iqbal Day 9 Nov, Quaid 25 Dec; Eid ranges marked as
   approximations editable by admin).
 - **2019 pool**: table of 2019 working dates (admin can add/edit/delete); system suggests
-  dates until 30 exist; random pick when needed. Store the pick + its UV-idcc pair on the
+  dates until 30 exist; random pick when needed. Store the pick + its UV-ibcc pair on the
   case attestation step.
 - The existing AI working-day helper (`working-day.ts`) stays for expected-printing-date;
   the set engine is deterministic over the holiday tables (AI call optional enhancement).
 
 ## N7. Case creation & workflow (booking office roles: partner / mulazam / commission agent)
-Create record with: name (optional), category (select), r-number **or** reg-number
+Create record with: name (optional), category (select), Roll Number **or** Registration Number
 (at least one compulsory), remarks (optional), picture of client (optional), contact
 number (optional), address (optional).
 After creation, open the record to add: **Agreed Amount** (+ optional remarks),
@@ -150,8 +150,8 @@ After creation, open the record to add: **Agreed Amount** (+ optional remarks),
 
 Statuses (extend existing):
 - After first payment marked RECEIVED by cashier/super admin → case becomes visible to
-  **filing** department, status `WAITING_FOR_FILE`. Filing sees ONLY: category, r-number,
-  reg-number, remarks, picture of client (no payment details).
+  **filing** department, status `WAITING_FOR_FILE`. Filing sees ONLY: category, Roll Number,
+  Registration Number, remarks, picture of client (no payment details).
 - Filing can add **targeted remarks** (choose recipients: admin / booking office /
   printing — one or many; only selected recipients see them; shown as a **warning** to
   the target) even before uploading files.
@@ -162,13 +162,13 @@ Statuses (extend existing):
   → status `PRINTED` (+ `isPrinted`).
 - If a case's set is NOT selected when printing marks it Printed → booking office sees a
   **red warning** on that case (hover/detail explains: set not selected).
-- Atta department: sees set dates; marks each step's status as it completes; optional
+- Attestation department: sees set dates; marks each step's status as it completes; optional
   file per step; **after the last step a final file (image/pdf/video) is mandatory** →
   status moves to attestation-complete (`COMPLETED` pending courier info).
-- Booking office can also create remarks directly for the atta department.
+- Booking office can also create remarks directly for the attestation department.
 - Courier: when all set steps complete AND payment clear AND courier number + address
-  exist → courier dept sees the case with client name, r-number, reg-number, address,
-  courier number; printing + atta files visible **in-app** (viewer, not just download).
+  exist → courier dept sees the case with client name, Roll Number, Registration Number, address,
+  courier number; printing + attestation files visible **in-app** (viewer, not just download).
   Courier uploads courier slip (visible to admin + booking office) → status `DELIVERED`.
 - `Urgent` badge: booking office can allot an Urgent badge to a case.
 - Payments 2/3/final reduce remaining when RECEIVED (existing behaviour).
@@ -479,7 +479,7 @@ or later) — a case pushed past attestations stops warning.
 
 ## W14.9 — New case: category → optional set select
 New-case form: after category chosen, fetch /api/office/setup/sets?categoryId=
-and show optional "Set (optional)" dropdown in the attestation section; POST
+and show optional "Set of Attestations (optional)" dropdown in the attestation section; POST
 /api/office/cases accepts optional setId (connect) so dates engine + workflow
 work from creation.
 
@@ -567,3 +567,21 @@ Root causes found:
 ### Files
 - APIs: finance/users, finance/users/[memberId], office-expenses, nav-counts, ledger (booking privacy), dashboard
 - Pages: office/finance/page.tsx (rewrite + drawer + expenses card), office/finance/[officeId]/page.tsx, office/page.tsx (rewrite), components/office/OfficeNav.tsx
+
+---
+
+## WAVE 17 — Terminology rename project-wide (2026-10-11)
+
+Owner ke exact words: idcc→ibcc, attas→attestation, MBC→Embassy, Saud→Saudi, Nevtcc→Navttc, Bord→Board, r-number→Roll Number, reg-number→Registration Number, Moofa→Mofa, Set→Set of Attestations, M Tech→Matric Tech, ver→verification, Dip→Diploma. Categories: `Dip BBTE DAE 3Y`→`DAE 3Y BBTE`, `BBTE DBA 3Y`→`DBA 3Y BBTE`, `BBTE Dip 1-2`→`1-2 Y BBTE`, `M Tech`→`Matric Tech`. AI date-finding engine ke user-facing text + previous records (DB) + har related jagah.
+
+### Code (Agent R)
+- Map applied: UI strings, date-engine pending reasons/notes, ai-dates identifiers (`MOFA_CITY_PRIORITY`, `aiChooseMofaCity`), seeds, docs.
+- Identifiers: `Case.boardAttasNumber`→`boardAttestationNumber`, `BoardAttasCounter`→`BoardAttestationCounter`, `board-attas.ts`→`board-attestation.ts`, `nextBoardAttestationNumber`.
+- `RNUMBER_DIMMED_CATEGORIES` → `["DAE 3Y BBTE","DBA 3Y BBTE"]`; CaseAttestationsTab compare `=== "Board"`.
+- stepKey constants (BORD/UV_IDCC/…) intentionally unchanged (internal DB keys); `ATTA` file-kind constant unchanged.
+- Migration `20261011120000_office_wave17`: column + table rename (data preserved).
+
+### Live DB (orchestrator, applied post-push)
+- CaseCategory: 4 renames; AttestationType: 13 renames; CategorySet: `Set (i): …` → `Set of Attestations (i): …` with inner term renames; CategorySetStep labels: same map.
+- Historical audit logs / notifications purani wording mein hain (history as-is).
+- Verify: tsc 0, lint 0, build exit 0 (real DB).

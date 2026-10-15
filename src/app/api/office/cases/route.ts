@@ -156,12 +156,12 @@ export async function POST(request: NextRequest) {
     const office = await prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId } });
     if (!office || !office.isActive) return badRequest("Booking office nahi mila ya inactive hai");
 
-    // §N7: client name is optional; at least one of r-number / reg-number is
-    // compulsory.
+    // §N7: client name is optional; at least one of Roll Number / Registration
+    // Number is compulsory.
     const clientName = cleanText(body.clientName, 200) || "";
     const rollNumber = cleanText(body.rollNumber, 80);
     const registrationNumber = cleanText(body.registrationNumber, 80);
-    if (!rollNumber && !registrationNumber) return badRequest("r-number ya reg-number lazmi hai");
+    if (!rollNumber && !registrationNumber) return badRequest("Roll Number ya Registration Number lazmi hai");
 
     // Category ab LAZMI hai (F4) — select karna zaroori, aur active honi chahiye.
     const categoryId = typeof body.categoryId === "string" ? body.categoryId.trim() : "";
@@ -174,8 +174,8 @@ export async function POST(request: NextRequest) {
     const setId = typeof body.setId === "string" && body.setId.trim() ? body.setId.trim() : "";
     if (setId) {
       const set = await prisma.categorySet.findUnique({ where: { id: setId } });
-      if (!set || !set.isActive) return badRequest("Set nahi mila ya inactive hai");
-      if (set.categoryId !== categoryId) return badRequest("Set is category ka nahi hai");
+      if (!set || !set.isActive) return badRequest("Set of Attestations nahi mila ya inactive hai");
+      if (set.categoryId !== categoryId) return badRequest("Set of Attestations is category ka nahi hai");
     }
 
     const agreedAmount =

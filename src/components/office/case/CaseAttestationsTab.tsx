@@ -28,7 +28,7 @@ type Props = {
 
 // Attestations & Dates tab: set selection (dimmed logic preserved), generate
 // dates, merged steps table (step / scheduled / status / notes / actions),
-// board attas number, expected printing date. Logic pehle CaseSetCard +
+// board attestation number, expected printing date. Logic pehle CaseSetCard +
 // CaseAttestations mein tha.
 export default function CaseAttestationsTab(props: Props) {
   return (
@@ -71,7 +71,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
       { method: "POST", json: { setId: set.id } }
     );
     if (res.ok) {
-      onMessage(`Set select ho gaya: ${res.data.setName}`);
+      onMessage(`Set of Attestations select ho gaya: ${res.data.setName}`);
       if (res.data.dates?.pendingReasons?.length) setPendingReasons(res.data.dates.pendingReasons);
       else setPendingReasons([]);
       await onReload();
@@ -81,7 +81,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
 
   async function generateDates() {
     setBusy(true);
-    const res = await officeFetch<{ status: string; pendingReasons: string[]; boardAttasNumber: string | null }>(
+    const res = await officeFetch<{ status: string; pendingReasons: string[]; boardAttestationNumber: string | null }>(
       `/api/office/cases/${detail.id}/generate-dates`,
       { method: "POST" }
     );
@@ -89,7 +89,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
       setPendingReasons(res.data.pendingReasons || []);
       onMessage(
         res.data.status === "ok"
-          ? `Dates generate ho gayi${res.data.boardAttasNumber ? ` — Board Attas # ${res.data.boardAttasNumber}` : ""}`
+          ? `Dates generate ho gayi${res.data.boardAttestationNumber ? ` — Board Attestation # ${res.data.boardAttestationNumber}` : ""}`
           : "Kuch dates pending hain — wajah neeche dekhein",
         res.data.status === "ok" ? "success" : "info"
       );
@@ -101,7 +101,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
   return (
     <SectionCard
       icon={Layers}
-      title="Attestation set"
+      title="Set of Attestations"
       actions={
         detail.setId &&
         canGenerate && (
@@ -114,22 +114,22 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${detail.setName ? "bg-primary-50 text-primary-700" : "bg-slate-100 text-slate-500"}`}>
-          {detail.setName ? `Set: ${detail.setName}` : "Koi set select nahi"}
+          {detail.setName ? `Set of Attestations: ${detail.setName}` : "Koi Set of Attestations select nahi"}
         </span>
-        {detail.boardAttasNumber && (
+        {detail.boardAttestationNumber && (
           <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
-            Board Attas # {detail.boardAttasNumber}
+            Board Attestation # {detail.boardAttestationNumber}
           </span>
         )}
       </div>
 
       {!detail.category ? (
-        <EmptyState icon={Layers} hint="Pehle case ki category select karein — us ke baad set milega" />
+        <EmptyState icon={Layers} hint="Pehle case ki category select karein — us ke baad Set of Attestations milega" />
       ) : loading ? (
         <SkeletonRows rows={2} />
       ) : canSelect ? (
         <div className="space-y-2">
-          {sets.length === 0 && <EmptyState icon={Layers} hint="Is category ke liye koi set nahi (Setup se add karein)" />}
+          {sets.length === 0 && <EmptyState icon={Layers} hint="Is category ke liye koi Set of Attestations nahi (Setup se add karein)" />}
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {sets.map((set) => {
               const selected = set.id === detail.setId;
@@ -137,7 +137,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
                 <button
                   key={set.id}
                   disabled={busy || set.dimmed}
-                  title={set.dimmed ? set.reason || "Ye set available nahi" : set.steps.map((s) => s.label).join(" + ")}
+                  title={set.dimmed ? set.reason || "Ye Set of Attestations available nahi" : set.steps.map((s) => s.label).join(" + ")}
                   onClick={() => selectSet(set)}
                   className={`rounded-xl border p-3 text-left text-sm transition ${
                     set.dimmed
@@ -159,7 +159,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
           </div>
         </div>
       ) : (
-        !detail.setName && <p className="text-sm text-slate-400">Set booking office select karega.</p>
+        !detail.setName && <p className="text-sm text-slate-400">Set of Attestations booking office select karega.</p>
       )}
     </SectionCard>
   );
@@ -170,7 +170,7 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
 function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
   const canEditList = adminCanAny(admin, ["office:cases:write"]);
   const canStatus = adminCanAny(admin, ["office:attestation:write"]);
-  // §N7: atta department sirf steps aage barha sakta hai (PENDING → IN_PROGRESS → DONE).
+  // §N7: attestation department sirf steps aage barha sakta hai (PENDING → IN_PROGRESS → DONE).
   const canAtta = !canStatus && adminCanAny(admin, ["office:atta:write"]);
   const [types, setTypes] = useState<AttestationType[]>([]);
   const [addId, setAddId] = useState("");
@@ -245,7 +245,7 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
       </div>
 
       {detail.attestations.length === 0 ? (
-        <EmptyState icon={Stamp} hint="Koi attestation required nahi — set select karein ya neeche add karein" />
+        <EmptyState icon={Stamp} hint="Koi attestation required nahi — Set of Attestations select karein ya neeche add karein" />
       ) : (
         <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
           {detail.attestations.map((a) => {
@@ -266,9 +266,9 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
                       CURRENT
                     </span>
                   )}
-                  {a.attestationType.name === "Bord" && detail.boardAttasNumber && (
+                  {a.attestationType.name === "Board" && detail.boardAttestationNumber && (
                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                      Board Attas # {detail.boardAttasNumber}
+                      Board Attestation # {detail.boardAttestationNumber}
                     </span>
                   )}
                 </p>

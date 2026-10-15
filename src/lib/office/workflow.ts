@@ -135,7 +135,7 @@ export async function unseenWarningCaseIds(
 // -- Filing-limited view (§N7) --------------------------------------------------
 
 // Filing department (unless super admin) sees ONLY: id, caseNumber, category
-// name, r-number, reg-number, notes, client picture, status, set name — never
+// name, Roll Number, Registration Number, notes, client picture, status, set name — never
 // payments / agreed amount / commission / ledger.
 export function isFilingLimited(session: AdminSession): boolean {
   return session.role === "filing";
@@ -204,7 +204,7 @@ const COMPLETION_GUARD_STATUSES = [
 
 // A case becomes ATTESTATION_COMPLETE when (a) every attestation step of its
 // set is DONE (fallback when no set: every CaseAttestation of the case) AND
-// (b) the atta department uploaded the mandatory final file (department=ATTA,
+// (b) the attestation department uploaded the mandatory final file (department=ATTA,
 // stepKey=FINAL). Forward-only: never touches ATTESTATION_COMPLETE-or-later /
 // CANCELLED cases.
 export async function evaluateCaseCompletion(

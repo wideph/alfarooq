@@ -39,7 +39,7 @@ export type CaseDetail = {
   filingFilesVisibleToBooking: boolean;
   courierNumber: string | null;
   agreedAmountRemarks: string | null;
-  boardAttasNumber: string | null;
+  boardAttestationNumber: string | null;
   clientPictureUrl: string | null;
   clientPictureType: string | null;
   contacts: Array<{ id: string; phone: string; label: string | null }>;
@@ -120,7 +120,7 @@ export type CaseFileItem = {
   url: string;
 };
 
-// GET /api/office/setup/sets item (with r-number dim info).
+// GET /api/office/setup/sets item (with Roll Number dim info).
 export type CategorySetWithSteps = {
   id: string;
   categoryId: string;

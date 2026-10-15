@@ -22,13 +22,13 @@ export default function CaseWarningStrip({
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 sm:text-sm">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span className="flex-1">
-            Is case ka set select nahi kiya gaya — printing ho chuki hai. &quot;Attestations &amp; Dates&quot; tab se set select karein.
+            Is case ka Set of Attestations select nahi kiya gaya — printing ho chuki hai. &quot;Attestations &amp; Dates&quot; tab se Set of Attestations select karein.
           </span>
           <button
             onClick={() => onOpenTab("attestations")}
             className="rounded-lg bg-red-600 px-2.5 py-1.5 text-[11px] font-bold text-white"
           >
-            Set select karein
+            Set of Attestations select karein
           </button>
         </div>
       )}

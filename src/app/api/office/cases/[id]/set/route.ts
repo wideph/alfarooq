@@ -10,9 +10,9 @@ export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// Booking office (or admin): select the attestation set of a case. Dimmed sets
-// (r-number suffix 22..29, §N5) are rejected. If a RECEIVED first payment
-// already exists, the set dates are generated right away.
+// Booking office (or admin): select the Set of Attestations of a case. Dimmed
+// sets (Roll Number suffix 22..29, §N5) are rejected. If a RECEIVED first
+// payment already exists, the set dates are generated right away.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:write");
   if (denied) return denied;
@@ -23,15 +23,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json();
     const setId = typeof body.setId === "string" ? body.setId : "";
-    if (!setId) return badRequest("Set zaroori hai");
+    if (!setId) return badRequest("Set of Attestations zaroori hai");
 
     const set = await prisma.categorySet.findUnique({
       where: { id: setId },
       include: { steps: { orderBy: { order: "asc" } } },
     });
-    if (!set || !set.isActive) return notFound("Set nahi mila");
+    if (!set || !set.isActive) return notFound("Set of Attestations nahi mila");
     if (item.categoryId && set.categoryId !== item.categoryId) {
-      return badRequest("Ye set is category ka nahi hai");
+      return badRequest("Ye Set of Attestations is category ka nahi hai");
     }
     if (isSetDimmed(item.category?.name, item.rollNumber, set.name)) {
       return forbidden(DIMMED_REASON);
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       setId,
       setName: set.name,
       dates: generated
-        ? { status: generated.status, pendingReasons: generated.pendingReasons, boardAttasNumber: generated.boardAttasNumber }
+        ? { status: generated.status, pendingReasons: generated.pendingReasons, boardAttestationNumber: generated.boardAttestationNumber }
         : null,
     });
   } catch (error) {

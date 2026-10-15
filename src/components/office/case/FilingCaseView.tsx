@@ -14,8 +14,8 @@ import { officeFetch } from "@/lib/office/client";
 import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import type { FilingCaseDetail } from "@/lib/office/types";
 
-// docs 06 §N7 — filing department ka limited view: SIRF category, r-number,
-// reg-number, remarks, client picture, status, filing files aur department
+// docs 06 §N7 — filing department ka limited view: SIRF category, Roll Number,
+// Registration Number, remarks, client picture, status, filing files aur department
 // remarks. Payments / agreed amount / commission / ledger kabhi nahi (API
 // payload bhi stripped hai — serializeFilingCase).
 export default function FilingCaseView({ id, admin }: { id: string; admin: AdminNavUser }) {
@@ -91,11 +91,11 @@ export default function FilingCaseView({ id, admin }: { id: string; admin: Admin
               )}
               <dl className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div className="min-w-0">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">R-number (roll)</dt>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Roll Number</dt>
                   <dd className="truncate text-slate-800">{detail.rollNumber || "—"}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reg-number</dt>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Registration Number</dt>
                   <dd className="truncate text-slate-800">{detail.registrationNumber || "—"}</dd>
                 </div>
                 <div className="min-w-0">
@@ -103,7 +103,7 @@ export default function FilingCaseView({ id, admin }: { id: string; admin: Admin
                   <dd className="truncate text-slate-800">{detail.category?.name || "—"}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Set</dt>
+                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Set of Attestations</dt>
                   <dd className="truncate text-slate-800">{detail.setName || "—"}</dd>
                 </div>
                 <div className="col-span-2">

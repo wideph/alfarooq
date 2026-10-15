@@ -6,8 +6,9 @@ import { dimmedSetNames } from "@/lib/office/rnumber";
 
 export const preferredRegion = ["sin1"];
 
-// Sets of a category with their ordered steps. When ?rollNumber= is given, each
-// set also carries {dimmed, reason} per the r-number suffix rules (§N5).
+// Sets of Attestations of a category with their ordered steps. When
+// ?rollNumber= is given, each set also carries {dimmed, reason} per the Roll
+// Number suffix rules (§N5).
 export async function GET(request: NextRequest) {
   const { denied } = await guardOffice("office:cases:read");
   if (denied) return denied;

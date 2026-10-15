@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const data: Prisma.CaseUpdateInput = {};
 
     // §N7: client name is optional (empty string allowed), but the case must
-    // always keep at least one of r-number / reg-number.
+    // always keep at least one of Roll Number / Registration Number.
     if (body.clientName !== undefined) {
       data.clientName = cleanText(body.clientName, 200) || "";
     }
@@ -52,7 +52,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const nextRoll = data.rollNumber !== undefined ? (data.rollNumber as string | null) : existing.rollNumber;
     const nextReg =
       data.registrationNumber !== undefined ? (data.registrationNumber as string | null) : existing.registrationNumber;
-    if (!nextRoll && !nextReg) return badRequest("r-number ya reg-number lazmi hai");
+    if (!nextRoll && !nextReg) return badRequest("Roll Number ya Registration Number lazmi hai");
     if (body.notes !== undefined) data.notes = cleanText(body.notes, 2000);
     if (body.agreedAmountRemarks !== undefined) {
       data.agreedAmountRemarks = cleanText(body.agreedAmountRemarks, 500);

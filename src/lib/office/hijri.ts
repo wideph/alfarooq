@@ -1,7 +1,7 @@
 // Tabular (civil) Islamic / Hijri calendar conversion.
 // NOTE: this is the arithmetic "civil" tabular calendar — the real Hijri calendar
 // is moon-sighting based, so results can be ±1 day off the announced date.
-// Used only for display on the Saud MBC step (docs/office-module/06 §N5).
+// Used only for display on the Saudi Embassy step (docs/office-module/06 §N5).
 
 export type HijriDate = {
   day: number;

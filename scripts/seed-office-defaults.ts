@@ -11,27 +11,27 @@ const prisma = new PrismaClient();
 // Original wave-1 categories are kept; wave-2 categories (06_NEW_REQUIREMENTS.md §N5)
 // are created if missing.
 const LEGACY_CATEGORIES = ["Matric", "Intermediate (FA/FSc)", "Bachelor (BA/BSc)", "Master (MA/MSc)", "Diploma", "Other"];
-const WAVE2_CATEGORIES = ["M Tech", "Dip BBTE DAE 3Y", "BBTE DBA 3Y", "BBTE Dip 1-2", "Medical Bmfq", "CPLS", "APAC"];
+const WAVE2_CATEGORIES = ["Matric Tech", "DAE 3Y BBTE", "DBA 3Y BBTE", "1-2 Y BBTE", "Medical Bmfq", "CPLS", "APAC"];
 
 const STEP_LABELS: Record<string, string> = {
-  BORD: "Bord",
-  UV_IDCC: "UV idcc",
-  QR_IDCC: "QR code idcc",
-  SPECIAL_MOOFA: "Special Moofa",
-  SAUD_MBC: "Saud MBC",
-  MOOFA_SAUD: "Moofa Saud",
-  BACK_NEVTCC: "Back Nevtcc",
-  CURRENT_NEVTCC: "Current Nevtcc",
-  BMFQ_VER: "bmfq ver",
-  MOH_ATTA: "MoH atta",
-  CPLS_ATTA: "CPLS atta",
-  APAC_ATTA: "APAC atta",
-  NEVTCC: "nevtcc",
+  BORD: "Board",
+  UV_IDCC: "UV ibcc",
+  QR_IDCC: "QR code ibcc",
+  SPECIAL_MOOFA: "Special Mofa",
+  SAUD_MBC: "Saudi Embassy",
+  MOOFA_SAUD: "Mofa Saudi",
+  BACK_NEVTCC: "Back Navttc",
+  CURRENT_NEVTCC: "Current Navttc",
+  BMFQ_VER: "bmfq verification",
+  MOH_ATTA: "MoH attestation",
+  CPLS_ATTA: "CPLS attestation",
+  APAC_ATTA: "APAC attestation",
+  NEVTCC: "Navttc",
 };
 
 const ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
 
-// §N5: Dip BBTE DAE 3Y = "category 4" with 7 sets; BBTE DBA 3Y uses the same.
+// §N5: DAE 3Y BBTE = "category 4" with 7 sets of attestations; DBA 3Y BBTE uses the same.
 const BBTE_SETS: string[][] = [
   ["BORD", "UV_IDCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
   ["BORD", "QR_IDCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
@@ -43,16 +43,16 @@ const BBTE_SETS: string[][] = [
 ];
 
 const CATEGORY_SETS: Record<string, string[][]> = {
-  "M Tech": [
+  "Matric Tech": [
     ["BORD", "UV_IDCC", "SPECIAL_MOOFA"],
     ["BORD", "QR_IDCC", "SPECIAL_MOOFA"],
     ["BORD", "UV_IDCC"],
     ["BORD", "QR_IDCC"],
     ["BORD"],
   ],
-  "Dip BBTE DAE 3Y": BBTE_SETS,
-  "BBTE DBA 3Y": BBTE_SETS,
-  "BBTE Dip 1-2": [
+  "DAE 3Y BBTE": BBTE_SETS,
+  "DBA 3Y BBTE": BBTE_SETS,
+  "1-2 Y BBTE": [
     ["BORD", "BACK_NEVTCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
     ["BORD", "CURRENT_NEVTCC", "SPECIAL_MOOFA", "SAUD_MBC", "MOOFA_SAUD"],
   ],
@@ -127,7 +127,7 @@ async function seedSets() {
     const category = await prisma.caseCategory.findUnique({ where: { name: categoryName } });
     if (!category) continue;
     for (const [setIndex, stepKeys] of sets.entries()) {
-      const setName = `Set (${ROMAN[setIndex]}): ${stepKeys.map((key) => STEP_LABELS[key]).join(" + ")}`;
+      const setName = `Set of Attestations (${ROMAN[setIndex]}): ${stepKeys.map((key) => STEP_LABELS[key]).join(" + ")}`;
       let set = await prisma.categorySet.findUnique({
         where: { categoryId_name: { categoryId: category.id, name: setName } },
       });
@@ -197,7 +197,7 @@ async function main() {
   const { createdSets, createdSteps } = await seedSets();
   const attestationCount = await seedAttestationTypes();
   const holidayCount = await seedHolidays();
-  await prisma.boardAttasCounter.upsert({
+  await prisma.boardAttestationCounter.upsert({
     where: { id: "global" },
     update: {},
     create: { id: "global" },

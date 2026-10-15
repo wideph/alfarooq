@@ -321,7 +321,7 @@ model Case {
   clientPictureType        String?
   agreedAmountRemarks      String?
   courierNumber            String?
-  boardAttasNumber         String?
+  boardAttestationNumber   String?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -345,7 +345,7 @@ model Case {
   @@index([createdAt])
   @@index([rollNumber])
   @@index([registrationNumber])
-  @@index([boardAttasNumber])
+  @@index([boardAttestationNumber])
 }
 
 model CaseContact {
@@ -574,7 +574,7 @@ model WorkingDatePool {
   @@unique([year, date])
 }
 
-model BoardAttasCounter {
+model BoardAttestationCounter {
   id   String @id @default("global")
   last Int    @default(0)
 }
