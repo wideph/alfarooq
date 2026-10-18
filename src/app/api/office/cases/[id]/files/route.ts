@@ -12,6 +12,7 @@ import {
   CASE_DEPARTMENTS,
   DEPARTMENT_PERMISSIONS,
   VERIFICATION_STICKER_STEP_KEY,
+  autoBridgePrintingForDualDept,
   evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
@@ -187,12 +188,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // ATTESTATION uploads (step files or the mandatory FINAL file) may
       // complete the attestation stage (→ ATTESTATION_COMPLETE).
       let completed = false;
+      // §F22.5: dual-perm actor (printing + attestation-dept) bridged the case
+      // WAITING_FOR_PRINTING → PRINTED inside this tx BEFORE the completion
+      // check, so the printing step (and its commission) is not skipped.
+      let bridged = false;
       if (department === "ATTESTATION") {
+        bridged = await autoBridgePrintingForDualDept(id, session, tx);
         completed = await evaluateCaseCompletion(id, tx);
         if (completed) nextStatus = "ATTESTATION_COMPLETE";
+        else if (bridged) nextStatus = "PRINTED";
       }
 
-      return { created, nextStatus, completed };
+      return { created, nextStatus, completed, bridged };
     }, { maxWait: 10000, timeout: 30000 });
 
     // F4: department commission credits (never throw, never fail the upload).
@@ -201,6 +208,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // user earned when the case just flipped to ATTESTATION_COMPLETE.
     const printedNow = result.nextStatus === "PRINTED" && item.status === "WAITING_FOR_PRINTING";
     if (printedNow) {
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+    }
+    // §F22.5: dual-perm bridge — case PRINTED ho gaya is attestation upload
+    // se → actor ko PRINTING commission bhi (idempotent; printedNow wali call
+    // ke saath overlap ho to second call no-op hai).
+    if (result.bridged) {
       await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
     }
     if (result.completed) {

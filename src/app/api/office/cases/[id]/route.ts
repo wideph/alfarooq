@@ -28,6 +28,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
 // Basic fields. agreedAmount: booking office may change it only before any
 // payment is RECEIVED; cashier / super admin any time (then recompute, BR2).
+//
+// §F22.4 (verified): is PATCH mein (aur admin ke direct status-change path
+// cases/[id]/status mein — applyStatusSideEffects) koi dept commission credit
+// NAHI hota. Admin jump se bypass hue steps ka commission na kisi user ko
+// jata hai, na kahin aur, na case expense mein — commission sirf dept worker
+// ke real action par credit hota hai (files / attestations routes).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:write");
   if (denied) return denied;

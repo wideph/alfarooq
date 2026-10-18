@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { parsePercent } from "@/lib/office/money";
+import { parseAmount, parsePercent } from "@/lib/office/money";
 import { toJson, cleanText } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -41,12 +41,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (body.profitPercent !== undefined && profitPercent === null) {
       return badRequest("Profit % 0 se 100 ke darmiyan ho");
     }
+    // F22.1: optional monthly salary (SALARY offices use it; stored regardless
+    // of office type). Default 0, must be a non-negative amount.
+    const monthlySalary = body.monthlySalary === undefined ? null : parseAmount(body.monthlySalary);
+    if (body.monthlySalary !== undefined && monthlySalary === null) {
+      return badRequest("Monthly salary sahi nahi hai (0 ya us se zyada)");
+    }
 
     const member = await prisma.bookingOfficeMember.create({
       data: {
         bookingOfficeId: id,
         name,
         profitPercent: profitPercent ?? undefined,
+        monthlySalary: monthlySalary ?? undefined,
       },
     });
 
@@ -81,12 +88,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (body.profitPercent !== undefined && profitPercent === null) {
       return badRequest("Profit % 0 se 100 ke darmiyan ho");
     }
+    // F22.1: optional monthly salary update (non-negative amount).
+    const monthlySalary = body.monthlySalary === undefined ? null : parseAmount(body.monthlySalary);
+    if (body.monthlySalary !== undefined && monthlySalary === null) {
+      return badRequest("Monthly salary sahi nahi hai (0 ya us se zyada)");
+    }
 
     const member = await prisma.bookingOfficeMember.update({
       where: { id: memberId },
       data: {
         ...(name ? { name } : {}),
         ...(profitPercent !== null ? { profitPercent } : {}),
+        ...(monthlySalary !== null ? { monthlySalary } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive !== false } : {}),
       },
     });

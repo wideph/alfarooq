@@ -13,7 +13,10 @@ const officeInclude = {
   members: { orderBy: { createdAt: "asc" as const } },
   commissions: { include: { category: { select: { id: true, name: true } } } },
   users: {
-    select: { id: true, name: true, email: true, role: true, isActive: true },
+    // §W22: permissions shamil — setup ka "Department commission rates" panel
+    // permission-based dept users (role ke baghair sirf office:printing:write /
+    // office:attestation-dept:write wale) ko bhi dikhata hai.
+    select: { id: true, name: true, email: true, role: true, isActive: true, permissions: true },
     orderBy: { createdAt: "asc" as const },
   },
   _count: { select: { cases: true, users: true } },

@@ -5,7 +5,7 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
-import { evaluateCaseCompletion } from "@/lib/office/workflow";
+import { autoBridgePrintingForDualDept, evaluateCaseCompletion } from "@/lib/office/workflow";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import { toJson } from "@/lib/office/serializers";
 
@@ -54,6 +54,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           where: { caseId: id, status: "DONE", completedDate: null },
           data: { completedDate: now },
         });
+        // §F22.5: dual-perm actor (printing + attestation-dept write) ke liye
+        // — case WAITING_FOR_PRINTING par ho to pehle auto PRINTED (isPrinted,
+        // printedAt) taake printing step skip na ho; phir completion check.
+        const bridged = await autoBridgePrintingForDualDept(id, session, tx);
         // §W11.1: saare set steps DONE + FINAL attestation file → ATTESTATION_COMPLETE.
         await evaluateCaseCompletion(id, tx);
         const updated = await tx.case.findUnique({ where: { id }, select: { status: true } });
@@ -62,10 +66,16 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           orderBy: { order: "asc" },
           include: { attestationType: { select: { id: true, name: true } } },
         });
-        return { status: updated?.status ?? item.status, attestations };
+        return { status: updated?.status ?? item.status, attestations, bridged };
       },
       { maxWait: 10000, timeout: 30000 }
     );
+
+    // §F22.5: bridge ne case PRINTED kiya → actor ko PRINTING commission
+    // (idempotent, never throws) — ATTESTATION credit se pehle.
+    if (result.bridged) {
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+    }
 
     // F4: case abhi ATTESTATION_COMPLETE hua (is request se) → acting
     // attestation user ka commission credit (idempotent, never throws).

@@ -656,3 +656,45 @@ Owner ke points:
 - Cases list filing queue: pending (WAITING_FOR_FILE) + filing-done (has FILING file) union; rows + filingFilesCount, filingDone, onlineVerificationNumber
 - Files: stepKey=VERIFICATION_STICKER (department FILING) — workflow transition trigger NAHI karta; files GET items + downloadUrl
 - Case detail payload: + onlineVerificationNumber, boardAttestationNumber (always included)
+
+---
+
+## §WAVE 22 — Salary set option, dept commission rates discoverability, dept user finance, dual-perm bridge (2026-10-15)
+
+### F22.1 Salary set option
+`BookingOfficeMember.monthlySalary Decimal @default(0) @db.Decimal(12,2)` + migration (idempotent).
+Members API (setup/booking-offices/[id]/members POST/PATCH) accepts monthlySalary; GET serializers include it.
+Setup members editor: SALARY offices par "Monthly salary" input (jaise PROFIT_SHARE par profitPercent).
+Members list mein salary display.
+
+### F22.2 Dept commission rates — dedicated discoverable panel
+Setup page par dedicated "Department commission rates" section: tamam users jin ke paas
+office:printing:write / office:attestation-dept:write permission ya printing/attestation_dept role hai —
+har user ke saath inline commission grid editor (per category + per set, print + attestation amounts).
+Existing in-form grid bhi rehti hai.
+
+### F22.3 Dept user ka apna finance view
+- summary route: office:ledger:read NA ho magar office:printing:write ya office:attestation-dept:write ho
+  → sirf apni row return kare. entries?adminId= bhi adminId===session.adminId par same relaxation.
+- Finance page: dept user (no finance/ledger read) → "Mera account" view: Earned / Wasool / Remaining +
+  case-by-case entries + payout history (read-only; Pay sirf admin).
+- OfficeNav Finance tab dept users ko bhi visible.
+
+### F22.4 Admin status-change bypass → NO commission (verify + document)
+cases/[id] PATCH (admin direct status change) kabhi dept commission credit NAHI karta — bypassed steps
+ka commission na user ko, na kahin aur, na case expense mein. (Existing behavior; comment + verify.)
+
+### F22.5 Dual-permission auto-bridge
+Agar actor ke paas office:printing:write + office:attestation-dept:write DONO hon aur case status
+WAITING_FOR_PRINTING ho jab attestation work (ATTESTATION file upload / attestations PATCH /
+complete-all) attestation complete karne wala ho → pehle auto PRINTED (isPrinted, printedAt) +
+PRINTING commission actor ko, phir ATTESTATION_COMPLETE + ATTESTATION commission actor ko.
+Dono credits idempotent (existing remarks-tag mechanism). Sirf dual-perm actor ke liye;
+single-perm actor ka purana behavior unchanged.
+Call sites: files POST (department=ATTESTATION), attestations PATCH, attestations/complete-all POST.
+
+### F22.6 Dept commission case ke sath attached (read-only display)
+Case detail payload +deptCommissions: [{id, kind:"PRINTING"|"ATTESTATION", amount, adminName, entryDate}]
+(ledger DEPT_COMMISSION entries of that case). Case ke expenses section mein read-only rows
+(chip "Dept commission") — REAL CaseExpense rows NAHI (pool/member formulas unaffected,
+admin profit mein double-count nahi — DEPT_COMMISSION bucket already deducts).

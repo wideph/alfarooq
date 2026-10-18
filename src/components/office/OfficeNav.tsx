@@ -75,6 +75,13 @@ function NavLinks({ admin }: { admin: AdminNavUser | null }) {
     // §W15.3 — booking-office users ko payout notifications /office/finance par
     // link karte hain; Finance tab unke liye visible (scoped view page par hai).
     if (item.href === "/office/finance" && admin?.role === "booking_office") return true;
+    // §W22 (F22.3) — dept users (printing/attestation write, bina finance/ledger
+    // read) bhi Finance tab dekhein — unka scoped "Mera account" view page par hai.
+    if (
+      item.href === "/office/finance" &&
+      adminCanAny(admin, ["office:printing:write", ATTESTATION_DEPT_PERMISSION])
+    )
+      return true;
     return adminCanAny(admin, item.permissions);
   });
 

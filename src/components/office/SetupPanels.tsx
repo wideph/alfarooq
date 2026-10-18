@@ -1,8 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Loader2, Plus, Save, Trash2, UserPlus, Users, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Plus, Save, Trash2, UserPlus, Users, X } from "lucide-react";
 import { officeFetch } from "@/lib/office/client";
+
+// §W22: permissions JSON string → string[] (client-side; @/lib/auth server-only
+// hai — next/headers use karta hai, client bundle mein import nahi ho sakta).
+function parsePermissionsJson(value: unknown): string[] {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 // N6 panels live in their own files to keep this file manageable.
 export { default as HolidayPanel } from "./HolidayPanel";
@@ -32,10 +44,12 @@ type Member = {
   id: string;
   name: string;
   profitPercent: number;
+  // §W22 (F22.1): SALARY offices ke members ki monthly salary (Rs).
+  monthlySalary: number;
   isActive: boolean;
   adminId: string | null;
 };
-type OfficeUser = { id: string; name: string; email: string; role: string; isActive: boolean };
+type OfficeUser = { id: string; name: string; email: string; role: string; isActive: boolean; permissions?: string[] | null };
 type Office = {
   id: string;
   name: string;
@@ -413,7 +427,24 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
       officeFetch<Office[]>("/api/office/setup/booking-offices"),
       officeFetch<Category[]>("/api/office/setup/categories"),
     ]);
-    if (officesRes.ok) setOffices(officesRes.data);
+    if (officesRes.ok)
+      // §W22 (F22.1): monthlySalary decimal/string aa sakta hai — number normalize.
+      // §W22 (F22.2): users[].permissions JSON string aata hai — string[] parse
+      // karo taake permission-based dept users bhi rates panel mein aain.
+      setOffices(
+        officesRes.data.map((office) => ({
+          ...office,
+          members: (office.members ?? []).map((member) => ({
+            ...member,
+            profitPercent: Number(member.profitPercent) || 0,
+            monthlySalary: Number(member.monthlySalary) || 0,
+          })),
+          users: (office.users ?? []).map((user) => ({
+            ...user,
+            permissions: parsePermissionsJson(user.permissions),
+          })),
+        }))
+      );
     if (categoriesRes.ok) setCategories(categoriesRes.data.filter((c) => c.isActive));
   }, []);
 
@@ -658,6 +689,10 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
           )}
         </div>
       </div>
+
+      {/* §W22 (F22.2): sab dept users ke commission rates aik jagah — admin ko
+          office/user dhoondna na pare. */}
+      <DeptCommissionRatesPanel offices={offices} onChanged={load} onMessage={onMessage} />
     </Panel>
   );
 }
@@ -792,6 +827,81 @@ function OfficeUsersEditor({
   );
 }
 
+// §W22 (F22.2) — Department commission rates: tamam offices ke dept users
+// (printing / attestation_dept role ya dept write permissions) aik collapsible
+// section mein, har user ke neeche inline commission grid editor — admin ko
+// pehle office select kar ke user dhoondna na pare.
+function DeptCommissionRatesPanel({
+  offices,
+  onChanged,
+  onMessage,
+}: {
+  offices: Office[];
+  onChanged: () => Promise<void>;
+  onMessage: (message: string, kind?: ToastKind) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const deptUsers = offices.flatMap((office) =>
+    office.users
+      .filter((user) => isDeptCommissionRole(user.role, user.permissions))
+      .map((user) => ({ user, officeName: office.name }))
+  );
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={open}
+      >
+        <div>
+          <p className="font-semibold text-slate-800">Department commission rates (Printing / Attestation)</p>
+          <p className="text-xs text-slate-500">
+            Tamam printing/attestation department users ke commission rates aik jagah — per category + per set.
+          </p>
+        </div>
+        {open ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+        )}
+      </button>
+
+      {open &&
+        (deptUsers.length === 0 ? (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400">
+            Abhi koi printing/attestation department user nahi
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {deptUsers.map(({ user, officeName }) => (
+              <div key={user.id} className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <p className={`font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>{user.name}</p>
+                  <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
+                    {ROLE_LABELS[user.role] || user.role}
+                  </span>
+                  <span className="text-xs text-slate-400">{officeName}</span>
+                  {!user.isActive && (
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
+                  )}
+                </div>
+                <DeptCommissionGridEditor
+                  adminId={user.id}
+                  userName={user.name}
+                  onMessage={onMessage}
+                  onSaved={onChanged}
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
 function MembersEditor({
   office,
   onChanged,
@@ -803,9 +913,11 @@ function MembersEditor({
 }) {
   const [name, setName] = useState("");
   const [percent, setPercent] = useState("");
+  const [salary, setSalary] = useState("");
   const [saving, setSaving] = useState(false);
-  const [edits, setEdits] = useState<Record<string, { name: string; profitPercent: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { name: string; profitPercent: string; monthlySalary: string }>>({});
   const isProfitShare = office.type === "PROFIT_SHARE";
+  const isSalary = office.type === "SALARY";
   const totalPercent = office.members
     .filter((member) => member.isActive)
     .reduce((acc, member) => acc + Number(member.profitPercent || 0), 0);
@@ -814,12 +926,18 @@ function MembersEditor({
     setSaving(true);
     const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/members`, {
       method: "POST",
-      json: { name, ...(isProfitShare ? { profitPercent: percent || "0" } : {}) },
+      json: {
+        name,
+        ...(isProfitShare ? { profitPercent: percent || "0" } : {}),
+        // §W22 (F22.1): SALARY office → monthly salary bhi save hoti hai.
+        ...(isSalary ? { monthlySalary: salary || "0" } : {}),
+      },
     });
     onMessage(res.ok ? "Member add ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
       setName("");
       setPercent("");
+      setSalary("");
       await onChanged();
     }
     setSaving(false);
@@ -830,7 +948,12 @@ function MembersEditor({
     if (!edit) return;
     const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/members`, {
       method: "PUT",
-      json: { id: member.id, name: edit.name, ...(isProfitShare ? { profitPercent: edit.profitPercent } : {}) },
+      json: {
+        id: member.id,
+        name: edit.name,
+        ...(isProfitShare ? { profitPercent: edit.profitPercent } : {}),
+        ...(isSalary ? { monthlySalary: edit.monthlySalary } : {}),
+      },
     });
     onMessage(res.ok ? "Member update ho gaya" : res.error, res.ok ? "success" : "error");
     if (res.ok) {
@@ -888,10 +1011,24 @@ function MembersEditor({
             onChange={(e) => setPercent(e.target.value)}
           />
         )}
+        {isSalary && (
+          <input
+            className={`${input} sm:max-w-[12rem]`}
+            placeholder="Monthly salary (Rs)"
+            inputMode="decimal"
+            value={salary}
+            onChange={(e) => setSalary(e.target.value)}
+          />
+        )}
         <button className={primaryBtn} disabled={saving || !name.trim()} onClick={add}>
           <Plus className="w-4 h-4" /> Add
         </button>
       </div>
+      {isSalary && (
+        <p className="rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
+          Salary entries /api/office/salaries se pay hoti hain — yahan sirf monthly salary set karein.
+        </p>
+      )}
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
         {office.members.map((member) => {
           const edit = edits[member.id];
@@ -906,6 +1043,7 @@ function MembersEditor({
                     [member.id]: {
                       name: e.target.value,
                       profitPercent: edit ? edit.profitPercent : String(member.profitPercent),
+                      monthlySalary: edit ? edit.monthlySalary : String(member.monthlySalary),
                     },
                   })
                 }
@@ -918,13 +1056,36 @@ function MembersEditor({
                   onChange={(e) =>
                     setEdits({
                       ...edits,
-                      [member.id]: { name: edit ? edit.name : member.name, profitPercent: e.target.value },
+                      [member.id]: {
+                        name: edit ? edit.name : member.name,
+                        profitPercent: e.target.value,
+                        monthlySalary: edit ? edit.monthlySalary : String(member.monthlySalary),
+                      },
+                    })
+                  }
+                />
+              )}
+              {isSalary && (
+                <input
+                  className={`${input} sm:max-w-[10rem]`}
+                  inputMode="decimal"
+                  placeholder="Monthly salary (Rs)"
+                  value={edit ? edit.monthlySalary : String(member.monthlySalary)}
+                  onChange={(e) =>
+                    setEdits({
+                      ...edits,
+                      [member.id]: {
+                        name: edit ? edit.name : member.name,
+                        profitPercent: edit ? edit.profitPercent : String(member.profitPercent),
+                        monthlySalary: e.target.value,
+                      },
                     })
                   }
                 />
               )}
               <span className="text-xs text-slate-400">
                 {member.adminId ? "login" : "no login"}
+                {isSalary ? ` · Rs ${member.monthlySalary} / month` : ""}
                 {!member.isActive ? " · inactive" : ""}
               </span>
               <div className="flex gap-1">

@@ -18,6 +18,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
+import DeptCommissionsAttached from "@/components/office/case/DeptCommissionsAttached";
 import { formatDate, formatDateTime, formatMoney, officeFetch, todayInputDate } from "@/lib/office/client";
 import { LEDGER_TYPE_LABELS } from "@/lib/office/labels";
 import {
@@ -47,6 +48,9 @@ export default function CaseHistoryTab(props: TabProps) {
     <div className="space-y-4">
       <ProfitAlert {...props} />
       <ExpensesPanel {...props} />
+      {/* §W22 (F22.6): is case par attached dept commissions (read-only) —
+          expenses block ke theek neeche. */}
+      <DeptCommissionsAttached detail={props.detail} />
       <LedgerPanel {...props} />
       <AuditPanel {...props} />
       <DiscountPanel caseId={props.detail.id} admin={props.admin} onReload={props.onReload} onMessage={props.onMessage} />

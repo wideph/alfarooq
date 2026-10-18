@@ -12,13 +12,21 @@ export const preferredRegion = ["sin1"];
 //   entries = their DEPT_COMMISSION ledger rows (newest first), kind parsed
 //             back from the remarks prefix written by creditDeptCommission.
 //   payouts = PAYOUT DEBIT ledger rows carrying the same adminId.
+// §F22.3: office:ledger:read NA ho magar printing / attestation-dept write ho
+// to dept user SIRF apna statement dekh sakta hai (adminId === session.adminId).
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
-  if (!hasPermission(session, "office:ledger:read")) return forbidden();
 
   const adminId = new URL(request.url).searchParams.get("adminId") || "";
   if (!adminId) return badRequest("adminId zaroori hai");
+
+  if (!hasPermission(session, "office:ledger:read")) {
+    const selfDept =
+      hasPermission(session, "office:printing:write") ||
+      hasPermission(session, "office:attestation-dept:write");
+    if (!selfDept || adminId !== session.adminId) return forbidden();
+  }
 
   try {
     const [entries, payouts] = await Promise.all([

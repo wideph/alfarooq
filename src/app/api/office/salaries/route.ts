@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     take: 300,
     include: {
       bookingOffice: { select: { id: true, name: true } },
-      member: { select: { id: true, name: true } },
+      // F22.1: member monthlySalary bhi list mein chahiye.
+      member: { select: { id: true, name: true, monthlySalary: true } },
     },
   });
   return NextResponse.json(toJson(items));
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         bookingOffice: { select: { id: true, name: true } },
-        member: { select: { id: true, name: true } },
+        member: { select: { id: true, name: true, monthlySalary: true } },
       },
     });
     await logOfficeAction(session, { action: "salary.create", entity: "SalaryEntry", entityId: salary.id, after: salary });

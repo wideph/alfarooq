@@ -19,6 +19,7 @@ import PendingPayouts from "@/components/office/finance/PendingPayouts";
 import PaymentsReceived from "@/components/office/finance/PaymentsReceived";
 import OfficeExpenses, { type ExpenseOfficeOption } from "@/components/office/finance/OfficeExpenses";
 import MemberFinanceView from "@/components/office/finance/MemberFinanceView";
+import DeptMyAccount from "@/components/office/finance/DeptMyAccount";
 import {
   normalizeOfficeExpenses,
   normalizeUsersPayload,
@@ -36,7 +37,16 @@ import {
 
 export default function OfficeFinancePage() {
   return (
-    <OfficePageFrame requiredAny={["office:finance:read", "office:ledger:read", "office:cases:read"]}>
+    <OfficePageFrame
+      requiredAny={[
+        "office:finance:read",
+        "office:ledger:read",
+        "office:cases:read",
+        // §W22 (F22.3): dept users bhi apna scoped view dekh sakein.
+        "office:printing:write",
+        "office:attestation-dept:write",
+      ]}
+    >
       {(admin) =>
         admin.role === "booking_office" ? (
           <MemberFinanceView admin={admin} />
@@ -46,6 +56,10 @@ export default function OfficeFinancePage() {
           // §W21: cashier (ledger:read, bina finance:read) — sirf dept
           // commissions card; profit/company data is scope mein nahi.
           <CashierDeptView />
+        ) : adminCanAny(admin, ["office:printing:write", "office:attestation-dept:write"]) ? (
+          // §W22 (F22.3): dept user (bina finance/ledger read) — sirf apni dept
+          // commission ka read-only "Mera account" view.
+          <DeptMyAccount admin={admin} />
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500">
             Is page ke liye permission zaroori hai

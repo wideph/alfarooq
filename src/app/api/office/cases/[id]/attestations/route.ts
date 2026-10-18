@@ -9,7 +9,7 @@ import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
-import { evaluateCaseCompletion } from "@/lib/office/workflow";
+import { autoBridgePrintingForDualDept, evaluateCaseCompletion } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
@@ -145,7 +145,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    const completed = await evaluateCaseCompletion(id);
+    // §F22.5: dual-perm actor (printing + attestation-dept write) ke liye —
+    // agar case abhi WAITING_FOR_PRINTING par hai to pehle auto PRINTED
+    // (bridge) phir completion check; dono ek hi tx mein (atomic).
+    // Single-perm actor ke liye bridge kabhi fire nahi hota (purana behavior).
+    const { bridged, completed } = await prisma.$transaction(async (tx) => {
+      const bridgedNow = await autoBridgePrintingForDualDept(id, session, tx);
+      const completedNow = await evaluateCaseCompletion(id, tx);
+      return { bridged: bridgedNow, completed: completedNow };
+    });
+    if (bridged) {
+      nextStatus = completed ? "ATTESTATION_COMPLETE" : "PRINTED";
+      // F22.5: bridge ne printing step complete kiya → actor ko PRINTING
+      // commission bhi (idempotent, never throws).
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+    }
     if (completed) {
       nextStatus = "ATTESTATION_COMPLETE";
       // F4: the acting attestation user earns the rule's attestationAmount

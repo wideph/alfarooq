@@ -70,6 +70,16 @@ export type CaseDetail = {
     createdAt: string;
   }>;
   expenses: Array<{ id: string; amount: number; description: string; expenseDate: string; deductFromCommission: boolean; createdByName: string | null }>;
+  // §F22.6: case ke sath attached dept commission rows (read-only display;
+  // REAL CaseExpense NAHI — expenses array se alag, pool/member formulas
+  // unaffected). Ledger DEPT_COMMISSION entries se banti hain.
+  deptCommissions: Array<{
+    id: string;
+    kind: "PRINTING" | "ATTESTATION" | null;
+    amount: number;
+    adminName: string | null;
+    entryDate: string;
+  }>;
   ledger: Array<{
     id: string;
     type: string;

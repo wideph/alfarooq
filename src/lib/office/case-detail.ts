@@ -11,6 +11,7 @@ import {
   serializeFilingCase,
   setMissingWarning,
 } from "@/lib/office/workflow";
+import { DEPT_COMMISSION_TYPE, type DeptCommissionKind } from "@/lib/office/dept-commission";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
@@ -70,6 +71,33 @@ async function adminNameMap(ids: Array<string | null | undefined>) {
     select: { id: true, name: true },
   });
   return Object.fromEntries(admins.map((admin) => [admin.id, admin.name]));
+}
+
+// §F22.6 — case ke sath attached dept commission rows (read-only display).
+// Ledger ke DEPT_COMMISSION entries se aati hain; kind remarks prefix
+// ("<KIND> commission [<caseId>]") se parse hota hai (dept-commission.ts).
+// Ye REAL CaseExpense rows NAHI hain — expenses array ke BAHAR alag field,
+// taake pool/member formulas double-count na karein (DEPT_COMMISSION bucket
+// profit mein already deduct hota hai).
+function parseDeptCommissionKind(remarks: string | null): DeptCommissionKind | null {
+  if (remarks?.startsWith("PRINTING commission [")) return "PRINTING";
+  if (remarks?.startsWith("ATTESTATION commission [")) return "ATTESTATION";
+  return null;
+}
+
+async function loadDeptCommissions(caseId: string) {
+  const rows = await prisma.ledgerEntry.findMany({
+    where: { caseId, type: DEPT_COMMISSION_TYPE },
+    orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
+    include: { admin: { select: { id: true, name: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    kind: parseDeptCommissionKind(row.remarks),
+    amount: toNumber(row.amount),
+    adminName: row.admin?.name ?? null,
+    entryDate: row.entryDate,
+  }));
 }
 
 // §W18: cross-office limited detail for department workers. Jab caseScope
@@ -172,7 +200,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   // (GET /api/office/cases/[id]/audit) — is loader mein nahi. Baqi lookups
   // parallel Promise.all se chalti hain.
   const remarkTarget = roleToRemarkTarget(session.role);
-  const [names, hasUnseenWarning, clientPictureUrl] = await Promise.all([
+  const [names, hasUnseenWarning, clientPictureUrl, deptCommissions] = await Promise.all([
     adminNameMap([
       item.createdByAdminId,
       ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
@@ -188,6 +216,10 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     item.clientPictureKey
       ? getOfficeFileSignedUrl(item.clientPictureKey)
       : Promise.resolve(null),
+    // §F22.6: case ki DEPT_COMMISSION ledger rows (read-only display) —
+    // sirf full detail payload par; dept-limited payload mein money data
+    // restricted hai (loadDeptLimitedCaseDetail mein ye field NAHI jata).
+    loadDeptCommissions(caseId),
   ]);
 
   const totals = computeTotals(item.payments, item.agreedAmount);
@@ -237,6 +269,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       slipKey: undefined,
     })),
     expenses: item.expenses.map((e) => ({ ...e, createdByName: names[e.createdById] || null })),
+    // §F22.6: dept commission rows — `expenses` array ke BAHAR (alag field).
+    deptCommissions,
     ledger: canSeeLedger
       ? item.ledger.map((l) => ({ ...l, createdByName: names[l.createdById] || null }))
       : [],

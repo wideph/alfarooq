@@ -225,6 +225,7 @@ model BookingOfficeMember {
   adminId         String?  @unique
   name            String
   profitPercent   Decimal  @default(0) @db.Decimal(5, 2)
+  monthlySalary   Decimal  @default(0) @db.Decimal(12, 2)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
 

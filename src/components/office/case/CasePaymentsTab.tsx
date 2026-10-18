@@ -18,6 +18,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import DeptCommissionsAttached from "@/components/office/case/DeptCommissionsAttached";
 import { formatDate, formatMoney, officeFetch, todayInputDate, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
 import { PAYMENT_METHODS } from "@/lib/office/permissions";
@@ -43,10 +44,16 @@ export default function CasePaymentsTab(props: TabProps) {
     <div className="space-y-4">
       <ClaimedRemainingStrip {...props} />
       <PaymentsPanel {...props} />
+      <DeptCommissionsAttached detail={props.detail} />
       <CommissionPanel {...props} />
     </div>
   );
 }
+
+/* -------- §W22 (F22.6): Department commissions (attached, read-only) -------- */
+
+// Shared component (./DeptCommissionsAttached) — Payments tab aur
+// History/expenses tab dono mein render hota hai.
 
 /* ------------- Claimed remaining: cashier/admin accept ya edit ------------- */
 

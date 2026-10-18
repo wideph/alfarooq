@@ -12,10 +12,17 @@ export const preferredRegion = ["sin1"];
 //   paid      = PAYOUT DEBIT entries carrying that adminId
 //   remaining = earned − paid
 // Only users with earned > 0 OR paid > 0 OR any rule defined are listed.
+// §F22.3: office:ledger:read NA ho magar printing / attestation-dept write ho
+// to dept user SIRF apni row dekh sakta hai (self-scoped response).
 export async function GET() {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
-  if (!hasPermission(session, "office:ledger:read")) return forbidden();
+  const fullAccess = hasPermission(session, "office:ledger:read");
+  const selfOnly =
+    !fullAccess &&
+    (hasPermission(session, "office:printing:write") ||
+      hasPermission(session, "office:attestation-dept:write"));
+  if (!fullAccess && !selfOnly) return forbidden();
 
   try {
     const [ledgerRows, ruleRows] = await Promise.all([
@@ -78,7 +85,11 @@ export async function GET() {
       }))
       .sort((a, b) => b.remaining - a.remaining);
 
-    return NextResponse.json({ ok: true, users });
+    // §F22.3: self-scoped dept user ko sirf apni row (empty array agar koi
+    // earning/payout/rule nahi).
+    const visible = selfOnly ? users.filter((row) => row.adminId === session.adminId) : users;
+
+    return NextResponse.json({ ok: true, users: visible });
   } catch (error) {
     return serverError(error);
   }

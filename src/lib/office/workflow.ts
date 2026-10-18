@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { AdminPermission, AdminSession } from "@/lib/auth";
+import { hasPermission, type AdminPermission, type AdminSession } from "@/lib/auth";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 
@@ -261,6 +261,33 @@ export async function evaluateCaseCompletion(
   await db.case.update({
     where: { id: caseId },
     data: { status: "ATTESTATION_COMPLETE", currentAttestationId: null },
+  });
+  return true;
+}
+
+// §F22.5 — dual-permission auto-bridge. Jab actor ke paas office:printing:write
+// + office:attestation-dept:write DONO hon aur case abhi bhi
+// WAITING_FOR_PRINTING par ho jab attestation work attestation complete karne
+// wala ho → pehle auto PRINTED (isPrinted + printedAt) taake PRINTING step
+// skip na ho. Call site (attestation completion se PEHLE, same tx ke andar)
+// is helper ko bulata hai; true return hone par caller post-tx PRINTING
+// commission credit karta hai (idempotent, never-throw — dept-commission.ts).
+// Single-perm actors: kabhi fire nahi hota, purana behavior unchanged.
+export async function autoBridgePrintingForDualDept(
+  caseId: string,
+  session: AdminSession,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<boolean> {
+  if (!hasPermission(session, "office:printing:write")) return false;
+  if (!hasPermission(session, "office:attestation-dept:write")) return false;
+  const item = await db.case.findUnique({
+    where: { id: caseId },
+    select: { status: true },
+  });
+  if (!item || item.status !== "WAITING_FOR_PRINTING") return false;
+  await db.case.update({
+    where: { id: caseId },
+    data: { status: "PRINTED", isPrinted: true, printedAt: new Date() },
   });
   return true;
 }
