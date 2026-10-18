@@ -255,6 +255,9 @@ export type ProfitBreakdown = {
   bonuses: number;
   deptCommissions: number;
   adjustments: number;
+  /** §W21.4: expense ka member-borne hissa (sirf display/transparency). */
+  caseExpensesMemberShare: number;
+  officeExpensesMemberShare: number;
   deductionsTotal: number;
   net: number;
 };
@@ -271,6 +274,8 @@ export const EMPTY_PROFIT: ProfitBreakdown = {
   bonuses: 0,
   deptCommissions: 0,
   adjustments: 0,
+  caseExpensesMemberShare: 0,
+  officeExpensesMemberShare: 0,
   deductionsTotal: 0,
   net: 0,
 };
@@ -290,23 +295,32 @@ export function normalizeProfit(raw: any): ProfitBreakdown | null {
     bonuses: num(raw.bonuses),
     deptCommissions: num(raw.deptCommissions),
     adjustments: num(raw.adjustments),
+    caseExpensesMemberShare: num(raw.caseExpensesMemberShare),
+    officeExpensesMemberShare: num(raw.officeExpensesMemberShare),
     deductionsTotal: num(raw.deductionsTotal),
     net: num(raw.net),
   };
 }
 
 // Profit deduction lines — modal mein isi order mein dikhte hain.
-export const PROFIT_DEDUCTION_LINES: Array<{ key: keyof ProfitBreakdown; label: string }> = [
-  { key: "caseExpenses", label: "Case expenses" },
-  { key: "officeExpenses", label: "Office expenses" },
+// §W21.4: "adjustments" line HATA di — ADJUSTMENT entries sirf profit-share
+// re-calc deltas hain, ab profitShares NET mein fold ho jate hain (pehle
+// gross 722,635 + adjustment −118,230 alag alag lines confusing thin).
+// memberShare: line ke neeche grey subtext (expense lines only).
+export const PROFIT_DEDUCTION_LINES: Array<{
+  key: keyof ProfitBreakdown;
+  label: string;
+  memberShareKey?: "caseExpensesMemberShare" | "officeExpensesMemberShare";
+}> = [
+  { key: "caseExpenses", label: "Case expenses", memberShareKey: "caseExpensesMemberShare" },
+  { key: "officeExpenses", label: "Office expenses (admin ka hissa)", memberShareKey: "officeExpensesMemberShare" },
   { key: "companyExpenses", label: "Company expenses" },
   { key: "commissions", label: "Commissions" },
-  { key: "profitShares", label: "Profit shares" },
+  { key: "profitShares", label: "Profit shares (net)" },
   { key: "extraShares", label: "Extra shares" },
   { key: "salaries", label: "Salaries" },
   { key: "bonuses", label: "Bonuses" },
   { key: "deptCommissions", label: "Dept commissions" },
-  { key: "adjustments", label: "Adjustments" },
 ];
 
 /* --------------------- Profit period selector (§W21) --------------------- */

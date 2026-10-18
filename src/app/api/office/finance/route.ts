@@ -82,6 +82,11 @@ type ProfitBucket = {
   bonuses: Prisma.Decimal;
   deptCommissions: Prisma.Decimal;
   adjustments: Prisma.Decimal;
+  // §W21.4 — transparency: expense ka wo hissa jo MEMBERS ne apne shares se
+  // diya (EXPENSE debits). Admin-borne = raw − memberShare. Sirf display ke
+  // liye (modal subtext) — deductions mein shamil NAHI.
+  caseExpensesMemberShare: Prisma.Decimal;
+  officeExpensesMemberShare: Prisma.Decimal;
 };
 
 function newProfitBucket(): ProfitBucket {
@@ -98,13 +103,20 @@ function newProfitBucket(): ProfitBucket {
     bonuses: zero(),
     deptCommissions: zero(),
     adjustments: zero(),
+    caseExpensesMemberShare: zero(),
+    officeExpensesMemberShare: zero(),
   };
 }
 
 function addLedgerToBucket(bucket: ProfitBucket, type: string, signed: Prisma.Decimal) {
   if (type === "COMMISSION_HALF" || type === "COMMISSION_FINAL" || type === "COMMISSION_ADJUST") {
     bucket.commissions = bucket.commissions.plus(signed);
-  } else if (type === "PROFIT_SHARE") {
+  } else if (type === "PROFIT_SHARE" || type === "ADJUSTMENT") {
+    // §W21.4: ADJUSTMENT entries SIRF finalizeProfitShare ke share re-calc
+    // deltas hain (koi aur ADJUSTMENT creator nahi) — is liye wo profit
+    // shares ka hi hissa hain. Gross credits + alag "adjustments" line
+    // admin ke liye confusing thi ("− Rs −118,230" double-negative); ab
+    // profitShares NET show hota hai (credits + adjustment deltas).
     bucket.profitShares = bucket.profitShares.plus(signed);
   } else if (type === "EXTRA_SHARE") {
     bucket.extraShares = bucket.extraShares.plus(signed);
@@ -112,8 +124,6 @@ function addLedgerToBucket(bucket: ProfitBucket, type: string, signed: Prisma.De
     bucket.bonuses = bucket.bonuses.plus(signed);
   } else if (type === "DEPT_COMMISSION") {
     bucket.deptCommissions = bucket.deptCommissions.plus(signed);
-  } else if (type === "ADJUSTMENT") {
-    bucket.adjustments = bucket.adjustments.plus(signed);
   }
 }
 
@@ -140,6 +150,8 @@ function profitJson(bucket: ProfitBucket) {
     bonuses: toNumber(bucket.bonuses),
     deptCommissions: toNumber(bucket.deptCommissions),
     adjustments: toNumber(bucket.adjustments),
+    caseExpensesMemberShare: toNumber(bucket.caseExpensesMemberShare),
+    officeExpensesMemberShare: toNumber(bucket.officeExpensesMemberShare),
     deductionsTotal: toNumber(deductionsTotal),
     net: toNumber(bucket.received.minus(deductionsTotal)),
   };
@@ -355,8 +367,21 @@ export async function GET(request: NextRequest) {
         );
         profitOffice(officeId).caseExpenses = profitOffice(officeId).caseExpenses.plus(caseBorne);
         profitOffice(officeId).officeExpenses = profitOffice(officeId).officeExpenses.plus(officeBorne);
+        // §W21.4 — member-borne hissa bhi record karo (modal transparency).
+        profitOffice(officeId).caseExpensesMemberShare = profitOffice(officeId).caseExpensesMemberShare.plus(
+          caseExpShareByOffice[officeId] || zero()
+        );
+        profitOffice(officeId).officeExpensesMemberShare = profitOffice(officeId).officeExpensesMemberShare.plus(
+          officeExpShareByOffice[officeId] || zero()
+        );
         totalProfit.caseExpenses = totalProfit.caseExpenses.plus(caseBorne);
         totalProfit.officeExpenses = totalProfit.officeExpenses.plus(officeBorne);
+        totalProfit.caseExpensesMemberShare = totalProfit.caseExpensesMemberShare.plus(
+          caseExpShareByOffice[officeId] || zero()
+        );
+        totalProfit.officeExpensesMemberShare = totalProfit.officeExpensesMemberShare.plus(
+          officeExpShareByOffice[officeId] || zero()
+        );
       }
     }
     for (const item of remainingRows) {

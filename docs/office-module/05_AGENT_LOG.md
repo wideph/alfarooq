@@ -1076,3 +1076,9 @@ Next step for the next agent:
 - Cause: UI raw totals dikha raha tha — KPI "Total expenses" = caseExpenses + officeExpensesTotal (member-borne hissa bhi shamil → zyada); office card "Expenses" = sirf raw office general expenses (case expenses missing, member-borne hissa shamil).
 - Fix (UI only, backend W21.2 ledger-truth formula untouched): KPI Total expenses = profit.caseExpenses + profit.officeExpenses + profit.companyExpenses (admin-borne); office card "Expenses (admin)" = o.profit.caseExpenses + o.profit.officeExpenses (fallback raw). KpiStrip hint updated.
 - Verify: tsc 0, lint 0, build exit 0.
+
+## WAVE 21.4 — Profit breakdown modal de-clutter + semantics fix (commit: pending)
+- Owner report (screenshot): breakdown confusing/uljha hua — gross profit shares 722,635 + alag "Adjustments −(−118,230)" double-negative line; 7 zero lines clutter.
+- Tehqeeq: ADJUSTMENT entries SIRF finalizeProfitShare ke share re-calc deltas hain (grep se confirm — koi aur creator nahi). Is liye ADJUSTMENT ab profitShares bucket mein fold → "Profit shares (net)" = 604,405. Net unchanged (529,396.50) — presentation fix, formula W21.2 ledger-truth wahi.
+- profitJson +caseExpensesMemberShare/officeExpensesMemberShare (transparency only, deductions mein nahi); modal: zero lines hide, expense lines ke neeche "Total X — members ne apne shares se Y diye" grey subtext, negative values "+ Rs" emerald mein (double-negative khatam), "adjustments" line removed, footer note: deductions sirf admin-borne.
+- Verify: tsc 0, lint 0, build exit 0.

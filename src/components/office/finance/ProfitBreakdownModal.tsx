@@ -135,12 +135,31 @@ export default function ProfitBreakdownModal({
                 <span className="font-bold text-emerald-700">{formatMoney(profit.received)}</span>
               </div>
               <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-                {PROFIT_DEDUCTION_LINES.map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between px-3 py-2 text-sm">
-                    <span className="text-slate-600">{label}</span>
-                    <span className="font-semibold text-red-600">− {formatMoney(profit[key])}</span>
-                  </div>
-                ))}
+                {/* §W21.4: sirf NON-ZERO lines dikhao (zero lines clutter thi);
+                    member-borne hissa grey subtext mein (transparency). */}
+                {PROFIT_DEDUCTION_LINES.filter(({ key }) => (profit[key] as number) !== 0).map(
+                  ({ key, label, memberShareKey }) => {
+                    const value = profit[key] as number;
+                    const memberShare = memberShareKey ? profit[memberShareKey] : 0;
+                    return (
+                      <div key={key} className="px-3 py-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600">{label}</span>
+                          <span className={`font-semibold ${value >= 0 ? "text-red-600" : "text-emerald-700"}`}>
+                            {value >= 0 ? "− " : "+ "}
+                            {formatMoney(Math.abs(value))}
+                          </span>
+                        </div>
+                        {memberShare > 0 && (
+                          <p className="mt-0.5 text-[11px] text-slate-400">
+                            Total {formatMoney(value + memberShare)} — members ne apne shares se{" "}
+                            {formatMoney(memberShare)} diye
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+                )}
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-semibold text-slate-700">Total deductions</span>
@@ -153,7 +172,8 @@ export default function ProfitBreakdownModal({
                 </span>
               </div>
               <p className="rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-                Received − deductions = Net
+                Received − deductions = Net · Deductions mein sirf admin-borne amounts hain —
+                members ka hissa un ke accounts se pehle hi kat chuka hota hai
               </p>
             </div>
           ) : null}
