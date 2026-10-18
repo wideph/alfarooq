@@ -21,7 +21,7 @@ export default function KpiStrip({
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       <StatCard label="Total received" value={received} tone="emerald" hint="Tamam received payments" />
-      <StatCard label="Total expenses" value={expenses} tone="red" hint="Case + office expenses" />
+      <StatCard label="Total expenses" value={expenses} tone="red" hint="Admin-borne case + office + company expenses" />
       <StatCard label="Total wasool" value={wasool} tone="sky" hint="Members ko paid out" />
       <StatCard label="Total due" value={due} tone="amber" hint="Members ka baaqi" />
     </div>

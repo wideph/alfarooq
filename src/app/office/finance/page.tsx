@@ -153,16 +153,22 @@ function FinanceDashboard({
   );
 
   // KPI numbers — received + expenses report se (all-time), wasool/due users
-  // totals se. Expenses = case expenses + office expenses (red).
+  // totals se. §W21.2: Expenses = ADMIN-BORNE expenses (profit object ka
+  // case + office + company) — raw totals member-borne hissa bhi shamil
+  // karte the (galat/zyada show hota tha).
   const totalReceived = report?.summary.income ?? 0;
-  const totalExpenses = report
-    ? report.summary.caseExpenses + report.summary.officeExpensesTotal
-    : (expenses ?? []).reduce((acc, e) => acc + e.amount, 0);
+  const totalExpenses = report?.profit
+    ? report.profit.caseExpenses + report.profit.officeExpenses + report.profit.companyExpenses
+    : report
+      ? report.summary.caseExpenses + report.summary.officeExpensesTotal
+      : (expenses ?? []).reduce((acc, e) => acc + e.amount, 0);
 
-  // Offices grid — har office ka received (report), expenses (contract 3 sum),
-  // dues (users rows sum). Offices with zero activity bhi dikhte hain.
+  // Offices grid — har office ka received (report), expenses (§W21.2:
+  // admin-borne = profit.caseExpenses + profit.officeExpenses; profit object
+  // na ho to raw office-expense fallback), dues (users rows sum).
   const officeCards: OfficeCardData[] = (() => {
     const map = new Map<string, OfficeCardData>();
+    const rawExpenses = new Map<string, number>();
     const ensure = (id: string, name: string, type: BookingOfficeType) => {
       let card = map.get(id);
       if (!card) {
@@ -182,10 +188,17 @@ function FinanceDashboard({
     }
     for (const e of expenses ?? []) {
       if (!e.officeId) continue;
-      ensure(e.officeId, e.officeName, e.officeType ?? "FIXED_COMMISSION").expenses += e.amount;
+      ensure(e.officeId, e.officeName, e.officeType ?? "FIXED_COMMISSION");
+      rawExpenses.set(e.officeId, (rawExpenses.get(e.officeId) ?? 0) + e.amount);
     }
     for (const row of users?.rows ?? []) {
       ensure(row.officeId, row.officeName, row.officeType).dues += row.due;
+    }
+    // §W21.2: admin-borne expenses prefer karo (profit breakdown), warna raw.
+    for (const card of map.values()) {
+      card.expenses = card.profit
+        ? card.profit.caseExpenses + card.profit.officeExpenses
+        : rawExpenses.get(card.officeId) ?? 0;
     }
     return Array.from(map.values()).sort((a, b) => a.officeName.localeCompare(b.officeName));
   })();

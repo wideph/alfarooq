@@ -61,7 +61,7 @@ export default function OfficesGrid({
                   <dd className="font-semibold text-emerald-700">{formatMoney(office.received)}</dd>
                 </div>
                 <div className="flex items-center justify-between">
-                  <dt className="text-slate-500">Expenses</dt>
+                  <dt className="text-slate-500">Expenses (admin)</dt>
                   <dd className="font-semibold text-red-600">{formatMoney(office.expenses)}</dd>
                 </div>
                 <div className="flex items-center justify-between">

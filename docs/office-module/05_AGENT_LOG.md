@@ -1070,3 +1070,9 @@ Next step for the next agent:
 - FINAL formula (ledger-truth, type-independent): admin-borne expense = expense table total − member-tagged EXPENSE debits (remarks: `Office expense share [` / `Commission expense share [` / `Commission expense [`). Buckets per office = max(raw − memberShares, 0). User-side formulas (finance/users, profit-share pool, commission) phir bhi UNTOUCHED.
 - Live-data simulation (script = route logic, all-time): Haroon NET=529,396.50 (cash cross-check: 1,235,060 − 26,250 − 150,017 − 520,000 payouts − 9,396.50 member dues = 529,396.50 EXACT match), AW-Knj NET=161,000, TOTAL=690,396.50.
 - Verify: tsc 0, lint 0, build exit 0 (direct 5432 — pooler 6543 pe stale prepared statements 42P05 de rahe the, transient).
+
+## WAVE 21.3 — Admin panel UI figures aligned with corrected formula (commit: pending)
+- Owner report: chat calculation theek thi magar admin panel ki office calculations/hisab galat dikh raha tha.
+- Cause: UI raw totals dikha raha tha — KPI "Total expenses" = caseExpenses + officeExpensesTotal (member-borne hissa bhi shamil → zyada); office card "Expenses" = sirf raw office general expenses (case expenses missing, member-borne hissa shamil).
+- Fix (UI only, backend W21.2 ledger-truth formula untouched): KPI Total expenses = profit.caseExpenses + profit.officeExpenses + profit.companyExpenses (admin-borne); office card "Expenses (admin)" = o.profit.caseExpenses + o.profit.officeExpenses (fallback raw). KpiStrip hint updated.
+- Verify: tsc 0, lint 0, build exit 0.
