@@ -29,15 +29,15 @@ export const preferredRegion = ["sin1"];
 // §W21 `profit` object (top-level + per office): raw bucket list — received,
 // expenses, aur har share/deduction ledger type ka net. Ye summary.profit se
 // alag hai: yahan net = received − deductionsTotal.
-// §W21.1 expense buckets ka rule (double-count fix):
-//   - PROFIT_SHARE office: case expenses pool se pehle kat chuke hote hain
-//     (PROFIT_SHARE credits net hain) → bucket mein shamil (admin cost). Office
-//     expenses per-member EXPENSE debits se members se recover → bucket se BAHAR.
-//   - FIXED_COMMISSION office: deductFromCommission=true wale case/office
-//     expenses member-tagged EXPENSE debits se recover → bucket se BAHAR;
-//     flag=false wale admin cost → bucket mein.
-//   - SALARY office: sab expenses company cost → bucket mein.
-//   - Company expenses: sirf top-level bucket mein (kisi office se attributed nahi).
+// §W21.2 expense buckets LEDGER-TRUTH se (double-count fix):
+//   admin-borne expense = expense total − member-tagged EXPENSE debits
+//   (remarks: `Office expense share [` / `Commission expense share [` /
+//   `Commission expense [`). Member debits ka hissa admin members se recover
+//   kar chuka hota hai — dobara minus karna double count hai. Is se har type
+//   cover hota hai: PROFIT_SHARE office expenses ka sirf admin ka hissa
+//   (100% − members%) minus hota hai; FIXED_COMMISSION flag=true expenses 0;
+//   SALARY / flag=false expenses pooray. Company expenses sirf top-level
+//   bucket mein (kisi office se attributed nahi).
 
 const SHARE_TYPES = ["COMMISSION_HALF", "COMMISSION_ADJUST", "COMMISSION_FINAL", "EXTRA_SHARE", "PROFIT_SHARE", "ADJUSTMENT"];
 // §W21 profit buckets ke liye ledger types (SHARE_TYPES + BONUS + DEPT_COMMISSION).
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     // §W20: offices list cached directory se (pehle report queries ke BAAD ek
     // alag sequential round-trip thi) — ab sab ek hi parallel batch mein.
-    const [payments, shares, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows] =
+    const [payments, shares, expenseDebits, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows] =
       await Promise.all([
         prisma.payment.findMany({
           where: { status: "RECEIVED", ...(inRange ? { paymentDate: inRange } : {}) },
@@ -177,9 +177,17 @@ export async function GET(request: NextRequest) {
           where: { type: { in: PROFIT_LEDGER_TYPES }, ...(inRange ? { entryDate: inRange } : {}) },
           select: { amount: true, direction: true, entryDate: true, bookingOfficeId: true, type: true },
         }),
+        // §W21.2 — member-tagged EXPENSE DEBITS (admin in se recover karta hai):
+        // remarks prefixes → `Office expense share [` (PROFIT_SHARE W15.1),
+        // `Commission expense share [` (FIXED_COMMISSION office flag=true W21),
+        // `Commission expense [` (FIXED_COMMISSION case flag=true W21).
+        prisma.ledgerEntry.findMany({
+          where: { type: "EXPENSE", direction: "DEBIT", ...(inRange ? { entryDate: inRange } : {}) },
+          select: { amount: true, bookingOfficeId: true, remarks: true },
+        }),
         prisma.caseExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
-          select: { amount: true, expenseDate: true, deductFromCommission: true, case: { select: { bookingOfficeId: true } } },
+          select: { amount: true, expenseDate: true, case: { select: { bookingOfficeId: true } } },
         }),
         prisma.salaryEntry.findMany({
           where: inRange
@@ -199,7 +207,7 @@ export async function GET(request: NextRequest) {
         // §N8 — office-level general expenses (OfficeExpense); typed per office below.
         prisma.officeExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
-          select: { amount: true, expenseDate: true, deductFromCommission: true, bookingOfficeId: true },
+          select: { amount: true, expenseDate: true, bookingOfficeId: true },
         }),
         totalLiabilities(),
         getOfficeDirectory(),
@@ -273,19 +281,34 @@ export async function GET(request: NextRequest) {
       addLedgerToBucket(profitOffice(s.bookingOfficeId), s.type, signed);
       addLedgerToBucket(totalProfit, s.type, signed);
     }
+    // §W21.2 — expense buckets LEDGER-TRUTH se (har office type ke liye ek hi
+    // sahi rule, koi type-wise guessing nahi):
+    //   admin-borne expense = expense table total − member-tagged EXPENSE debits
+    // Member debits ka matlab: expense ka wo hissa members ke payout se kat chuka
+    // (admin recover kar chuka) — usay admin profit se minus karna DOUBLE COUNT hai.
+    //   - PROFIT_SHARE office expense: members apne % hisse ke debits dete hain;
+    //     admin sirf APNA hissa (OE − member debits) bear karta hai.
+    //   - FIXED_COMMISSION flag=true (case/office): poora recover → 0 admin cost.
+    //   - FIXED_COMMISSION flag=false / SALARY: koi member debit nahi → poora admin cost.
+    const caseExpRawByOffice: Record<string, Prisma.Decimal> = {};
+    const officeExpRawByOffice: Record<string, Prisma.Decimal> = {};
+    const caseExpShareByOffice: Record<string, Prisma.Decimal> = {};
+    const officeExpShareByOffice: Record<string, Prisma.Decimal> = {};
+    const addTo = (map: Record<string, Prisma.Decimal>, key: string, amount: Prisma.Decimal) => {
+      map[key] = (map[key] || zero()).plus(amount);
+    };
+    for (const d of expenseDebits) {
+      const remarks = d.remarks || "";
+      if (remarks.startsWith("Commission expense [")) addTo(caseExpShareByOffice, d.bookingOfficeId, d.amount);
+      else if (remarks.startsWith("Commission expense share [") || remarks.startsWith("Office expense share ["))
+        addTo(officeExpShareByOffice, d.bookingOfficeId, d.amount);
+      // untagged office-level debits (FIXED_COMMISSION flag=false) kisi member
+      // ke payout se nahi kat-te → admin ka cost rehta hai → share maps mein nahi.
+    }
     for (const e of caseExpenses) {
       caseExpenseTotal = caseExpenseTotal.plus(e.amount);
       day(e.expenseDate).caseExpenses = day(e.expenseDate).caseExpenses.plus(e.amount);
-      // §W21.1 (double-count fix): FIXED_COMMISSION office ka case expense jab
-      // deductFromCommission=true ho to wo pehle hi member ke `Commission expense [id]`
-      // EXPENSE debit se uske payout se kat chuka hota hai (admin recover kar leta
-      // hai) — admin profit se dobara minus karna DOUBLE COUNT hai. Skip karo.
-      // Har aur haal mein (PROFIT_SHARE pool / SALARY / commission flag=false)
-      // expense admin ka cost hai → bucket mein shamil.
-      const officeTypeOfCase = officeType[e.case.bookingOfficeId];
-      if (officeTypeOfCase === "FIXED_COMMISSION" && e.deductFromCommission) continue;
-      profitOffice(e.case.bookingOfficeId).caseExpenses = profitOffice(e.case.bookingOfficeId).caseExpenses.plus(e.amount);
-      totalProfit.caseExpenses = totalProfit.caseExpenses.plus(e.amount);
+      addTo(caseExpRawByOffice, e.case.bookingOfficeId, e.amount);
     }
     for (const s of salaries) {
       const date = salaryEffectiveDate(s);
@@ -309,24 +332,31 @@ export async function GET(request: NextRequest) {
     for (const e of officeExpenses) {
       officeExpenseTotal = officeExpenseTotal.plus(e.amount);
       office(e.bookingOfficeId).officeExpenses = office(e.bookingOfficeId).officeExpenses.plus(e.amount);
-      // §W21.1 (double-count fix): office expense kab admin profit se kat-ta hai?
-      //   - PROFIT_SHARE: expense pehle hi per-member `Office expense share [id]`
-      //     EXPENSE debits se members ke payout se kat chuka hota hai (admin recover
-      //     kar leta hai) — bucket mein shamil karna DOUBLE COUNT hai. Skip.
-      //   - FIXED_COMMISSION + deductFromCommission=true: per-member
-      //     `Commission expense share [id]` debits se members se recover — Skip.
-      //   - Baqi (SALARY office, FIXED_COMMISSION flag=false): admin ka cost → include.
-      const officeTypeOfExpense = officeType[e.bookingOfficeId];
-      const borneByMembers =
-        officeTypeOfExpense === "PROFIT_SHARE" ||
-        (officeTypeOfExpense === "FIXED_COMMISSION" && e.deductFromCommission);
-      if (!borneByMembers) {
-        profitOffice(e.bookingOfficeId).officeExpenses = profitOffice(e.bookingOfficeId).officeExpenses.plus(e.amount);
-        totalProfit.officeExpenses = totalProfit.officeExpenses.plus(e.amount);
-      }
-      if (officeTypeOfExpense === "SALARY") {
+      addTo(officeExpRawByOffice, e.bookingOfficeId, e.amount);
+      if (officeType[e.bookingOfficeId] === "SALARY") {
         officeExpenseCompanyCost = officeExpenseCompanyCost.plus(e.amount);
         day(e.expenseDate).officeExpenses = day(e.expenseDate).officeExpenses.plus(e.amount);
+      }
+    }
+    // §W21.2 — ab buckets finalize: raw expense − member-tagged debits (floor 0).
+    {
+      const officeIds = new Set([
+        ...Object.keys(caseExpRawByOffice),
+        ...Object.keys(officeExpRawByOffice),
+      ]);
+      for (const officeId of officeIds) {
+        const caseBorne = Prisma.Decimal.max(
+          (caseExpRawByOffice[officeId] || zero()).minus(caseExpShareByOffice[officeId] || zero()),
+          0
+        );
+        const officeBorne = Prisma.Decimal.max(
+          (officeExpRawByOffice[officeId] || zero()).minus(officeExpShareByOffice[officeId] || zero()),
+          0
+        );
+        profitOffice(officeId).caseExpenses = profitOffice(officeId).caseExpenses.plus(caseBorne);
+        profitOffice(officeId).officeExpenses = profitOffice(officeId).officeExpenses.plus(officeBorne);
+        totalProfit.caseExpenses = totalProfit.caseExpenses.plus(caseBorne);
+        totalProfit.officeExpenses = totalProfit.officeExpenses.plus(officeBorne);
       }
     }
     for (const item of remainingRows) {

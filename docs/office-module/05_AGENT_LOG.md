@@ -1063,3 +1063,10 @@ Next step for the next agent:
 - Rule ab: caseExpenses bucket = sab offices KE SIWA FIXED_COMMISSION flag=true; officeExpenses bucket = sirf SALARY + FIXED_COMMISSION flag=false; PROFIT_SHARE ke OE kabhi nahi (members bear). LEGACY summary/days formulas untouched.
 - UI: ProfitBreakdown.companyExpenses + "Company expenses" deduction line (types.ts).
 - Verify: tsc 0, lint 0, build exit 0 (real DB). No DB change.
+
+## WAVE 21.2 — Share-office profit formula + total profit correction (commit: pending)
+- Owner report: share office ka profit aur total profit abhi b galat.
+- Deep tehqeeq (live DB audit): W21.1 ne PROFIT_SHARE office expenses POORAY skip kar diye the — galat. Members sirf apne % hissa (EXPENSE debits) bear karte hain; ADMIN ka apna hissa (OE − member debits) admin ka cost hai. Live verify: Haroon office OE=150,017, member debits=75,008.50 (50%) → admin burden 75,008.50.
+- FINAL formula (ledger-truth, type-independent): admin-borne expense = expense table total − member-tagged EXPENSE debits (remarks: `Office expense share [` / `Commission expense share [` / `Commission expense [`). Buckets per office = max(raw − memberShares, 0). User-side formulas (finance/users, profit-share pool, commission) phir bhi UNTOUCHED.
+- Live-data simulation (script = route logic, all-time): Haroon NET=529,396.50 (cash cross-check: 1,235,060 − 26,250 − 150,017 − 520,000 payouts − 9,396.50 member dues = 529,396.50 EXACT match), AW-Knj NET=161,000, TOTAL=690,396.50.
+- Verify: tsc 0, lint 0, build exit 0 (direct 5432 — pooler 6543 pe stale prepared statements 42P05 de rahe the, transient).
