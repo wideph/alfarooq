@@ -1053,3 +1053,13 @@ Next step for the next agent:
 - U1: AdminProfitStrip (period pills All time/Current month/Last month/Custom PKT, hover deductions tooltip, click → ProfitBreakdownModal with 9 deduction lines + formula), OfficesGrid +Remaining (amber) + per-office Profit modal + hover deductionsTotal, DeptCommissions card (Earned/Paid/Remaining + Pay modal + Details drawer case-by-case), CashierDeptView branch, setup DeptCommissionGrid editor (per category + per set, printing/attestation amounts) in user create/edit.
 - U2: DeptQueue rewrite — filing rows colored (pending amber / done emerald), inline upload modal (no navigation, announceOfficeChange + local flip), "Verification Sticker/Picture of student" button on all filing rows, done rows `N files ✓`; CaseFileViewer pdf.js removed → native iframe + Download button everywhere (downloadUrl); StickerChip in file lists; CaseHeaderStrip (sticky, every tab: caseNumber, client, Roll, Reg, category, status, Board Attestation #, Online Verification #); new-case BMFQ conditional Online Verification Number field.
 - Verify: tsc 0 (whole tree), lint 0, build exit 0 (real DB, BUILD_ID E119NfLfZ4pXTj1CAfm0x). Migration applied live via prisma migrate deploy — "Database schema is up to date!".
+
+## WAVE 21.1 — Admin profit double-count fix (commit: pending)
+- Owner report: admin profit formula mein expenses twice/thrice minus ho rahe the.
+- Root causes (finance/route.ts profit buckets ONLY — user formulas (finance/users, profit-share pool, commission) untouched):
+  1. PROFIT_SHARE office ke office expenses bucket mein subtract ho rahe the jabke wo W15.1 per-member `Office expense share [id]` EXPENSE debits se members ke payout se pehle hi kat chuke hote hain → DOUBLE COUNT. Ab skip.
+  2. FIXED_COMMISSION office ke deductFromCommission=true case/office expenses bucket mein subtract ho rahe the jabke wo `Commission expense [id]` / `Commission expense share [id]` member debits se recover ho chuke hote hain → DOUBLE COUNT. Ab skip.
+  3. Company expenses (CompanyExpense) profit object mein kahin shamil hi nahi the → net overstated. Ab top-level bucket mein `companyExpenses` line add (per-office scoped profit mein 0 — attributed nahi).
+- Rule ab: caseExpenses bucket = sab offices KE SIWA FIXED_COMMISSION flag=true; officeExpenses bucket = sirf SALARY + FIXED_COMMISSION flag=false; PROFIT_SHARE ke OE kabhi nahi (members bear). LEGACY summary/days formulas untouched.
+- UI: ProfitBreakdown.companyExpenses + "Company expenses" deduction line (types.ts).
+- Verify: tsc 0, lint 0, build exit 0 (real DB). No DB change.

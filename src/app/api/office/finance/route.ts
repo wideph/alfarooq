@@ -28,8 +28,16 @@ export const preferredRegion = ["sin1"];
 //
 // §W21 `profit` object (top-level + per office): raw bucket list — received,
 // expenses, aur har share/deduction ledger type ka net. Ye summary.profit se
-// alag hai: yahan officeExpenses ALL offices ki count hoti hain (admin ko
-// poora breakdown chahiye), aur net = received − deductionsTotal.
+// alag hai: yahan net = received − deductionsTotal.
+// §W21.1 expense buckets ka rule (double-count fix):
+//   - PROFIT_SHARE office: case expenses pool se pehle kat chuke hote hain
+//     (PROFIT_SHARE credits net hain) → bucket mein shamil (admin cost). Office
+//     expenses per-member EXPENSE debits se members se recover → bucket se BAHAR.
+//   - FIXED_COMMISSION office: deductFromCommission=true wale case/office
+//     expenses member-tagged EXPENSE debits se recover → bucket se BAHAR;
+//     flag=false wale admin cost → bucket mein.
+//   - SALARY office: sab expenses company cost → bucket mein.
+//   - Company expenses: sirf top-level bucket mein (kisi office se attributed nahi).
 
 const SHARE_TYPES = ["COMMISSION_HALF", "COMMISSION_ADJUST", "COMMISSION_FINAL", "EXTRA_SHARE", "PROFIT_SHARE", "ADJUSTMENT"];
 // §W21 profit buckets ke liye ledger types (SHARE_TYPES + BONUS + DEPT_COMMISSION).
@@ -66,6 +74,7 @@ type ProfitBucket = {
   received: Prisma.Decimal;
   caseExpenses: Prisma.Decimal;
   officeExpenses: Prisma.Decimal;
+  companyExpenses: Prisma.Decimal;
   commissions: Prisma.Decimal;
   profitShares: Prisma.Decimal;
   extraShares: Prisma.Decimal;
@@ -81,6 +90,7 @@ function newProfitBucket(): ProfitBucket {
     received: zero(),
     caseExpenses: zero(),
     officeExpenses: zero(),
+    companyExpenses: zero(),
     commissions: zero(),
     profitShares: zero(),
     extraShares: zero(),
@@ -110,6 +120,7 @@ function addLedgerToBucket(bucket: ProfitBucket, type: string, signed: Prisma.De
 function profitJson(bucket: ProfitBucket) {
   const deductionsTotal = bucket.caseExpenses
     .plus(bucket.officeExpenses)
+    .plus(bucket.companyExpenses)
     .plus(bucket.commissions)
     .plus(bucket.profitShares)
     .plus(bucket.extraShares)
@@ -121,6 +132,7 @@ function profitJson(bucket: ProfitBucket) {
     received: toNumber(bucket.received),
     caseExpenses: toNumber(bucket.caseExpenses),
     officeExpenses: toNumber(bucket.officeExpenses),
+    companyExpenses: toNumber(bucket.companyExpenses),
     commissions: toNumber(bucket.commissions),
     profitShares: toNumber(bucket.profitShares),
     extraShares: toNumber(bucket.extraShares),
@@ -167,7 +179,7 @@ export async function GET(request: NextRequest) {
         }),
         prisma.caseExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
-          select: { amount: true, expenseDate: true, case: { select: { bookingOfficeId: true } } },
+          select: { amount: true, expenseDate: true, deductFromCommission: true, case: { select: { bookingOfficeId: true } } },
         }),
         prisma.salaryEntry.findMany({
           where: inRange
@@ -187,7 +199,7 @@ export async function GET(request: NextRequest) {
         // §N8 — office-level general expenses (OfficeExpense); typed per office below.
         prisma.officeExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
-          select: { amount: true, expenseDate: true, bookingOfficeId: true },
+          select: { amount: true, expenseDate: true, deductFromCommission: true, bookingOfficeId: true },
         }),
         totalLiabilities(),
         getOfficeDirectory(),
@@ -264,6 +276,14 @@ export async function GET(request: NextRequest) {
     for (const e of caseExpenses) {
       caseExpenseTotal = caseExpenseTotal.plus(e.amount);
       day(e.expenseDate).caseExpenses = day(e.expenseDate).caseExpenses.plus(e.amount);
+      // §W21.1 (double-count fix): FIXED_COMMISSION office ka case expense jab
+      // deductFromCommission=true ho to wo pehle hi member ke `Commission expense [id]`
+      // EXPENSE debit se uske payout se kat chuka hota hai (admin recover kar leta
+      // hai) — admin profit se dobara minus karna DOUBLE COUNT hai. Skip karo.
+      // Har aur haal mein (PROFIT_SHARE pool / SALARY / commission flag=false)
+      // expense admin ka cost hai → bucket mein shamil.
+      const officeTypeOfCase = officeType[e.case.bookingOfficeId];
+      if (officeTypeOfCase === "FIXED_COMMISSION" && e.deductFromCommission) continue;
       profitOffice(e.case.bookingOfficeId).caseExpenses = profitOffice(e.case.bookingOfficeId).caseExpenses.plus(e.amount);
       totalProfit.caseExpenses = totalProfit.caseExpenses.plus(e.amount);
     }
@@ -278,6 +298,9 @@ export async function GET(request: NextRequest) {
     for (const e of otherExpenses) {
       otherTotal = otherTotal.plus(e.amount);
       day(e.expenseDate).otherExpenses = day(e.expenseDate).otherExpenses.plus(e.amount);
+      // §W21.1: company expenses admin profit ka hissa hain (kisi ek office se
+      // attributed nahi — sirf top-level bucket mein).
+      totalProfit.companyExpenses = totalProfit.companyExpenses.plus(e.amount);
     }
     // §N8: every OfficeExpense shows in the per-office breakdown; only SALARY
     // office expenses are company costs (others are already netted via ledger
@@ -286,9 +309,22 @@ export async function GET(request: NextRequest) {
     for (const e of officeExpenses) {
       officeExpenseTotal = officeExpenseTotal.plus(e.amount);
       office(e.bookingOfficeId).officeExpenses = office(e.bookingOfficeId).officeExpenses.plus(e.amount);
-      profitOffice(e.bookingOfficeId).officeExpenses = profitOffice(e.bookingOfficeId).officeExpenses.plus(e.amount);
-      totalProfit.officeExpenses = totalProfit.officeExpenses.plus(e.amount);
-      if (officeType[e.bookingOfficeId] === "SALARY") {
+      // §W21.1 (double-count fix): office expense kab admin profit se kat-ta hai?
+      //   - PROFIT_SHARE: expense pehle hi per-member `Office expense share [id]`
+      //     EXPENSE debits se members ke payout se kat chuka hota hai (admin recover
+      //     kar leta hai) — bucket mein shamil karna DOUBLE COUNT hai. Skip.
+      //   - FIXED_COMMISSION + deductFromCommission=true: per-member
+      //     `Commission expense share [id]` debits se members se recover — Skip.
+      //   - Baqi (SALARY office, FIXED_COMMISSION flag=false): admin ka cost → include.
+      const officeTypeOfExpense = officeType[e.bookingOfficeId];
+      const borneByMembers =
+        officeTypeOfExpense === "PROFIT_SHARE" ||
+        (officeTypeOfExpense === "FIXED_COMMISSION" && e.deductFromCommission);
+      if (!borneByMembers) {
+        profitOffice(e.bookingOfficeId).officeExpenses = profitOffice(e.bookingOfficeId).officeExpenses.plus(e.amount);
+        totalProfit.officeExpenses = totalProfit.officeExpenses.plus(e.amount);
+      }
+      if (officeTypeOfExpense === "SALARY") {
         officeExpenseCompanyCost = officeExpenseCompanyCost.plus(e.amount);
         day(e.expenseDate).officeExpenses = day(e.expenseDate).officeExpenses.plus(e.amount);
       }

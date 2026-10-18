@@ -247,6 +247,7 @@ export type ProfitBreakdown = {
   received: number;
   caseExpenses: number;
   officeExpenses: number;
+  companyExpenses: number;
   commissions: number;
   profitShares: number;
   extraShares: number;
@@ -262,6 +263,7 @@ export const EMPTY_PROFIT: ProfitBreakdown = {
   received: 0,
   caseExpenses: 0,
   officeExpenses: 0,
+  companyExpenses: 0,
   commissions: 0,
   profitShares: 0,
   extraShares: 0,
@@ -280,6 +282,7 @@ export function normalizeProfit(raw: any): ProfitBreakdown | null {
     received: num(raw.received),
     caseExpenses: num(raw.caseExpenses),
     officeExpenses: num(raw.officeExpenses),
+    companyExpenses: num(raw.companyExpenses),
     commissions: num(raw.commissions),
     profitShares: num(raw.profitShares),
     extraShares: num(raw.extraShares),
@@ -296,6 +299,7 @@ export function normalizeProfit(raw: any): ProfitBreakdown | null {
 export const PROFIT_DEDUCTION_LINES: Array<{ key: keyof ProfitBreakdown; label: string }> = [
   { key: "caseExpenses", label: "Case expenses" },
   { key: "officeExpenses", label: "Office expenses" },
+  { key: "companyExpenses", label: "Company expenses" },
   { key: "commissions", label: "Commissions" },
   { key: "profitShares", label: "Profit shares" },
   { key: "extraShares", label: "Extra shares" },
