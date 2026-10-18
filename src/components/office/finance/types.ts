@@ -240,6 +240,189 @@ export type PayoutRequestRow = {
 
 /* --------------------------- Finance report (existing) --------------------------- */
 
+// §W21 — Admin profit breakdown (GET /api/office/finance ...profit). Top-level
+// profit is period-scoped; with ?officeId= it is scoped to that office. Har
+// offices[] row bhi apna `profit` object + `remaining` (Σ baqi) rakhta hai.
+export type ProfitBreakdown = {
+  received: number;
+  caseExpenses: number;
+  officeExpenses: number;
+  commissions: number;
+  profitShares: number;
+  extraShares: number;
+  salaries: number;
+  bonuses: number;
+  deptCommissions: number;
+  adjustments: number;
+  deductionsTotal: number;
+  net: number;
+};
+
+export const EMPTY_PROFIT: ProfitBreakdown = {
+  received: 0,
+  caseExpenses: 0,
+  officeExpenses: 0,
+  commissions: 0,
+  profitShares: 0,
+  extraShares: 0,
+  salaries: 0,
+  bonuses: 0,
+  deptCommissions: 0,
+  adjustments: 0,
+  deductionsTotal: 0,
+  net: 0,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeProfit(raw: any): ProfitBreakdown | null {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    received: num(raw.received),
+    caseExpenses: num(raw.caseExpenses),
+    officeExpenses: num(raw.officeExpenses),
+    commissions: num(raw.commissions),
+    profitShares: num(raw.profitShares),
+    extraShares: num(raw.extraShares),
+    salaries: num(raw.salaries),
+    bonuses: num(raw.bonuses),
+    deptCommissions: num(raw.deptCommissions),
+    adjustments: num(raw.adjustments),
+    deductionsTotal: num(raw.deductionsTotal),
+    net: num(raw.net),
+  };
+}
+
+// Profit deduction lines — modal mein isi order mein dikhte hain.
+export const PROFIT_DEDUCTION_LINES: Array<{ key: keyof ProfitBreakdown; label: string }> = [
+  { key: "caseExpenses", label: "Case expenses" },
+  { key: "officeExpenses", label: "Office expenses" },
+  { key: "commissions", label: "Commissions" },
+  { key: "profitShares", label: "Profit shares" },
+  { key: "extraShares", label: "Extra shares" },
+  { key: "salaries", label: "Salaries" },
+  { key: "bonuses", label: "Bonuses" },
+  { key: "deptCommissions", label: "Dept commissions" },
+  { key: "adjustments", label: "Adjustments" },
+];
+
+/* --------------------- Profit period selector (§W21) --------------------- */
+
+export type ProfitPeriod = "ALL" | "THIS_MONTH" | "LAST_MONTH" | "CUSTOM";
+
+export const PROFIT_PERIOD_LABELS: Record<ProfitPeriod, string> = {
+  ALL: "All time",
+  THIS_MONTH: "Current month",
+  LAST_MONTH: "Last month",
+  CUSTOM: "Custom",
+};
+
+export const ALL_TIME_FROM = "2020-01-01";
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function fmtYMD(d: Date) {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+// Period → from/to (YYYY-MM-DD). PKT-shifted "today" (todayInputDate jaisa)
+// taake month boundaries Pakistan time ke mutabiq hon.
+export function profitPeriodRange(
+  period: ProfitPeriod,
+  custom?: { from: string; to: string }
+): { from: string; to: string } {
+  const now = new Date(Date.now() + 5 * 3_600_000);
+  const today = fmtYMD(now);
+  if (period === "THIS_MONTH") {
+    return { from: `${now.getUTCFullYear()}-${pad2(now.getUTCMonth() + 1)}-01`, to: today };
+  }
+  if (period === "LAST_MONTH") {
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
+    return { from: fmtYMD(first), to: fmtYMD(last) };
+  }
+  if (period === "CUSTOM" && custom?.from && custom?.to) {
+    return { from: custom.from, to: custom.to };
+  }
+  return { from: ALL_TIME_FROM, to: today };
+}
+
+/* -------------------- Dept commissions (§W21, contract 2) -------------------- */
+
+export type DeptCommissionRule = {
+  categoryId: string;
+  categoryName: string;
+  setId: string | null;
+  setName: string | null;
+  printAmount: number;
+  attestationAmount: number;
+};
+
+export type DeptCommissionSummaryUser = {
+  adminId: string;
+  name: string;
+  role: string;
+  earned: number;
+  paid: number;
+  remaining: number;
+};
+
+export type DeptCommissionEntry = {
+  id: string;
+  entryDate: string;
+  kind: "PRINTING" | "ATTESTATION";
+  amount: number;
+  caseId: string;
+  caseNumber: string;
+  caseCategory: string;
+};
+
+export type DeptCommissionPayout = {
+  id: string;
+  entryDate: string;
+  amount: number;
+  method: string | null;
+  remarks: string | null;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeDeptSummary(data: any): DeptCommissionSummaryUser[] {
+  const list: unknown[] = Array.isArray(data) ? data : (data?.users ?? []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return list.map((raw: any) => ({
+    adminId: String(raw?.adminId ?? raw?.id ?? ""),
+    name: String(raw?.name ?? "—"),
+    role: String(raw?.role ?? ""),
+    earned: num(raw?.earned),
+    paid: num(raw?.paid),
+    remaining: num(raw?.remaining ?? num(raw?.earned) - num(raw?.paid)),
+  })).filter((row) => row.adminId);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeDeptEntries(data: any): { entries: DeptCommissionEntry[]; payouts: DeptCommissionPayout[] } {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const entries = (Array.isArray(data?.entries) ? data.entries : []).map((raw: any) => ({
+    id: String(raw?.id ?? ""),
+    entryDate: String(raw?.entryDate ?? raw?.date ?? ""),
+    kind: (raw?.kind === "ATTESTATION" ? "ATTESTATION" : "PRINTING") as "PRINTING" | "ATTESTATION",
+    amount: num(raw?.amount),
+    caseId: String(raw?.caseId ?? ""),
+    caseNumber: String(raw?.caseNumber ?? "—"),
+    caseCategory: String(raw?.caseCategory ?? ""),
+  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payouts = (Array.isArray(data?.payouts) ? data.payouts : []).map((raw: any) => ({
+    id: String(raw?.id ?? ""),
+    entryDate: String(raw?.entryDate ?? raw?.date ?? ""),
+    amount: num(raw?.amount),
+    method: raw?.method ? String(raw.method) : null,
+    remarks: raw?.remarks ? String(raw.remarks) : null,
+  }));
+  return { entries, payouts };
+}
+
 export type FinanceReportOffice = {
   id: string;
   name: string;
@@ -248,6 +431,10 @@ export type FinanceReportOffice = {
   commissions: number;
   salaries: number;
   officeExpenses: number;
+  /** §W21: Σ baqi amounts of this office's cases. */
+  remaining?: number;
+  /** §W21: is office ka profit breakdown (same shape as top-level profit). */
+  profit?: ProfitBreakdown | null;
 };
 
 export type FinanceReport = {
@@ -266,6 +453,8 @@ export type FinanceReport = {
     paymentsCount: number;
   };
   offices: FinanceReportOffice[];
+  /** §W21: admin profit breakdown (period / office scoped). */
+  profit?: ProfitBreakdown | null;
 };
 
 /* --------------------------------- Ledger --------------------------------- */

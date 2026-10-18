@@ -7,9 +7,11 @@ import { deptPermissionsOf, findAccessibleCase } from "@/lib/office/case-access"
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { deleteOfficeFile, getOfficeFileSignedUrl, uploadDepartmentFile } from "@/lib/office/r2";
 import { cleanText, toJson } from "@/lib/office/serializers";
+import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   CASE_DEPARTMENTS,
   DEPARTMENT_PERMISSIONS,
+  VERIFICATION_STICKER_STEP_KEY,
   evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
@@ -72,6 +74,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         uploadedById: file.uploadedById,
         uploadedByName: names[file.uploadedById] || null,
         url: await getOfficeFileSignedUrl(file.fileKey),
+        // W21: forced-attachment download (filename = title when present).
+        downloadUrl: await getOfficeFileSignedUrl(file.fileKey, 900, {
+          download: file.title || true,
+        }),
       }))
     );
     return NextResponse.json({ items: toJson(items) });
@@ -136,10 +142,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       let nextStatus = item.status;
       const caseData: { status?: string; isPrinted?: boolean; printedAt?: Date } = {};
+      // W21: verification stickers (FILING + stepKey VERIFICATION_STICKER) are
+      // allowed ANYTIME — they never trigger the filing→printing transition
+      // and never count as the "first filing file".
+      const isSticker = department === "FILING" && stepKey === VERIFICATION_STICKER_STEP_KEY;
 
-      if (department === "FILING" && item.status === "WAITING_FOR_FILE") {
+      if (department === "FILING" && !isSticker && item.status === "WAITING_FOR_FILE") {
         const earlier = await tx.caseFile.count({
-          where: { caseId: id, department: "FILING", id: { not: created.id } },
+          where: {
+            caseId: id,
+            department: "FILING",
+            id: { not: created.id },
+            // Stickers uploaded earlier must not mark filing as done.
+            OR: [{ stepKey: null }, { stepKey: { not: VERIFICATION_STICKER_STEP_KEY } }],
+          },
         });
         if (earlier === 0) {
           caseData.status = "WAITING_FOR_PRINTING";
@@ -176,8 +192,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         if (completed) nextStatus = "ATTESTATION_COMPLETE";
       }
 
-      return { created, nextStatus };
+      return { created, nextStatus, completed };
     }, { maxWait: 10000, timeout: 30000 });
+
+    // F4: department commission credits (never throw, never fail the upload).
+    // PRINTING → the acting printing user earned when this first printing
+    // file moved the case to PRINTED; ATTESTATION → the acting attestation
+    // user earned when the case just flipped to ATTESTATION_COMPLETE.
+    const printedNow = result.nextStatus === "PRINTED" && item.status === "WAITING_FOR_PRINTING";
+    if (printedNow) {
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+    }
+    if (result.completed) {
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
+    }
 
     // W13.2: audit log + notifications response ke baad (R2 upload request
     // path mein rehta hai — file upload ke baghair row ka koi matlab nahi).

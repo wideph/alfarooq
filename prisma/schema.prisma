@@ -24,6 +24,8 @@ model Admin {
   bookingOffice   BookingOffice? @relation(fields: [bookingOfficeId], references: [id], onDelete: SetNull)
   officeMember    BookingOfficeMember?
   notifications   Notification[]
+  ledgerEntries   LedgerEntry[]
+  departmentCommissionRules DepartmentCommissionRule[]
 
   @@index([bookingOfficeId])
 }
@@ -259,6 +261,27 @@ model CaseCategory {
   cases         Case[]
   commissions   BookingOfficeCommission[]
   sets          CategorySet[]
+  departmentCommissionRules DepartmentCommissionRule[]
+}
+
+// Wave 21: department commission rules — per admin × category (× set).
+// setId "" = category-wide default (whole category); kisi specific set ke liye
+// rule ho to setId us set ki id hoti hai. printAmount / attestationAmount se
+// DEPT_COMMISSION ledger entries banti hain (dept-commission.ts).
+model DepartmentCommissionRule {
+  id                String   @id @default(cuid())
+  adminId           String
+  categoryId        String
+  setId             String   @default("")
+  printAmount       Decimal  @default(0) @db.Decimal(12, 2)
+  attestationAmount Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  admin    Admin        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  category CaseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, categoryId, setId])
 }
 
 model AttestationType {
@@ -322,6 +345,8 @@ model Case {
   agreedAmountRemarks      String?
   courierNumber            String?
   boardAttestationNumber   String?
+  // Wave 21: board/case online verification tracking number (manual entry).
+  onlineVerificationNumber String?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -424,6 +449,9 @@ model CaseExpense {
   amount      Decimal  @db.Decimal(12, 2)
   description String
   expenseDate DateTime
+  // Wave 21 (F3): FIXED_COMMISSION office ho aur flag on ho to expense ka
+  // DEBIT case ke commission member ke ledger se kat-ta hai (EXPENSE entry).
+  deductFromCommission Boolean @default(false)
   createdById String
   createdAt   DateTime @default(now())
   case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -438,7 +466,11 @@ model LedgerEntry {
   memberId        String?
   caseId          String?
   paymentId       String?
-  // COMMISSION_HALF | COMMISSION_FINAL | COMMISSION_ADJUST | EXTRA_SHARE | PROFIT_SHARE | PAYOUT | ADJUSTMENT | DISCOUNT | BONUS
+  // Wave 21: optional admin attribution (e.g. department commission entries
+  // credited against a specific admin). SetNull on admin delete.
+  adminId         String?
+  // COMMISSION_HALF | COMMISSION_FINAL | COMMISSION_ADJUST | EXTRA_SHARE | PROFIT_SHARE |
+  // PAYOUT | ADJUSTMENT | DISCOUNT | BONUS | EXPENSE | DEPT_COMMISSION
   type            String
   // CREDIT | DEBIT
   direction       String
@@ -453,12 +485,14 @@ model LedgerEntry {
   member        BookingOfficeMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
   case          Case?                @relation(fields: [caseId], references: [id], onDelete: SetNull)
   payment       Payment?             @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  admin         Admin?               @relation(fields: [adminId], references: [id], onDelete: SetNull)
 
   @@index([bookingOfficeId, entryDate])
   @@index([memberId])
   @@index([memberId, type, direction])
   @@index([caseId])
   @@index([entryDate])
+  @@index([adminId])
 }
 
 model SalaryEntry {
@@ -676,6 +710,10 @@ model OfficeExpense {
   amount          Decimal  @db.Decimal(12, 2)
   description     String
   expenseDate     DateTime
+  // Wave 21 (F5): FIXED_COMMISSION office ho aur flag on ho to expense active
+  // members par profitPercent se split ho kar un ke commission ledger se
+  // kat-ta hai (per-member EXPENSE DEBIT rows).
+  deductFromCommission Boolean @default(false)
   createdById     String
   createdAt       DateTime @default(now())
 

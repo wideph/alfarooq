@@ -59,6 +59,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       data.agreedAmountRemarks = cleanText(body.agreedAmountRemarks, 500);
     }
     if (body.courierNumber !== undefined) data.courierNumber = cleanText(body.courierNumber, 120);
+    // §W21: online verification number — nullable-able string field.
+    if (body.onlineVerificationNumber !== undefined) {
+      data.onlineVerificationNumber = cleanText(body.onlineVerificationNumber, 120);
+    }
     if (body.isUrgent !== undefined) data.isUrgent = Boolean(body.isUrgent);
 
     // §W11.6: filing-files visibility for booking office users — admin-only.

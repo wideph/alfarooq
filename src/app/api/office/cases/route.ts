@@ -65,6 +65,10 @@ async function serializeDeptQueueCase(item: DeptQueueRow) {
     courierNumber: item.courierNumber,
     createdAt: item.createdAt,
     currentAttestationId: item.currentAttestationId,
+    // W21: verification number + filing done-state on slim rows too.
+    onlineVerificationNumber: item.onlineVerificationNumber ?? null,
+    filingFilesCount: item._count.files,
+    filingDone: item._count.files > 0,
     limited: true,
   });
 }
@@ -96,6 +100,9 @@ const caseListRowInclude = {
     orderBy: { expenseDate: "desc" as const },
     select: { amount: true, description: true },
   },
+  // W21: filtered count — filing queue rows need filingFilesCount/filingDone
+  // (pending vs done colors). Prisma filtered _count keeps this free.
+  _count: { select: { files: { where: { department: "FILING" } } } },
 } satisfies Prisma.CaseInclude;
 
 export async function GET(request: NextRequest) {
@@ -163,6 +170,17 @@ export async function GET(request: NextRequest) {
     prisma.case.count({ where }),
   ]);
 
+  // W21: filing queue (non-history) — pending (WAITING_FOR_FILE) pehle, phir
+  // done rows; stable sort se group ke andar isUrgent/newest order wahi rehta
+  // hai. (Page-level sort: filing queue chhoti hoti hai.)
+  if (dept === "filing" && !history) {
+    items.sort((a, b) => {
+      const aPending = a.status === "WAITING_FOR_FILE" ? 0 : 1;
+      const bPending = b.status === "WAITING_FOR_FILE" ? 0 : 1;
+      return aPending - bPending;
+    });
+  }
+
   // §N7: filing department gets the stripped payload (no money fields).
   // Cache-Control: no-store — list har waqt fresh honi chahiye (live refresh).
   const NO_STORE = { "Cache-Control": "no-store" };
@@ -188,6 +206,11 @@ export async function GET(request: NextRequest) {
       // expenseSummary pehle se computed hain.
       delete row.payments;
       delete row.expenses;
+      // W21: filing queue pending/done flags (slim rows bhi — upar
+      // serializeDeptQueueCase mein). onlineVerificationNumber serializeCaseRow
+      // ke ...item spread se khud aa jata hai.
+      row.filingFilesCount = item._count.files;
+      row.filingDone = item._count.files > 0;
       row.limited = false;
       return row;
     })
@@ -320,6 +343,8 @@ export async function POST(request: NextRequest) {
           agreedAmount: agreedAmount ?? new Prisma.Decimal(0),
           agreedAmountRemarks: cleanText(body.agreedAmountRemarks, 500),
           courierNumber: cleanText(body.courierNumber, 120),
+          // W21: optional online verification number (sticker flow, F2/F3).
+          onlineVerificationNumber: cleanText(body.onlineVerificationNumber, 60),
           isUrgent: Boolean(body.isUrgent),
           clientPictureKey,
           clientPictureType,

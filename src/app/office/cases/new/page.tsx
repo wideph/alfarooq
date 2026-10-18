@@ -33,6 +33,7 @@ export default function NewCasePage() {
     agreedAmount: "",
     agreedAmountRemarks: "",
     notes: "",
+    onlineVerificationNumber: "",
     attestationTypeIds: [] as string[],
     contacts: [{ phone: "", label: "" }],
     addresses: [{ address: "", label: "" }],
@@ -101,6 +102,10 @@ export default function NewCasePage() {
 
   const hasRorReg = Boolean(form.rollNumber.trim() || form.registrationNumber.trim());
 
+  // §W21: BMFQ category par "Online Verification Number" ka extra field
+  // (optional) — baqi categories par hidden rehta hai.
+  const isBmfq = (categories.find((c) => c.id === form.categoryId)?.name || "").toLowerCase().includes("bmfq");
+
   async function submit() {
     setError("");
     // §N7: Roll Number ya Registration Number — in men se aik lazmi hai (client-side check).
@@ -126,6 +131,9 @@ export default function NewCasePage() {
     fd.append("agreedAmount", form.agreedAmount);
     fd.append("agreedAmountRemarks", form.agreedAmountRemarks);
     fd.append("notes", form.notes);
+    if (isBmfq && form.onlineVerificationNumber.trim()) {
+      fd.append("onlineVerificationNumber", form.onlineVerificationNumber.trim());
+    }
     fd.append("contacts", JSON.stringify(form.contacts));
     fd.append("addresses", JSON.stringify(form.addresses));
     fd.append("attestationTypeIds", JSON.stringify(form.attestationTypeIds));
@@ -203,6 +211,18 @@ export default function NewCasePage() {
             <p className={`text-xs ${hasRorReg ? "text-slate-400" : "text-amber-600 font-semibold"}`}>
               Roll Number ya Registration Number — in men se aik lazmi hai
             </p>
+            {isBmfq && (
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Online Verification Number (optional)</label>
+                <input
+                  className={input}
+                  maxLength={60}
+                  value={form.onlineVerificationNumber}
+                  onChange={(e) => setForm({ ...form, onlineVerificationNumber: e.target.value })}
+                  placeholder="BMFQ online verification number"
+                />
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Agreed total amount (Rs)</label>

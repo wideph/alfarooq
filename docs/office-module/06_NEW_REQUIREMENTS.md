@@ -624,3 +624,35 @@ Owner: (1) dept tab counts click/focus ke baghair nahi dikhte — bina kisi inte
 - R3: R2 signed URLs parallel/batch + longer cache; setup/static data unstable_cache + mutation invalidation; client double-fetch removal.
 - R4: mutations — tx round-trips kam (createMany/updateMany/batch), client optimistic updates jahan safe.
 - R5: final audit sweep + bench before/after + verify (tsc 0, lint 0, build 0) + push.
+
+---
+
+## WAVE 21 — Finance profit/remaining + dept commissions + filing UX + viewer/header polish (2026-10-15)
+
+Owner ke points:
+- F1: admin finance mein har office ki TOTAL REMAINING (cases ki baqi amounts) show ho.
+- F2: admin profit = received − (expenses + commissions + shares + salaries + dept commissions); all-time/current month/last month/custom range; click → deduction breakdown popup; hover → deductions total. Per-office bhi same (click office → us office ka profit, hover/click breakdown, period filters).
+- F3/F5: FIXED_COMMISSION offices mein case/office expenses commission user se TAB TAK minus na hon jab tak admin expense add karte waqt "commission user ke khatay se minus" option select na kare (flag per expense). PROFIT_SHARE offices ka formula unchanged (case expenses pool se, office expenses per-share).
+- F4: printing/attestation dept users ka commission per category + per Set of Attestations grid (user create/edit mein); printing complete → printing commission, attestation complete → attestation commission (case-by-case entries + finance account + payout ke baad remaining).
+- F6: filing tab mein files upload ho jane ke baad bhi cases show hon (disappear NAHIN); uploaded vs pending rows ke background colors different; navbar count sirf pending ka.
+- F7: filing list ka upload button inline upload khole (detail page pe NA jaye); row ke baqi hisse pe click → detail page.
+- F8: har filing case ke neeche doosra button "Verification Sticker/Picture of student" (image/word/pdf) — har woh jagah show ho jahan files show hoti hain.
+- F9: PDF in-app view fix + download option.
+- F10: case detail page top pe hamesha case name + roll number + category (har tab pe).
+- F11: attestation tab mein board attestation number show ho (serializer mein field missing thi).
+- F12: category mein "bmfq" ho to new case form mein "Online Verification Number" extra field; har jagah show ho jahan case dekhne ki permission hai.
+
+### Schema (S owns; migration 20261015120000_office_wave21)
+- Case.onlineVerificationNumber String?
+- CaseExpense.deductFromCommission Boolean @default(false); OfficeExpense.deductFromCommission Boolean @default(false)
+- LedgerEntry.adminId String? (+index) — dept commission/payout attribution (memberId null rehta hai)
+- DepartmentCommissionRule { adminId, categoryId, setId String @default(""), printAmount Decimal(12,2) @default(0), attestationAmount Decimal(12,2) @default(0), @@unique([adminId, categoryId, setId]) }
+
+### Contracts
+- Finance report GET /api/office/finance?from&to&officeId → + offices[].remaining; + profit { received, caseExpenses, officeExpenses, commissions, profitShares, extraShares, salaries, bonuses, deptCommissions, adjustments, deductionsTotal, net } (period-filtered; officeId scoped variant same shape)
+- Dept commissions: GET/PUT /api/office/dept-commissions/rules?adminId=; GET /api/office/dept-commissions/summary → [{adminId,name,role,earned,paid,remaining}]; GET /api/office/dept-commissions/entries?adminId= → case-by-case; POST /api/office/dept-commissions/payout {adminId,amount,method,entryDate,remarks}
+- Ledger type "DEPT_COMMISSION" (CREDIT) — printing: first PRINTING file → PRINTED transition pe uploader ko rule amount; attestation: case → ATTESTATION_COMPLETE pe acting user ko; idempotent (per case+kind+admin single entry)
+- Expenses POST (case + office) accept deductFromCommission; FIXED_COMMISSION + flag → member-tagged EXPENSE DEBIT (case expense → us case ka commission member; office expense → members split by profitPercent fallback equal); list items carry flag
+- Cases list filing queue: pending (WAITING_FOR_FILE) + filing-done (has FILING file) union; rows + filingFilesCount, filingDone, onlineVerificationNumber
+- Files: stepKey=VERIFICATION_STICKER (department FILING) — workflow transition trigger NAHI karta; files GET items + downloadUrl
+- Case detail payload: + onlineVerificationNumber, boardAttestationNumber (always included)

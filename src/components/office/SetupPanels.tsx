@@ -16,6 +16,15 @@ import {
   type OfficeRole,
 } from "@/lib/office/permissions";
 import type { ToastKind } from "@/components/Toast";
+import {
+  DEPT_COMMISSION_HINT,
+  DeptCommissionGridEditor,
+  DeptCommissionRowsEditor,
+  isDeptCommissionRole,
+  saveCommissionRules,
+  serializeRuleRows,
+  type CommissionRuleDraft,
+} from "./setup/DeptCommissionGrid";
 
 type Category = { id: string; name: string; defaultAmount: number | null; order: number; isActive: boolean };
 type AttestationType = { id: string; name: string; order: number; isActive: boolean };
@@ -539,14 +548,21 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
             ) : (
               <div className="space-y-2">
                 {userDrafts.map((draft, index) => (
-                  <UserDraftFields
-                    key={index}
-                    draft={draft}
-                    onChange={(next) =>
-                      setUserDrafts(userDrafts.map((item, i) => (i === index ? next : item)))
-                    }
-                    onRemove={() => setUserDrafts(userDrafts.filter((_, i) => i !== index))}
-                  />
+                  <div key={index} className="space-y-1">
+                    <UserDraftFields
+                      draft={draft}
+                      onChange={(next) =>
+                        setUserDrafts(userDrafts.map((item, i) => (i === index ? next : item)))
+                      }
+                      onRemove={() => setUserDrafts(userDrafts.filter((_, i) => i !== index))}
+                    />
+                    {isDeptCommissionRole(draft.role) && (
+                      <p className="rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
+                        {DEPT_COMMISSION_HINT} Commission grid office banne ke baad &quot;Login users&quot;
+                        section mein is user ke neeche set karein.
+                      </p>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -657,15 +673,22 @@ function OfficeUsersEditor({
   onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(emptyUserDraft());
+  const [ruleRows, setRuleRows] = useState<CommissionRuleDraft[]>([]);
   const [adding, setAdding] = useState(false);
+  // Existing user ka khula hua commission grid editor (adminId).
+  const [gridFor, setGridFor] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(emptyUserDraft());
+    setRuleRows([]);
+    setGridFor(null);
   }, [office.id]);
+
+  const draftIsDept = isDeptCommissionRole(draft.role);
 
   async function add() {
     setAdding(true);
-    const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/users`, {
+    const res = await officeFetch<{ id: string }>(`/api/office/setup/booking-offices/${office.id}/users`, {
       method: "POST",
       json: {
         name: draft.name.trim(),
@@ -674,9 +697,21 @@ function OfficeUsersEditor({
         role: draft.role,
       },
     });
-    onMessage(res.ok ? "User add ho gaya" : res.error, res.ok ? "success" : "error");
+    // §W21: dept role + grid rows → user banne ke baad rules bhi save.
+    let rulesNote = "";
+    if (res.ok && draftIsDept && serializeRuleRows(ruleRows).length > 0) {
+      const rulesRes = await saveCommissionRules(res.data.id, ruleRows);
+      rulesNote = rulesRes.ok
+        ? " — commission grid bhi save"
+        : ` — lekin commission grid save nahi hui (${rulesRes.error})`;
+    }
+    onMessage(
+      res.ok ? `User add ho gaya${rulesNote}` : res.error,
+      res.ok ? (rulesNote.includes("nahi hui") ? "info" : "success") : "error"
+    );
     if (res.ok) {
       setDraft(emptyUserDraft());
+      setRuleRows([]);
       await onChanged();
     }
     setAdding(false);
@@ -694,27 +729,55 @@ function OfficeUsersEditor({
       {office.users.length > 0 && (
         <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
           {office.users.map((user) => (
-            <div key={user.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-              <div className="min-w-0">
-                <p className={`truncate font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>
-                  {user.name}
-                </p>
-                <p className="truncate text-xs text-slate-500">{user.email}</p>
+            <div key={user.id} className="p-3 text-sm space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={`truncate font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>
+                    {user.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">{user.email}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
+                    {ROLE_LABELS[user.role] || user.role}
+                  </span>
+                  {!user.isActive && (
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
+                  )}
+                  {isDeptCommissionRole(user.role) && (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      onClick={() => setGridFor(gridFor === user.id ? null : user.id)}
+                    >
+                      {gridFor === user.id ? "Grid band karein" : "Commission"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
-                  {ROLE_LABELS[user.role] || user.role}
-                </span>
-                {!user.isActive && (
-                  <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
-                )}
-              </div>
+              {gridFor === user.id && isDeptCommissionRole(user.role) && (
+                <DeptCommissionGridEditor
+                  adminId={user.id}
+                  userName={user.name}
+                  onMessage={onMessage}
+                  onSaved={onChanged}
+                />
+              )}
             </div>
           ))}
         </div>
       )}
 
       <UserDraftFields draft={draft} onChange={setDraft} />
+      {draftIsDept && (
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Commission grid (optional)</p>
+            <p className="text-xs text-slate-500">{DEPT_COMMISSION_HINT}</p>
+          </div>
+          <DeptCommissionRowsEditor rows={ruleRows} onChange={setRuleRows} />
+        </div>
+      )}
       <div>
         <button
           className={primaryBtn}

@@ -6,6 +6,7 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { evaluateCaseCompletion } from "@/lib/office/workflow";
+import { creditDeptCommission } from "@/lib/office/dept-commission";
 import { toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -65,6 +66,12 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       },
       { maxWait: 10000, timeout: 30000 }
     );
+
+    // F4: case abhi ATTESTATION_COMPLETE hua (is request se) → acting
+    // attestation user ka commission credit (idempotent, never throws).
+    if (result.status === "ATTESTATION_COMPLETE" && item.status !== "ATTESTATION_COMPLETE") {
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
+    }
 
     // W13.2: audit log + notifications response ke baad.
     after(async () => {

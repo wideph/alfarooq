@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Building2 } from "lucide-react";
+import { ArrowRight, Building2, Scale } from "lucide-react";
 import { formatMoney } from "@/lib/office/client";
 import type { BookingOfficeType } from "@/lib/office/permissions";
 import { OfficeTypeChip, SectionHeader } from "./ui";
+import type { ProfitBreakdown } from "./types";
 
 export type OfficeCardData = {
   officeId: string;
@@ -13,10 +14,20 @@ export type OfficeCardData = {
   received: number;
   expenses: number;
   dues: number;
+  /** §W21: Σ baqi amounts of this office's cases (amber). */
+  remaining: number;
+  /** §W21: is office ka profit breakdown — hover tooltip + modal ke liye. */
+  profit: ProfitBreakdown | null;
 };
 
 // Ek compact card per office — kai offices hon to grid wrap ho jati hai.
-export default function OfficesGrid({ offices }: { offices: OfficeCardData[] }) {
+export default function OfficesGrid({
+  offices,
+  onProfit,
+}: {
+  offices: OfficeCardData[];
+  onProfit?: (office: OfficeCardData) => void;
+}) {
   return (
     <section className="space-y-2">
       <SectionHeader
@@ -34,6 +45,11 @@ export default function OfficesGrid({ offices }: { offices: OfficeCardData[] }) 
             <div
               key={office.officeId}
               className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              title={
+                office.profit
+                  ? `Total deductions: ${formatMoney(office.profit.deductionsTotal)}`
+                  : undefined
+              }
             >
               <div className="flex flex-wrap items-center gap-2">
                 <p className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{office.officeName}</p>
@@ -54,13 +70,30 @@ export default function OfficesGrid({ offices }: { offices: OfficeCardData[] }) 
                     {formatMoney(office.dues)}
                   </dd>
                 </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-slate-500">Remaining (baqi)</dt>
+                  <dd className={`font-bold ${office.remaining > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                    {formatMoney(office.remaining)}
+                  </dd>
+                </div>
               </dl>
-              <Link
-                href={`/office/finance/${office.officeId}`}
-                className="mt-3 inline-flex items-center gap-1 self-start text-xs font-bold text-primary-700 hover:underline"
-              >
-                Ledger <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+              <div className="mt-3 flex items-center gap-4">
+                <Link
+                  href={`/office/finance/${office.officeId}`}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-primary-700 hover:underline"
+                >
+                  Ledger <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+                {onProfit && (
+                  <button
+                    type="button"
+                    onClick={() => onProfit(office)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+                  >
+                    <Scale className="h-3.5 w-3.5" /> Profit
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

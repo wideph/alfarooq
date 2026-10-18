@@ -40,6 +40,8 @@ export type CaseDetail = {
   courierNumber: string | null;
   agreedAmountRemarks: string | null;
   boardAttestationNumber: string | null;
+  // Wave 21: board/case online verification tracking number (manual entry).
+  onlineVerificationNumber: string | null;
   clientPictureUrl: string | null;
   clientPictureType: string | null;
   contacts: Array<{ id: string; phone: string; label: string | null }>;
@@ -67,7 +69,7 @@ export type CaseDetail = {
     verifiedAt: string | null;
     createdAt: string;
   }>;
-  expenses: Array<{ id: string; amount: number; description: string; expenseDate: string; createdByName: string | null }>;
+  expenses: Array<{ id: string; amount: number; description: string; expenseDate: string; deductFromCommission: boolean; createdByName: string | null }>;
   ledger: Array<{
     id: string;
     type: string;

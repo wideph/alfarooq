@@ -19,6 +19,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import CaseFileViewer, { type ViewableFile } from "@/components/office/case/CaseFileViewer";
+import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDateTime, officeFetch } from "@/lib/office/client";
 import { type CaseFileItem, type CategorySetWithSteps, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -51,7 +52,9 @@ const DEPARTMENT_PERMISSIONS_CLIENT: Record<Department, AdminPermission> = {
 };
 
 // Files API (B2) naye department names return karti hai (ATTA → ATTESTATION).
-type FileItem = Omit<CaseFileItem, "department"> & { department: Department };
+// §W21: downloadUrl (signed, download force karta hai) contract field hai —
+// types.ts mid-flight hai, is liye yahan optional.
+type FileItem = Omit<CaseFileItem, "department"> & { department: Department; downloadUrl?: string | null };
 
 const ACCEPT_DOC = "application/pdf,.pdf,image/*";
 const ACCEPT_ALL = "application/pdf,.pdf,image/*,video/*";
@@ -182,6 +185,7 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
       <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
         <span className="min-w-0">
           <span className="font-medium text-slate-800">{file.title || `${DEPARTMENT_LABELS[file.department]} file`}</span>
+          {isVerificationSticker(file) && <StickerChip />}
           <span className="ml-2 text-xs text-slate-400">
             {file.fileType.toUpperCase()}
             {file.stepKey ? ` · ${file.stepKey}` : ""} · {formatDateTime(file.createdAt)}
@@ -190,19 +194,27 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
         </span>
         <span className="flex items-center gap-1.5">
           <button
-            onClick={() => setViewer({ url: file.url, fileType: file.fileType, title: file.title || "Case file" })}
+            onClick={() =>
+              setViewer({
+                url: file.url,
+                downloadUrl: file.downloadUrl,
+                fileType: file.fileType,
+                title: file.title || "Case file",
+              })
+            }
             className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
           >
             <Eye className="h-3.5 w-3.5" /> Dekhein
           </button>
+          {/* §W21: downloadUrl signed + download-force; na ho to plain url fallback */}
           <a
-            href={file.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Download"
-            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
+            href={file.downloadUrl || file.url}
+            download={file.title || "case-file"}
+            title={`Download — ${file.title || "case file"}`}
+            aria-label={`Download ${file.title || "case file"}`}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5" /> Download
           </a>
           {canDelete(file) && (
             <button onClick={() => remove(file)} aria-label="File delete karein" className="rounded-lg p-2 text-red-500 hover:bg-red-50">

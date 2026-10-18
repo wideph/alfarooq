@@ -6,6 +6,7 @@ import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import { SkeletonRows, SkeletonTiles } from "@/components/ui/Skeleton";
 import CaseCommandBar from "@/components/office/case/CaseCommandBar";
+import CaseHeaderStrip from "@/components/office/case/CaseHeaderStrip";
 import CaseStatusHeader from "@/components/office/case/CaseStatusHeader";
 import CaseWarningStrip from "@/components/office/case/CaseWarningStrip";
 import CaseOverviewTab from "@/components/office/case/CaseOverviewTab";
@@ -112,6 +113,8 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             ) : (
               <>
                 <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
+                {/* §W21: har tab ke upar case ki pehchan wali slim strip (sticky) */}
+                <CaseHeaderStrip detail={detail} />
                 <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} />
                 <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
 

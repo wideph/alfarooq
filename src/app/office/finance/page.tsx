@@ -8,7 +8,10 @@ import type { BookingOfficeType } from "@/lib/office/permissions";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import KpiStrip from "@/components/office/finance/KpiStrip";
+import AdminProfitStrip from "@/components/office/finance/AdminProfitStrip";
+import ProfitBreakdownModal from "@/components/office/finance/ProfitBreakdownModal";
 import OfficesGrid, { type OfficeCardData } from "@/components/office/finance/OfficesGrid";
+import DeptCommissions from "@/components/office/finance/DeptCommissions";
 import UsersAccounts from "@/components/office/finance/UsersAccounts";
 import UserDrawer from "@/components/office/finance/UserDrawer";
 import PayModal from "@/components/office/finance/PayModal";
@@ -39,6 +42,10 @@ export default function OfficeFinancePage() {
           <MemberFinanceView admin={admin} />
         ) : adminCanAny(admin, ["office:finance:read"]) ? (
           <FinanceDashboard isSuperAdmin={admin.role === "admin"} canWriteExpenses={adminCanAny(admin, ["office:expenses:write"])} />
+        ) : adminCanAny(admin, ["office:ledger:read"]) ? (
+          // §W21: cashier (ledger:read, bina finance:read) — sirf dept
+          // commissions card; profit/company data is scope mein nahi.
+          <CashierDeptView />
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500">
             Is page ke liye permission zaroori hai
@@ -50,6 +57,19 @@ export default function OfficeFinancePage() {
 }
 
 /* ------------------------- Admin / privileged dashboard ------------------------- */
+
+// §W21: cashier slim view — sirf department commissions (admin/cashier scope).
+function CashierDeptView() {
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const setMessage = (m: string, kind: ToastKind = "success") => setToast(m ? { message: m, kind } : null);
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold text-slate-900">Finance</h2>
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <DeptCommissions onToast={setMessage} />
+    </div>
+  );
+}
 
 // All-time range for the KPI strip + per-office received figures.
 const ALL_TIME_FROM = "2020-01-01";
@@ -70,6 +90,8 @@ function FinanceDashboard({
 
   const [selectedMember, setSelectedMember] = useState<FinanceUserRow | null>(null);
   const [payTarget, setPayTarget] = useState<FinanceUserRow | null>(null);
+  // §W21: per-office profit modal target.
+  const [profitOffice, setProfitOffice] = useState<OfficeCardData | null>(null);
 
   const [toast, setToast] = useState<ToastData | null>(null);
   const setMessage = (m: string, kind: ToastKind = "success") => setToast(m ? { message: m, kind } : null);
@@ -144,7 +166,7 @@ function FinanceDashboard({
     const ensure = (id: string, name: string, type: BookingOfficeType) => {
       let card = map.get(id);
       if (!card) {
-        card = { officeId: id, officeName: name, officeType: type, received: 0, expenses: 0, dues: 0 };
+        card = { officeId: id, officeName: name, officeType: type, received: 0, expenses: 0, dues: 0, remaining: 0, profit: null };
         map.set(id, card);
       }
       if (card.officeName === "—" && name !== "—") card.officeName = name;
@@ -154,6 +176,9 @@ function FinanceDashboard({
     for (const o of report?.offices ?? []) {
       const card = ensure(o.id, o.name, o.type);
       card.received = o.income;
+      // §W21: baqi (cases) + per-office profit breakdown (tooltip/modal).
+      card.remaining = o.remaining ?? 0;
+      card.profit = o.profit ?? null;
     }
     for (const e of expenses ?? []) {
       if (!e.officeId) continue;
@@ -178,8 +203,14 @@ function FinanceDashboard({
         due={users?.totals.due ?? 0}
       />
 
-      {/* 2. Offices */}
-      <OfficesGrid offices={officeCards} />
+      {/* 1b. §W21 Admin profit strip (period selector + breakdown modal) */}
+      <AdminProfitStrip />
+
+      {/* 2. Offices (Remaining + per-office Profit) */}
+      <OfficesGrid offices={officeCards} onProfit={setProfitOffice} />
+
+      {/* 2b. §W21 Department commissions (Printing / Attestation) */}
+      <DeptCommissions onToast={setMessage} />
 
       {/* 3. Users' accounts (grouped by office) */}
       <UsersAccounts
@@ -212,6 +243,14 @@ function FinanceDashboard({
 
       {selectedMember && <UserDrawer member={selectedMember} onClose={() => setSelectedMember(null)} />}
       {payTarget && <PayModal target={payTarget} onClose={() => setPayTarget(null)} onToast={setMessage} />}
+      {profitOffice && (
+        <ProfitBreakdownModal
+          title={profitOffice.officeName}
+          subtitle="Office-scoped profit"
+          officeId={profitOffice.officeId}
+          onClose={() => setProfitOffice(null)}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,11 @@ import { toJson } from "@/lib/office/serializers";
 export const CASE_DEPARTMENTS = ["FILING", "PRINTING", "ATTESTATION", "COURIER"] as const;
 export type CaseDepartment = (typeof CASE_DEPARTMENTS)[number];
 
+// W21: verification sticker uploads ride the FILING department with this
+// stepKey. They NEVER trigger the WAITING_FOR_FILE → WAITING_FOR_PRINTING
+// transition and never count as the "first filing file".
+export const VERIFICATION_STICKER_STEP_KEY = "VERIFICATION_STICKER";
+
 // Department → permission required to upload/delete its files.
 export const DEPARTMENT_PERMISSIONS: Record<CaseDepartment, AdminPermission> = {
   FILING: "office:filing:write",
@@ -90,7 +95,16 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
               ],
             },
           }
-        : { status: "WAITING_FOR_FILE" };
+        : // W21: the filing tab KEEPS cases after their files are uploaded —
+          // pending (no filing file yet) OR done (≥1 FILING file). Rows carry
+          // filingFilesCount / filingDone so the UI can color them; the cases
+          // route sorts pending first.
+          {
+            OR: [
+              { status: "WAITING_FOR_FILE" },
+              { files: { some: { department: "FILING" } } },
+            ],
+          };
     case "printing":
       return { status: { in: ["WAITING_FOR_PRINTING", "PRINTED"] } };
     case "attestation":
@@ -151,8 +165,13 @@ type FilingCaseRow = {
   status: string;
   clientPictureKey: string | null;
   clientPictureType: string | null;
+  // W21: S's new Case scalar — optional here so older include shapes still compile.
+  onlineVerificationNumber?: string | null;
   category?: { name: string } | null;
   set?: { name: string } | null;
+  // W21: cases list rows carry a filtered FILING files count; when present the
+  // payload gets filingFilesCount / filingDone (pending vs done colors).
+  _count?: { files: number };
 };
 
 export async function serializeFilingCase(item: FilingCaseRow) {
@@ -165,6 +184,10 @@ export async function serializeFilingCase(item: FilingCaseRow) {
     notes: item.notes,
     status: item.status,
     setName: item.set?.name ?? null,
+    onlineVerificationNumber: item.onlineVerificationNumber ?? null,
+    ...(item._count
+      ? { filingFilesCount: item._count.files, filingDone: item._count.files > 0 }
+      : {}),
     clientPictureType: item.clientPictureType,
     clientPictureUrl: item.clientPictureKey
       ? await getOfficeFileSignedUrl(item.clientPictureKey)

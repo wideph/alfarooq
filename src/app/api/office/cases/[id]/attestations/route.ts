@@ -8,6 +8,7 @@ import { loadCaseDetail } from "@/lib/office/case-detail";
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
+import { creditDeptCommission } from "@/lib/office/dept-commission";
 import { evaluateCaseCompletion } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
@@ -145,7 +146,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const completed = await evaluateCaseCompletion(id);
-    if (completed) nextStatus = "ATTESTATION_COMPLETE";
+    if (completed) {
+      nextStatus = "ATTESTATION_COMPLETE";
+      // F4: the acting attestation user earns the rule's attestationAmount
+      // (idempotent, never throws). Admin status-dropdown jumps do NOT credit
+      // anyone — no dept worker acted (see dept-commission.ts).
+      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
+    }
 
     // W13.2: audit log + notifications response ke baad (status side effects
     // aur evaluateCaseCompletion request path mein hi rehte hain).

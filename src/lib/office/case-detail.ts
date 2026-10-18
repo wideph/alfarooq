@@ -119,6 +119,9 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
       expectedPrintingDate: item.expectedPrintingDate,
       isPrinted: item.isPrinted,
       courierNumber: item.courierNumber,
+      // §W21: attestation tab ka Board-# chip limited payload par bhi chale.
+      boardAttestationNumber: item.boardAttestationNumber,
+      onlineVerificationNumber: item.onlineVerificationNumber,
       createdAt: item.createdAt,
       attestations: item.attestations.map((a) => ({
         id: a.id,

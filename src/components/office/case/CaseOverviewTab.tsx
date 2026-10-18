@@ -22,6 +22,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
+import type { CaseHeaderDetail } from "@/components/office/case/CaseHeaderStrip";
 import { formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -56,6 +57,8 @@ type Category = { id: string; name: string; isActive: boolean };
 
 function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps, "onReload">) {
   const canEdit = adminCanAny(admin, ["office:cases:write"]);
+  // §W21: BMFQ cases ka online verification number (contract field; types mid-flight).
+  const onlineVerificationNumber = (detail as CaseHeaderDetail).onlineVerificationNumber;
   const [editing, setEditing] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
@@ -143,6 +146,7 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
           <dl className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-3">
             <Row label="Roll Number" value={detail.rollNumber} />
             <Row label="Registration Number" value={detail.registrationNumber} />
+            {onlineVerificationNumber && <Row label="Online Verification Number" value={onlineVerificationNumber} />}
             <Row label="Category" value={detail.category?.name} />
             <Row label="Courier number" value={detail.courierNumber} />
             <Row label="Set of Attestations" value={detail.setName} />
