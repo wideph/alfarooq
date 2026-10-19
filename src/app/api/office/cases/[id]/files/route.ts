@@ -75,9 +75,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         uploadedById: file.uploadedById,
         uploadedByName: names[file.uploadedById] || null,
         url: await getOfficeFileSignedUrl(file.fileKey),
-        // W21: forced-attachment download (filename = title when present).
+        // W21: forced-attachment download. §W23: filename hamesha ORIGINAL
+        // file name (title nahi — title mein extension nahi hoti, jis se
+        // Word/PDF download "corrupt" lagti thi aur name badal jata tha).
         downloadUrl: await getOfficeFileSignedUrl(file.fileKey, 900, {
-          download: file.title || true,
+          download: true,
         }),
       }))
     );

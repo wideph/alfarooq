@@ -147,8 +147,17 @@ export async function deleteOfficeFile(key: string) {
 }
 
 // Signed GET url. `options.download` (W21): true → force an attachment
-// disposition (filename = key basename); a string overrides the filename.
+// disposition (filename = ORIGINAL file name — key basename minus the
+// `Date.now()_` upload prefix); a string overrides the filename.
+// §W23: title ko filename ke tor par use KARNA mana hai — title mein
+// extension nahi hoti, jis se Word/PDF download "corrupt" lagti thi aur
+// original name badal jata tha.
 // Default behavior (no options) is byte-identical for existing callers.
+export function originalFilenameFromKey(key: string): string {
+  const base = path.basename(key);
+  return base.replace(/^\d+_/, "") || base;
+}
+
 export async function getOfficeFileSignedUrl(
   key: string,
   expiresInSeconds = 900,
@@ -165,7 +174,7 @@ export async function getOfficeFileSignedUrl(
     const rawName =
       typeof options.download === "string" && options.download.trim()
         ? options.download.trim()
-        : path.basename(key);
+        : originalFilenameFromKey(key);
     const filename = rawName.replace(/["\\\r\n]/g, "_").slice(0, 120) || "file";
     command.input.ResponseContentDisposition = `attachment; filename="${filename}"`;
   }

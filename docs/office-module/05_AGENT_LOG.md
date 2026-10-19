@@ -1092,3 +1092,11 @@ Next step for the next agent:
 - F22.5: autoBridgePrintingForDualDept (workflow.ts) — actor ke paas office:printing:write + office:attestation-dept:write DONO hon aur case WAITING_FOR_PRINTING ho to attestation work se pehle auto PRINTED (isPrinted/printedAt) + PRINTING commission actor ko, phir ATTESTATION_COMPLETE + ATTESTATION commission. 3 call sites (files POST, attestations PATCH — ab atomic tx mein, complete-all POST). Idempotent remarks-tag credits; single-perm behavior unchanged.
 - F22.6: case detail payload +deptCommissions[] (ledger DEPT_COMMISSION rows, admin name ke saath) — shared DeptCommissionsAttached component CasePaymentsTab + CaseHistoryTab (expenses block ke neeche) mein read-only "attached" rows. REAL CaseExpense rows nahi — pool/member formulas unaffected, admin profit double-count nahi.
 - Verify: tsc 0 (whole tree), lint 0, build exit 0, migration live applied.
+
+## WAVE 23 — Queue/labels/files investigation + fixes (commit: pending)
+Investigation-first (live DB audit):
+1. Printing queue PRINTED cases dikhati thi (attestation phase ke cases bhi) — deptQueueWhere("printing") ab SIRF WAITING_FOR_PRINTING. (nav-counts pehle se consistent.)
+2. Word download "corrupt" + filename change — ROOT CAUSE same: files GET downloadUrl filename = title (title mein extension nahi → extensionless file Word/PDF "corrupt" kahti thi) ya timestamp-prefixed key basename. Fix: filename hamesha ORIGINAL (key basename minus Date.now()_ prefix), title kabhi filename nahi. originalFilenameFromKey() helper r2.ts mein.
+3. AF-2026-000016: status WAITING_FOR_PRINTING magar isPrinted=true (stale flag) → DeptQueue chip "Printed" dikhata tha. Fix: chip ab STATUS se decide hota hai (sirf tab Printed jab status aage barh chuka ho) + live data fix (isPrinted=false, printedAt=null — 1 row, verified 0 remaining).
+4. Filing files "2 bars" — DATA bug NAHI: live audit se pata chala filing dept ne hi har document 2 formats (image + pdf) mein upload kiya (maslan 89810_-_1080.jpeg + .pdf, alag timestamps) — rows duplicate nahi, alag files hen. Koi code change nahi.
+- Verify: tsc 0, lint 0, build exit 0. No schema change.

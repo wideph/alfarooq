@@ -242,19 +242,24 @@ export default function DeptQueue({
             )}
           </div>
         );
-      case "printing":
+      case "printing": {
+        // §W23: chip STATUS se decide hota hai, isPrinted flag se nahi —
+        // AF-2026-000016 jaisa stale state (status WAITING_FOR_PRINTING magar
+        // isPrinted=true) ghalat "Printed" dikhata tha.
+        const printed = item.status !== "WAITING_FOR_PRINTING" && Boolean(item.isPrinted);
         return (
           <div className="space-y-1 text-xs">
             <span
               className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                item.isPrinted ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                printed ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
               }`}
             >
-              {item.isPrinted ? "Printed" : "Not printed"}
+              {printed ? "Printed" : "Not printed"}
             </span>
             <p className="text-slate-500">Expected: {formatDate(item.expectedPrintingDate)}</p>
           </div>
         );
+      }
       case "attestation": {
         const step = currentStepName(item);
         const progress = attestationProgress(item);

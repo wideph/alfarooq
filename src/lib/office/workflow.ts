@@ -106,7 +106,10 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
             ],
           };
     case "printing":
-      return { status: { in: ["WAITING_FOR_PRINTING", "PRINTED"] } };
+      // §W23: printing queue = sirf kaam ka intezar karne wale cases. PRINTED
+      // case attestation phase mein hota hai — wo SIRF attestation queue ka
+      // hissa hai (pehle yahan bhi show hota tha → confusing).
+      return { status: "WAITING_FOR_PRINTING" };
     case "attestation":
       return { status: { in: ["PRINTED", "ATTESTATION"] } };
     case "courier":
