@@ -41,6 +41,10 @@ export function roleToRemarkTarget(role?: string | null): RemarkTarget | null {
       return "FILING";
     case "printing":
       return "PRINTING";
+    // §W25: "attestation" office role bhi ATTESTATION dept remarks ka target
+    // hai (live dept user isi role par hai — pehle null aata tha, is liye unhe
+    // remarks ka option hi nahi milta tha).
+    case "attestation":
     case "attestation_dept":
       return "ATTESTATION";
     case "courier":
@@ -62,6 +66,7 @@ export function allowedRemarkTargets(role?: string | null): RemarkTarget[] {
     case "filing":
       return ["ADMIN", "BOOKING", "PRINTING"];
     case "printing":
+    case "attestation":
     case "attestation_dept":
     case "courier":
       return [...REMARK_TARGETS];
@@ -162,6 +167,9 @@ export function isFilingLimited(session: AdminSession): boolean {
 type FilingCaseRow = {
   id: string;
   caseNumber: string;
+  // §W25: dept queues (printing/attestation) ko list mein client ka naam bhi
+  // chahiye — pehle slim payload mein nahi tha.
+  clientName?: string | null;
   rollNumber: string | null;
   registrationNumber: string | null;
   notes: string | null;
@@ -181,6 +189,7 @@ export async function serializeFilingCase(item: FilingCaseRow) {
   return toJson({
     id: item.id,
     caseNumber: item.caseNumber,
+    clientName: item.clientName ?? null,
     category: item.category ? { name: item.category.name } : null,
     rollNumber: item.rollNumber,
     registrationNumber: item.registrationNumber,

@@ -39,6 +39,10 @@ function allowedTargetsFor(role?: string | null): RemarkTarget[] {
     case "filing":
       return ["ADMIN", "BOOKING", "PRINTING"];
     case "printing":
+    // §W25: "attestation" office role bhi dept remarks bhej sakta hai (server
+    // workflow.ts allowedRemarkTargets ke sath sync — pehle yahan default [] tha
+    // is liye composer kabhi render nahi hota tha).
+    case "attestation":
     case "attestation_dept":
     case "courier":
       return ALL_TARGETS;

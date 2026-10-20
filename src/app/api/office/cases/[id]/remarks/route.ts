@@ -134,12 +134,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       // §W11.8 — har remark target department ke users ko notification.
-      const TARGET_ROLE: Record<Exclude<RemarkTarget, "ADMIN">, string> = {
-        BOOKING: "booking_office",
-        FILING: "filing",
-        PRINTING: "printing",
-        ATTESTATION: "attestation_dept",
-        COURIER: "courier",
+      // §W25: ATTESTATION target dono roles ko jata hai ("attestation" office
+      // role + "attestation_dept") — live dept user attestation role par hai.
+      const TARGET_ROLES: Record<Exclude<RemarkTarget, "ADMIN">, string[]> = {
+        BOOKING: ["booking_office"],
+        FILING: ["filing"],
+        PRINTING: ["printing"],
+        ATTESTATION: ["attestation_dept", "attestation"],
+        COURIER: ["courier"],
       };
       const notice = {
         type: "remark",
@@ -148,10 +150,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         link: `/office/cases/${id}`,
       };
       await Promise.all(
-        targets.map((target) =>
+        targets.flatMap((target) =>
           target === "ADMIN"
-            ? notifyAdmins(notice)
-            : notifyRole(TARGET_ROLE[target as Exclude<RemarkTarget, "ADMIN">], notice)
+            ? [notifyAdmins(notice)]
+            : TARGET_ROLES[target as Exclude<RemarkTarget, "ADMIN">].map((role) => notifyRole(role, notice))
         )
       );
     });

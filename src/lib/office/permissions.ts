@@ -39,7 +39,9 @@ export const ROLE_PRESETS: Record<OfficeRole, AdminPermission[]> = {
     "office:ledger:write",
     "office:expenses:write",
   ],
-  attestation: ["office:cases:read", "office:attestation:write"],
+  // §W25: attestation office role ko bhi remarks:write — dept users ko case par
+  // remarks add karne ka option chahiye (live user isi role par hai).
+  attestation: ["office:cases:read", "office:attestation:write", "office:remarks:write"],
   booking_office: [
     "office:cases:read",
     "office:cases:write",

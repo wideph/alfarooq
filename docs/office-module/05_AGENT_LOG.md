@@ -1117,3 +1117,17 @@ Investigation-first (live DB audit):
 - **Labels**: "Done —" default hata diya; "Completed at" sirf completedDate hone par;
   date inputs Scheduled/Completed at. DeptCaseView bhi "Completed at".
 - Verify: tsc 0, lint 0, build exit 0 (real DB). No migration (code + data fix only).
+
+## WAVE 25 (2026-10-20) — dept queue mein name/roll/reg + dept remarks fix
+
+- **Queue identity**: serializeFilingCase (slim dept-queue payload) +clientName;
+  DeptQueue identityBlock mein client naam (tamam depts), printing/attestation
+  work cells mein Roll/Reg lines.
+- **Remarks (root cause)**: live printing/attestation dept user "attestation" ROLE
+  par hai jo remarks ke teeno maps (client allowedTargetsFor, server
+  allowedRemarkTargets, roleToRemarkTarget) mein missing tha — composer kabhi render
+  nahi hota tha, POST 403 deta, dept remarks visibility bhi null target ki wajah se
+  zero. Teeno fix + ROLE_PRESETS.attestation +remarks:write + ATTESTATION notifications
+  dono roles ko. Permission live DB mein pehle se maujood thi (verified) — code fix
+  kaafi tha, koi data change nahi.
+- Verify: tsc 0, lint 0, build exit 0 (real DB). No migration.

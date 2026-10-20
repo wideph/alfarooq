@@ -723,3 +723,20 @@ admin profit mein double-count nahi — DEPT_COMMISSION bucket already deducts).
    (MOFA_SAUDI preferred). Seed script bhi MOFA_SAUDI par align. 3 affected cases
    (AF-2026-000024/25/27) ki dates regenerate kar di (engine se, existing status/dates
    preserve): 027 → 2026-11-02, 025 → 2026-10-12, 024 → 2026-11-02.
+
+---
+
+## WAVE 25 (2026-10-20) — dept queue identity fields + dept remarks option
+
+1. **Dept queue list mein pehchan**: printing/attestation (aur baqi dept) queue rows mein
+   ab client ka NAME (identity block mein, sab depts) + Roll # / Reg # (printing aur
+   attestation work cell mein). Slim cross-office payload (serializeFilingCase) ab
+   clientName carry karta hai — pehle nahi karta tha.
+2. **Dept users ko remarks add option**: root cause — "attestation" office ROLE remarks
+   maps mein kahin nahi tha: client `allowedTargetsFor` default [] (composer kabhi render
+   nahi hota tha), server `allowedRemarkTargets` [] (POST 403), `roleToRemarkTarget` null
+   (dept remarks visible hi nahi hote). Teeno maps mein "attestation" role add:
+   target=ATTESTATION, targets=ALL. ROLE_PRESETS.attestation +office:remarks:write
+   (future users). ATTESTATION remark notifications ab "attestation" + "attestation_dept"
+   dono roles ko jati hain. Live rwp user ke paas permission pehle se maujood thi —
+   asal blocker role-mapping thi.

@@ -20,6 +20,9 @@ export type DeptQueueRow = {
   caseNumber: string;
   status: string;
   limited?: boolean;
+  // §W25: dept queues ki list mein client ka naam bhi dikhta hai (slim
+  // payload ab clientName carry karta hai; purane rows par optional).
+  clientName?: string | null;
   category: { id?: string; name: string } | null;
   rollNumber: string | null;
   registrationNumber: string | null;
@@ -224,6 +227,8 @@ export default function DeptQueue({
             {caseStatusLabel(item.status, item.status === "ATTESTATION" ? currentName : null)}
           </span>
         </div>
+        {/* §W25: har dept row mein client ka naam — case pehchan ek nazar mein */}
+        {item.clientName && <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{item.clientName}</p>}
         {item.createdAt && <p className="text-xs text-slate-400">{formatDate(item.createdAt)}</p>}
       </>
     );
@@ -256,6 +261,11 @@ export default function DeptQueue({
             >
               {printed ? "Printed" : "Not printed"}
             </span>
+            {/* §W25: printing row mein Roll/Reg — list se hi pehchan */}
+            <p className="text-slate-600">
+              {item.rollNumber ? `Roll ${item.rollNumber}` : "Roll —"} ·{" "}
+              {item.registrationNumber ? `Reg ${item.registrationNumber}` : "Reg —"}
+            </p>
             <p className="text-slate-500">Expected: {formatDate(item.expectedPrintingDate)}</p>
           </div>
         );
@@ -265,6 +275,11 @@ export default function DeptQueue({
         const progress = attestationProgress(item);
         return (
           <div className="space-y-1 text-xs">
+            {/* §W25: attestation row mein Roll/Reg — list se hi pehchan */}
+            <p className="text-slate-600">
+              {item.rollNumber ? `Roll ${item.rollNumber}` : "Roll —"} ·{" "}
+              {item.registrationNumber ? `Reg ${item.registrationNumber}` : "Reg —"}
+            </p>
             <p className="text-slate-500">Set: {item.setName || "—"}</p>
             {step && (
               <p className="text-slate-600">
