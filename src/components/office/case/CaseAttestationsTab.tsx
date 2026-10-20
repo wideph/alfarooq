@@ -53,15 +53,21 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // §W24 (blink fix): deps primitive rakhe hain (category.id / rollNumber).
+  // Pehle `detail.category` OBJECT par dep thi — har 15s live-refresh par naya
+  // object aata, effect dobara chalta, setLoading(true) ka skeleton FLASH hota
+  // (tab ka "bar bar blink"). Ab sirf category/roll BADALNE par fetch hoti hai.
+  const categoryId = detail.category?.id ?? null;
+  const rollNumber = detail.rollNumber ?? null;
   const loadSets = useCallback(async () => {
-    if (!detail.category) return;
+    if (!categoryId) return;
     setLoading(true);
-    const params = new URLSearchParams({ categoryId: detail.category.id });
-    if (detail.rollNumber) params.set("rollNumber", detail.rollNumber);
+    const params = new URLSearchParams({ categoryId });
+    if (rollNumber) params.set("rollNumber", rollNumber);
     const res = await officeFetch<CategorySetWithSteps[]>(`/api/office/setup/sets?${params}`);
     if (res.ok) setSets(res.data);
     setLoading(false);
-  }, [detail.category, detail.rollNumber]);
+  }, [categoryId, rollNumber]);
 
   useEffect(() => {
     void loadSets();
@@ -277,7 +283,10 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
                   )}
                 </p>
                 <p className="text-xs text-slate-500">
-                  Scheduled {formatDate(a.scheduledDate)} · Done {formatDate(a.completedDate)}
+                  {/* §W24: "Done" ka default "—" text hata diya — Completed at
+                      sirf tab dikhta hai jab date waqai maujood ho. */}
+                  Scheduled {formatDate(a.scheduledDate)}
+                  {a.completedDate ? ` · Completed at ${formatDate(a.completedDate)}` : ""}
                   {a.notes ? ` · ${a.notes}` : ""}
                 </p>
               </div>
@@ -305,7 +314,7 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
                     ))}
                   </select>
                   <label className="text-[11px] text-slate-500">
-                    Sched.
+                    Scheduled
                     <input
                       type="date"
                       className="ml-1 min-h-[36px] rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -316,7 +325,7 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
                     />
                   </label>
                   <label className="text-[11px] text-slate-500">
-                    Done
+                    Completed at
                     <input
                       type="date"
                       className="ml-1 min-h-[36px] rounded-lg border border-slate-200 px-2 py-1 text-xs"

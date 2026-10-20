@@ -40,6 +40,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       const exists = await prisma.case.findFirst({ where: { id }, select: { id: true } });
       if (!exists) return notFound("Case nahi mila");
     }
+    // §W24: printing / attestation dept workers ko FILING files bhi milti hain
+    // (READ-ONLY view — unhe source documents print/attest karne ke liye chahiye).
+    // Upload/delete server-side permission checks se protected hain, is liye yahan
+    // sirf visibility barh rahi hai. Filing worker ko pehle se apni files milti hain.
+    const visibleDepts = [...deptOnly];
+    if (
+      visibleDepts.length > 0 &&
+      !visibleDepts.includes("FILING") &&
+      (visibleDepts.includes("PRINTING") || visibleDepts.includes("ATTESTATION"))
+    ) {
+      visibleDepts.push("FILING");
+    }
 
     // §W11.6: booking office users ko FILING department ki files sirf tab
     // dikhen jab admin ne is case par permission di ho.
@@ -50,8 +62,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const files = await prisma.caseFile.findMany({
       where:
-        deptOnly.length > 0
-          ? { caseId: id, department: { in: deptOnly } }
+        visibleDepts.length > 0
+          ? { caseId: id, department: { in: visibleDepts } }
           : hideFilingFiles
             ? { caseId: id, department: { not: "FILING" } }
             : { caseId: id },

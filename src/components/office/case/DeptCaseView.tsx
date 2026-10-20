@@ -116,7 +116,9 @@ const ATTESTATION_STEP_KEY_BY_NAME: Record<string, string> = {
   "qr code ibcc": "QR_IBCC",
   "special mofa": "SPECIAL_MOFA",
   "saudi embassy": "SAUDI_EMBASSY",
-  "mofa saudi": "MOFA_SAUD",
+  // §W24: live DB ke set steps "MOFA_SAUDI" key use karte hain (date-engine
+  // dono keys accept karta hai) — upload tag live sets se match rakho.
+  "mofa saudi": "MOFA_SAUDI",
   "back navttc": "BACK_NAVTTC",
   "current navttc": "CURRENT_NAVTTC",
   "bmfq verification": "BMFQ_VERIFICATION",
@@ -159,8 +161,12 @@ export default function DeptCaseView({
   const loadFiles = useCallback(async () => {
     const res = await officeFetch<{ items: DeptFileItem[] }>(`/api/office/cases/${id}/files`);
     if (res.ok) {
-      // Sirf user ke apne departments ki files (defensive — server bhi filter karta hai).
-      setFiles(res.data.items.filter((file) => depts.includes(file.department)));
+      // Apne departments ki files + FILING files (§W24: printing/attestation
+      // worker ko filing files sirf dekhne ke liye milti hain — server bhi
+      // yahi set return karta hai; filter defensive hai).
+      setFiles(
+        res.data.items.filter((file) => depts.includes(file.department) || file.department === "FILING")
+      );
     }
     setFilesLoading(false);
   }, [id, depts]);
@@ -348,7 +354,7 @@ export default function DeptCaseView({
                     </span>
                     <span className="flex items-center gap-2 text-xs text-slate-500">
                       {attestation.completedDate
-                        ? `Done ${formatDate(attestation.completedDate)}`
+                        ? `Completed at ${formatDate(attestation.completedDate)}`
                         : attestation.scheduledDate
                           ? `Scheduled ${formatDate(attestation.scheduledDate)}`
                           : ""}
@@ -403,6 +409,33 @@ export default function DeptCaseView({
                 </section>
               );
             })}
+
+            {/* §W24: printing/attestation worker ke apne departments mein FILING
+                nahi — magar filing files dekhne ki permission hai. Read-only
+                section (koi upload box nahi, koi delete nahi). */}
+            {!depts.includes("FILING") &&
+              (depts.includes("PRINTING") || depts.includes("ATTESTATION")) && (
+                <section className="overflow-hidden rounded-xl border border-slate-200">
+                  <header className="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2.5">
+                    <span className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                      {DEPT_LABELS.FILING}
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
+                        {files.filter((file) => file.department === "FILING").length}
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-slate-400">sirf dekhne ke liye</span>
+                  </header>
+                  <div className="p-3">
+                    {files.filter((file) => file.department === "FILING").length === 0 ? (
+                      <EmptyState icon={FileText} hint="Filing department ne abhi koi file upload nahi ki" />
+                    ) : (
+                      <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100">
+                        {files.filter((file) => file.department === "FILING").map(fileRow)}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              )}
           </div>
         )}
       </SectionCard>

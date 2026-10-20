@@ -19,7 +19,7 @@ const STEP_LABELS: Record<string, string> = {
   QR_IBCC: "QR code ibcc",
   SPECIAL_MOFA: "Special Mofa",
   SAUDI_EMBASSY: "Saudi Embassy",
-  MOFA_SAUD: "Mofa Saudi",
+  MOFA_SAUDI: "Mofa Saudi",
   BACK_NAVTTC: "Back Navttc",
   CURRENT_NAVTTC: "Current Navttc",
   BMFQ_VERIFICATION: "bmfq verification",
@@ -33,8 +33,8 @@ const ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
 
 // §N5: DAE 3Y BBTE = "category 4" with 7 sets of attestations; DBA 3Y BBTE uses the same.
 const BBTE_SETS: string[][] = [
-  ["BOARD", "UV_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
-  ["BOARD", "QR_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
+  ["BOARD", "UV_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUDI"],
+  ["BOARD", "QR_IBCC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUDI"],
   ["BOARD", "UV_IBCC", "SPECIAL_MOFA"],
   ["BOARD", "QR_IBCC", "SPECIAL_MOFA"],
   ["BOARD", "UV_IBCC"],
@@ -53,8 +53,8 @@ const CATEGORY_SETS: Record<string, string[][]> = {
   "DAE 3Y BBTE": BBTE_SETS,
   "DBA 3Y BBTE": BBTE_SETS,
   "1-2 Y BBTE": [
-    ["BOARD", "BACK_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
-    ["BOARD", "CURRENT_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUD"],
+    ["BOARD", "BACK_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUDI"],
+    ["BOARD", "CURRENT_NAVTTC", "SPECIAL_MOFA", "SAUDI_EMBASSY", "MOFA_SAUDI"],
   ],
   "Medical Bmfq": [
     ["BMFQ_VERIFICATION", "MOH_ATTESTATION", "SPECIAL_MOFA"],

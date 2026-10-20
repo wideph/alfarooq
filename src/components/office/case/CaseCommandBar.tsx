@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, Tag } from "lucide-react";
+import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, ScanBarcode, Tag } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
@@ -90,6 +90,16 @@ export default function CaseCommandBar({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <h1 className="truncate text-base font-bold leading-tight text-slate-900">{detail.clientName || "—"}</h1>
+            {/* §W24: Roll/Reg/Online-Verification chips yahan merge kiye — purani
+                CaseHeaderStrip in sab ko DOBARA dikhati thi (ab delete). */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+              Roll {detail.rollNumber || "—"}
+            </span>
+            {detail.registrationNumber && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                Reg {detail.registrationNumber}
+              </span>
+            )}
             {detail.category && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                 <Tag className="h-3 w-3" /> {detail.category.name}
@@ -103,6 +113,11 @@ export default function CaseCommandBar({
             {detail.boardAttestationNumber && (
               <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
                 Board Attestation # {detail.boardAttestationNumber}
+              </span>
+            )}
+            {detail.onlineVerificationNumber && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-700">
+                <ScanBarcode className="h-3 w-3" /> Online Verification # {detail.onlineVerificationNumber}
               </span>
             )}
           </div>

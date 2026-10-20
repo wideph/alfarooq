@@ -474,12 +474,16 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       pendingReasons.add("Saudi Embassy ke liye Special Mofa date chahiye");
     }
   }
-  if (stepKeys.includes("MOFA_SAUD")) {
+  // §W24: live DB ke sets stepKey "MOFA_SAUDI" use karte hain jabke purana
+  // seed "MOFA_SAUD" likhta tha — key mismatch ki wajah se Mofa Saudi ki date
+  // KABHI generate nahi hoti thi. Dono keys accept karo (pehli maujood key).
+  const mofaSaudKey = stepKeys.includes("MOFA_SAUDI") ? "MOFA_SAUDI" : "MOFA_SAUD";
+  if (stepKeys.includes(mofaSaudKey)) {
     const saudiEmbassy = dates.get("SAUDI_EMBASSY");
     if (saudiEmbassy) {
       const date = await mofaSaudiDate(saudiEmbassy, db);
-      dates.set("MOFA_SAUD", date);
-      notes.set("MOFA_SAUD", formatDdMmYy(date));
+      dates.set(mofaSaudKey, date);
+      notes.set(mofaSaudKey, formatDdMmYy(date));
     } else if (paymentDate) {
       pendingReasons.add("Mofa Saudi ke liye Saudi Embassy date chahiye");
     }

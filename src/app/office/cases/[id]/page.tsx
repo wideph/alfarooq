@@ -6,7 +6,6 @@ import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import { SkeletonRows, SkeletonTiles } from "@/components/ui/Skeleton";
 import CaseCommandBar from "@/components/office/case/CaseCommandBar";
-import CaseHeaderStrip from "@/components/office/case/CaseHeaderStrip";
 import CaseStatusHeader from "@/components/office/case/CaseStatusHeader";
 import CaseWarningStrip from "@/components/office/case/CaseWarningStrip";
 import CaseOverviewTab from "@/components/office/case/CaseOverviewTab";
@@ -112,9 +111,11 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
               )
             ) : (
               <>
+                {/* §W24: purani CaseHeaderStrip hata di — wahi info (case #,
+                    naam, category, status, Board #) command bar + status header
+                    mein pehle se thi, teen jagah repeat ho rahi thi. Roll/Reg/
+                    Online-Verification # ab command bar ke chips mein hain. */}
                 <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
-                {/* §W21: har tab ke upar case ki pehchan wali slim strip (sticky) */}
-                <CaseHeaderStrip detail={detail} />
                 <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} />
                 <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
 

@@ -25,9 +25,10 @@ import { type CaseFileItem, type CategorySetWithSteps, inputClass, primaryBtnCla
 import type { ToastKind } from "@/components/Toast";
 import { announceOfficeChange } from "@/lib/office/live";
 
-// docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (filing
-// files dekhe + printed proof), ATTESTATION (per set-step optional + FINAL lazmi),
-// COURIER (printing+attestation files in-app viewer mein + courier slip).
+// docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (printed
+// proof; filing ki files upar Filing section se dekhta hai — §W24), ATTESTATION
+// (per set-step optional + FINAL lazmi), COURIER (printing+attestation files
+// in-app viewer mein + courier slip).
 // Upload sirf us department ki write permission par; lists sab ko (read).
 
 // §W18: ATTA → ATTESTATION rename (department value + permission key).
@@ -288,22 +289,10 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
 
                 {isOpen && (
                   <div className="space-y-2 p-3">
-                    {/* PRINTING: filing ki files download/dekhne ke liye alag se */}
-                    {department === "PRINTING" && (
-                      <div className="rounded-lg bg-slate-50 p-2">
-                        <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                          Filing files (print ke liye)
-                        </p>
-                        {files.filter((file) => file.department === "FILING").length === 0 ? (
-                          <p className="p-2 text-xs text-slate-400">Filing department ne abhi koi file upload nahi ki</p>
-                        ) : (
-                          <ul className="divide-y divide-slate-100">
-                            {files.filter((file) => file.department === "FILING").map(fileRow)}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-
+                    {/* §W24: filing files SIRF Filing section mein show hoti hain —
+                        printing section ke andar duplicate block hata diya (confusing
+                        tha). View/download permission sab ke paas hai: Filing section
+                        har viewer ko "sirf dekhne ke liye" mode mein milta hai. */}
                     {/* COURIER: printing + atta files in-app viewer mein (sirf download nahi) */}
                     {department === "COURIER" && (
                       <div className="rounded-lg bg-slate-50 p-2">

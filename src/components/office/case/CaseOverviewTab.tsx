@@ -22,7 +22,6 @@ import SectionCard from "@/components/ui/SectionCard";
 import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
-import type { CaseHeaderDetail } from "@/components/office/case/CaseHeaderStrip";
 import { formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -57,8 +56,9 @@ type Category = { id: string; name: string; isActive: boolean };
 
 function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps, "onReload">) {
   const canEdit = adminCanAny(admin, ["office:cases:write"]);
-  // §W21: BMFQ cases ka online verification number (contract field; types mid-flight).
-  const onlineVerificationNumber = (detail as CaseHeaderDetail).onlineVerificationNumber;
+  // §W21: BMFQ cases ka online verification number (§W24: CaseDetail ka
+  // proper field hai — CaseHeaderStrip delete ho gayi, cast ki zaroorat nahi).
+  const onlineVerificationNumber = detail.onlineVerificationNumber;
   const [editing, setEditing] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);

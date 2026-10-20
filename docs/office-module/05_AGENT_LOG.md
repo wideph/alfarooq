@@ -1100,3 +1100,20 @@ Investigation-first (live DB audit):
 3. AF-2026-000016: status WAITING_FOR_PRINTING magar isPrinted=true (stale flag) → DeptQueue chip "Printed" dikhata tha. Fix: chip ab STATUS se decide hota hai (sirf tab Printed jab status aage barh chuka ho) + live data fix (isPrinted=false, printedAt=null — 1 row, verified 0 remaining).
 4. Filing files "2 bars" — DATA bug NAHI: live audit se pata chala filing dept ne hi har document 2 formats (image + pdf) mein upload kiya (maslan 89810_-_1080.jpeg + .pdf, alag timestamps) — rows duplicate nahi, alag files hen. Koi code change nahi.
 - Verify: tsc 0, lint 0, build exit 0. No schema change.
+
+## WAVE 24 (2026-10-20) — filing files visibility + detail page dedup + blink fix + Mofa Saudi date bug
+
+- **Investigation-first**: live DB audit ne dikhaya ke tamam CategorySetStep rows `MOFA_SAUDI`
+  key use karti hain jabke date-engine sirf `MOFA_SAUD` check karta tha — Mofa Saudi date
+  kabhi generate hi nahi hoti thi (3 cases affected). Engine dono keys accept karta hai ab.
+  3 cases ki dates engine se regenerate (existing progress preserved).
+- **Filing files**: CaseFilesTab ke PRINTING section se embedded filing block remove
+  (duplicate display); files GET dept workers (printing/attestation) ko FILING files
+  read-only deta hai; DeptCaseView mein read-only Filing section ("sirf dekhne ke liye").
+- **Dedup**: CaseHeaderStrip component delete — Roll/Reg/Online-Verification # chips
+  CaseCommandBar mein merge; CaseOverviewTab ka cast hata kar proper CaseDetail field.
+- **Blink**: CaseAttestationsTab SetPanel object-dep (`detail.category`) → primitive deps;
+  15s live-refresh par skeleton flash band.
+- **Labels**: "Done —" default hata diya; "Completed at" sirf completedDate hone par;
+  date inputs Scheduled/Completed at. DeptCaseView bhi "Completed at".
+- Verify: tsc 0, lint 0, build exit 0 (real DB). No migration (code + data fix only).

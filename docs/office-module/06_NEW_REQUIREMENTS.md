@@ -698,3 +698,28 @@ Case detail payload +deptCommissions: [{id, kind:"PRINTING"|"ATTESTATION", amoun
 (ledger DEPT_COMMISSION entries of that case). Case ke expenses section mein read-only rows
 (chip "Dept commission") — REAL CaseExpense rows NAHI (pool/member formulas unaffected,
 admin profit mein double-count nahi — DEPT_COMMISSION bucket already deducts).
+
+---
+
+## WAVE 24 (2026-10-20) — case detail UX + filing files visibility + Mofa Saudi date bug
+
+1. **Filing files sirf Filing section mein**: CaseFilesTab ke PRINTING section ke andar
+   "Filing files (print ke liye)" duplicate block tha — HATA diya. Filing files ab sirf
+   Filing section mein; view/download permission sab viewers ke paas (read-only mode).
+   Dept-limited workers (printing/attestation) ko files GET ab FILING files bhi deta hai
+   (read-only) + DeptCaseView mein alag "sirf dekhne ke liye" Filing section.
+2. **Case detail page dedup**: CaseHeaderStrip DELETE — wahi info (case #, naam, category,
+   status, Board #) CaseCommandBar + CaseStatusHeader mein pehle se thi. Roll/Reg/
+   Online-Verification # chips command bar mein merge.
+3. **Attestations tab blink fix**: SetPanel ki loadSets dep `detail.category` OBJECT par
+   thi — har 15s live-refresh par naya object → effect refire → skeleton flash. Ab
+   primitive deps (categoryId/rollNumber) — sirf tab fetch jab waqai change ho.
+4. **"Done" label → "Completed at"**: attestation row ka default "Done —" text hata diya;
+   "Completed at <date>" sirf tab jab completedDate maujood ho. Date input labels bhi
+   Scheduled / Completed at.
+5. **Mofa Saudi date bug (ROOT CAUSE)**: live DB ke tamam sets stepKey "MOFA_SAUDI" use
+   karte hain, date-engine sirf "MOFA_SAUD" check karta tha — key mismatch se Mofa Saudi
+   ki date KABHI generate nahi hoti thi. Engine ab dono keys accept karta hai
+   (MOFA_SAUDI preferred). Seed script bhi MOFA_SAUDI par align. 3 affected cases
+   (AF-2026-000024/25/27) ki dates regenerate kar di (engine se, existing status/dates
+   preserve): 027 → 2026-11-02, 025 → 2026-10-12, 024 → 2026-11-02.
