@@ -44,6 +44,8 @@ export default function BotChatWidget() {
     return match?.[1] || "";
   }, [pathname]);
 
+  // §W28 perf: config ek dafa (har client navigation par dobara fetch nahi —
+  // courses list route ke saath nahi badalti).
   useEffect(() => {
     if (hidden) return;
 
@@ -54,7 +56,7 @@ export default function BotChatWidget() {
         setCourses(Array.isArray(data.courses) ? data.courses : []);
       })
       .catch(() => {});
-  }, [pathname, hidden]);
+  }, [hidden]);
 
   useEffect(() => {
     if (pathCourseId) setSelectedCourseId(pathCourseId);

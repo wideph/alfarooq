@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { officeFetch } from "@/lib/office/client";
@@ -8,7 +8,11 @@ import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 
 // §W11.8 — notification bell (OfficeNav + AdminNav dono mein): unread badge,
 // dropdown (title / body / relative time), item click → read + link par
-// navigate, "Mark all read". 20s polling + office:changed event par refresh.
+// navigate, "Mark all read".
+// §W28 perf: bell ab KHUD poll nahi karta — unread badge nav-counts
+// (unreadNotifications) se aata hai jo nav pehle se poll karta hai; list sirf
+// dropdown khulne par fetch hoti hai. Pehle har tab har 20s alag
+// /notifications call karta tha (list + count) chahe bell kabhi na khule.
 
 type NotificationItem = {
   id: string;
@@ -46,7 +50,9 @@ export function useOfficeNavCounts(enabled = true): OfficeNavCounts | null {
 
   // §W20 (P2): immediate — nav bubbles ka data sirf isi hook se aata hai;
   // bina immediate ke count 30s baad ya click/focus par hi dikhta tha.
-  useLiveRefresh(load, { intervalMs: 30000, immediate: true });
+  // §W28: 20s — bell ka unread badge bhi ab isi se aata hai (bell ki apni 20s
+  // polling khatam), is liye freshness pehle jitni hi rehti hai.
+  useLiveRefresh(load, { intervalMs: 20000, immediate: true });
   return counts;
 }
 
@@ -76,7 +82,7 @@ function relativeTime(value: string): string {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ unreadCount }: { unreadCount?: number | null }) {
   const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -86,17 +92,31 @@ export default function NotificationBell() {
   const [data, setData] = useState<NotificationsResponse | null>(null);
   const [marking, setMarking] = useState(false);
 
+  // List / mark-read ke jawab ka unread — nav-counts ka agla taaza count aane
+  // tak yahi dikhta hai (mark-read ke foran baad badge sahi rahe).
+  const [unreadOverride, setUnreadOverride] = useState<number | null>(null);
+  useEffect(() => {
+    setUnreadOverride(null);
+  }, [unreadCount]);
+
   const load = useCallback(async () => {
-    const res = await officeFetch<NotificationsResponse>("/api/office/notifications");
-    if (res.ok) setData(res.data);
+    try {
+      const res = await officeFetch<NotificationsResponse>("/api/office/notifications");
+      if (res.ok) {
+        setData(res.data);
+        setUnreadOverride(res.data.unread);
+      }
+    } catch {
+      // network error — purani list rehne dein
+    }
   }, []);
 
-  // 20s polling + focus + office:changed (mutations ke foran baad).
-  // §W20 (P2): immediate — unread badge bina click ke page load par hi dikhe
-  // (is component ka initial data bhi sirf isi hook se aata hai).
-  useLiveRefresh(load, { intervalMs: 20000, immediate: true });
+  // §W28: list sirf dropdown khulne par (har dafa taaza).
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
 
-  const unread = data?.unread ?? 0;
+  const unread = unreadOverride ?? unreadCount ?? 0;
 
   function toggleOpen(event: React.MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
@@ -126,6 +146,7 @@ export default function NotificationBell() {
         json: { ids: [item.id] },
       });
       if (res.ok) {
+        setUnreadOverride(res.data.unread);
         setData((prev) =>
           prev
             ? {
@@ -146,6 +167,7 @@ export default function NotificationBell() {
       json: {},
     });
     if (res.ok) {
+      setUnreadOverride(res.data.unread);
       setData((prev) =>
         prev ? { unread: res.data.unread, items: prev.items.map((n) => ({ ...n, readAt: n.readAt || new Date().toISOString() })) } : prev
       );

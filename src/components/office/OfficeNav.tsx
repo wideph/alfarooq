@@ -21,7 +21,11 @@ import {
 } from "lucide-react";
 import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
-import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
+import NotificationBell, {
+  NavCountBubble,
+  useOfficeNavCounts,
+  type OfficeNavCounts,
+} from "@/components/office/NotificationBell";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 
 // §W18: atta department ka rename — permission ab office:attestation-dept:write
@@ -62,11 +66,11 @@ const navItems: Array<{
 
 // §W18: nav links alag component mein — dept tabs ki active state ?dept= query
 // par depend karti hai (useSearchParams), is liye Suspense boundary zaroori hai.
-function NavLinks({ admin }: { admin: AdminNavUser | null }) {
+// §W28: counts OfficeNav se aate hain (wahi data bell ke unread badge ko bhi).
+function NavLinks({ admin, counts }: { admin: AdminNavUser | null; counts: OfficeNavCounts | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const deptParam = pathname === "/office/cases" ? searchParams.get("dept") || "" : "";
-  const counts = useOfficeNavCounts();
 
   const visibleItems = navItems.filter((item) => {
     // §W18: dept tabs — cases page ke canSeeDeptTab rule ke mutabiq: us dept ki
@@ -136,6 +140,8 @@ export default function OfficeNav({
   onLogout: () => void;
 }) {
   const isSuperAdmin = admin?.role === "admin";
+  // §W28: ek hi nav-counts poll — nav bubbles + bell ka unread badge dono.
+  const counts = useOfficeNavCounts();
 
   // §N9 — department access links, kisi bhi office user ke liye. Lazy: sirf
   // pehli dafa dropdown khulne par fetch hota hai (har page load par nahi).
@@ -182,7 +188,7 @@ export default function OfficeNav({
           <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-center justify-start gap-1.5 md:justify-center">
               <Suspense fallback={null}>
-                <NavLinks admin={admin} />
+                <NavLinks admin={admin} counts={counts} />
               </Suspense>
 
               {/* §W11.9: Department Links sirf super admin ke liye — baqi roles
@@ -220,7 +226,7 @@ export default function OfficeNav({
 
           {/* RIGHT — actions cluster (kabhi shrink nahi) */}
           <div className="ml-1 flex shrink-0 items-center gap-1">
-            <NotificationBell />
+            <NotificationBell unreadCount={counts?.unreadNotifications} />
             {isSuperAdmin && (
               <Link
                 href="/admin"

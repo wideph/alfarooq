@@ -25,7 +25,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           // The object URL is short-lived but the filename is already guarded.
           // Let the browser/CDN reuse this redirect instead of signing on every
           // logo, image and PDF request.
-          "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=60",
+          // §W28: signed URL 60 min valid hai — redirect 45 min tak reuse
+          // (CDN Age header browser freshness se minus hota hai, is liye
+          // max-age + swr hamesha signed URL ki umar ke andar rehta hai).
+          // Pehle 5 min baad har logo/image par dobara signing + DB check.
+          "Cache-Control": "public, max-age=2700, s-maxage=2700, stale-while-revalidate=300",
         },
       });
     }

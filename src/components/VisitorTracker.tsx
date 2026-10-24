@@ -1,8 +1,9 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 import {
   canonicalizeVisitorUrl,
   consumePreviousVisitorKey,
@@ -64,31 +65,33 @@ function inferSource(url: URL, referrer: string, userAgent: string) {
   }
 }
 
+// §W28 perf: heartbeat 5s → 15s. Time-spent phir bhi poora ginta hai (har ping
+// pichhle ping se ab tak ka delta bhejta hai; tab chhupne/band hone par beacon).
+const HEARTBEAT_MS = 15_000;
+
 export default function VisitorTracker() {
   const pathname = usePathname();
-  const isAdminPath = pathname.startsWith("/admin");
-  const [settings, setSettings] = useState<PublicTrackingSettings | null>(null);
+  // §W28: staff pages (/admin + /office) par visitor tracking nahi — pehle
+  // /office ke har khule tab se har 5s DB write hoti thi (live DB par sab se
+  // zyada chalne wali query yahi UPDATE "Visitor" thi).
+  const isAdminPath = pathname.startsWith("/admin") || pathname.startsWith("/office");
+  // §W28: tracking IDs layout ki server-rendered settings (context) se — har
+  // page load par alag /api/settings fetch ki zaroorat nahi.
+  const { settings: siteSettings } = useSiteSettings();
+  const metaPixelId = siteSettings.metaPixelId || "";
+  const googleAdsTagId = siteSettings.googleAdsTagId || "";
+  const tiktokPixelId = siteSettings.tiktokPixelId || "";
+  const settings = useMemo<PublicTrackingSettings>(
+    () => ({ metaPixelId, googleAdsTagId, tiktokPixelId }),
+    [metaPixelId, googleAdsTagId, tiktokPixelId]
+  );
   const visitorKeyRef = useRef<string | null>(null);
   const previousVisitorKeyRef = useRef<string>("");
   const lastActiveAtRef = useRef<number>(Date.now());
   const landingPageRef = useRef<string | null>(null);
   const referrerRef = useRef<string>("");
   const sendPingRef = useRef<((includeDelta?: boolean, useBeacon?: boolean) => void) | null>(null);
-
-  useEffect(() => {
-    if (isAdminPath) return;
-
-    fetch("/api/settings")
-      .then((res) => res.json())
-      .then((data) => {
-        setSettings({
-          metaPixelId: data.metaPixelId || "",
-          googleAdsTagId: data.googleAdsTagId || "",
-          tiktokPixelId: data.tiktokPixelId || "",
-        });
-      })
-      .catch(() => {});
-  }, [isAdminPath]);
+  const lastPingedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isAdminPath) return;
@@ -182,10 +185,11 @@ export default function VisitorTracker() {
 
     sendPing(false);
     sendPingRef.current = sendPing;
+    lastPingedPathRef.current = window.location.pathname;
 
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") sendPing(true);
-    }, 5000);
+    }, HEARTBEAT_MS);
 
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") sendPing(true, true);
@@ -208,6 +212,10 @@ export default function VisitorTracker() {
 
   useEffect(() => {
     if (isAdminPath) return;
+    // §W28: mount par upar wala effect pehla ping bhej chuka hota hai — sirf
+    // asal route change par ping (pehle load par 2 POST jate the).
+    if (lastPingedPathRef.current === pathname) return;
+    lastPingedPathRef.current = pathname;
     sendPingRef.current?.(true);
   }, [isAdminPath, pathname]);
 

@@ -1205,3 +1205,42 @@ Investigation-first (live DB audit):
   2 files (jpg + mp4) → ek PRINTING registration, modal band, toast, row done.
 - **Next step**: deploy ke baad printing user se ek case par proof upload karwa
   kar dekhein ke row queue se hat jaye aur case attestation queue mein aa jaye.
+
+## WAVE 28 (2026-10-24) — speed: Singapore region, Prisma pg adapter + joins, fazool calls khatam (commit: pending)
+
+- **Owner report**: data dikhne / upload mein der; shak tha ke DB "India" region ki
+  wajah se hai.
+- **Tehqeeq (measured)**: DB asal mein Singapore (ap-southeast-1) hai. Live
+  `x-vercel-id` = `bom1::iad1` — functions **Washington (iad1)** mein chal rahe
+  the (code ka `preferredRegion` Hobby par apply nahi hota). Prisma engine
+  `pgbouncer=true` mode har query ko BEGIN + DEALLOCATE ALL + query + COMMIT
+  bana deta tha (pg_stat_statements: ~3.7 lakh har ek) — pooler par seedha `pg`
+  137 ms vs Prisma 622–684 ms per query. DB khud tez: avg ~1 ms/query, 16 MB.
+  Production: ek-query wali API 1.6–2.1 s, baghair DB 0.5 s.
+- **Infra-in-code**: `vercel.json` `"regions": ["sin1"]` (Hobby = 1 region).
+  `src/lib/prisma.ts` → `@prisma/adapter-pg` (pooler 6543, engine-only URL
+  flags strip, TLS, pool max 10). `schema.prisma` previewFeatures
+  `relationJoins` (include wali queries ek SQL mein). `bot-learning.ts`
+  information_schema query `::text` (adapter `name` type deserialize nahi
+  karta — warna bot training tootti).
+- **Fazool calls khatam**: VisitorTracker `/office` par band (har tab har 5s DB
+  write — live DB ki #1 query), settings context se (alag /api/settings nahi),
+  load par 1 ping (pehle 2), heartbeat 15s. NotificationBell khud poll nahi
+  karta — badge nav-counts se (OfficeNav/AdminNav ek hi hook, 20s), list sirf
+  dropdown khulne par. AdminProfitStrip "All time" par finance page ki report
+  (same URL 2 dafa jata tha). officeFetch: same-time identical GETs ek network
+  call share (in-flight dedup) + network error par throw nahi. Bot page
+  conversations 2 dafa → 1. Bot config: cached loaders + CDN `s-maxage=60`, har
+  navigation par refetch nahi. Course page on-demand ISR (`●`; pehle har
+  request dynamic, `no-store`). `/office/ledger` server redirect. Media
+  redirect cache 5 → 45 min.
+- **Verify**: tsc 0, lint 0, build exit 0. 60 GET APIs ke jawab purane engine
+  setup vs naye adapter+joins setup mein **60/60 identical** (signed URL params
+  normalize). Local (Pakistan→Singapore) 60 APIs sequential: 103.0 s → 21.6 s
+  (case detail 4977 → 378 ms, cases list ~3.8 s → ~0.4 s). Page audit: office
+  pages par API calls ~aadhi, tracking POST 0, duplicates 0, page errors 0.
+  Adapter ke saath write transactions (registerCaseFiles, case number upsert)
+  rollback-only tests pass, kuch persist nahi. Bell browser test pass. Tamam
+  tests read-only harness (writes blocked) — live data par koi asar nahi.
+- **Next step**: deploy ke baad live `x-vercel-id` mein `::sin1::` confirm karein
+  aur case page / finance page ka waqt dobara naapein.

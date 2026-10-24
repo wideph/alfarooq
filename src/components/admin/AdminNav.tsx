@@ -179,7 +179,7 @@ export default function AdminNav({
 
           {/* RIGHT — actions cluster */}
           <div className="ml-1 flex shrink-0 items-center gap-1">
-            {officeUser && <NotificationBell />}
+            {officeUser && <NotificationBell unreadCount={counts?.unreadNotifications} />}
             <Link
               href="/"
               title="Website"

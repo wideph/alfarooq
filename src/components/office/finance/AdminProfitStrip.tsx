@@ -18,26 +18,35 @@ import {
 // §W21 — Admin profit strip: prominent card with big NET number + period
 // selector (All time / Current month / Last month / Custom). Hover par total
 // deductions ka tooltip, click par "Profit ka hisab" modal.
-export default function AdminProfitStrip() {
+// §W28 perf: `allTimeReport` (finance page ki apni all-time report) mile to
+// "All time" period par strip DOBARA wahi /api/office/finance call nahi karta
+// (pehle page load par same URL 2 dafa jata tha); parent ki live refresh se hi
+// taaza rehta hai. Baqi periods apni fetch karte hain.
+export default function AdminProfitStrip({ allTimeReport }: { allTimeReport?: FinanceReport | null } = {}) {
   const [period, setPeriod] = useState<ProfitPeriod>("ALL");
   const [custom, setCustom] = useState({ from: "", to: "" });
-  const [profit, setProfit] = useState<ProfitBreakdown | null>(null);
+  const [ownProfit, setProfit] = useState<ProfitBreakdown | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const shared = period === "ALL" && allTimeReport !== undefined;
 
   const load = useCallback(async () => {
+    if (shared) return;
     const { from, to } = profitPeriodRange(period, custom);
     const res = await officeFetch<FinanceReport>(`/api/office/finance?from=${from}&to=${to}`);
     if (res.ok) setProfit(normalizeProfit(res.data?.profit));
-  }, [period, custom]);
+  }, [period, custom, shared]);
 
   useEffect(() => {
+    if (shared) return;
     if (period === "CUSTOM" && (!custom.from || !custom.to)) return;
     void load();
-  }, [load, period, custom.from, custom.to]);
+  }, [load, shared, period, custom.from, custom.to]);
 
-  // Live refresh — office:changed / polling par strip bhi silent reload.
+  // Live refresh — office:changed / polling par strip bhi silent reload
+  // (shared mode mein no-op — parent refresh karta hai).
   useLiveRefresh(load);
 
+  const profit = shared ? (allTimeReport ? normalizeProfit(allTimeReport.profit) : null) : ownProfit;
   const net = profit?.net ?? 0;
   const netTone = net >= 0 ? "text-emerald-700" : "text-red-600";
 

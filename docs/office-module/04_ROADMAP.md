@@ -72,3 +72,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 
 - [x] W26 Printing/attestation proof upload: multi-file + video via direct R2 upload (Vercel 4.5 MB limit), stable file links, viewer fallbacks.
 - [x] W27 Printing queue: "Printed proof upload karein" inline modal (detail page par navigate nahi).
+- [x] W28 Speed: functions sin1 (vercel.json), Prisma pg adapter + relationJoins, fazool/duplicate API calls khatam, course page ISR.

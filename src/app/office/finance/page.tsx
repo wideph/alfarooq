@@ -231,7 +231,7 @@ function FinanceDashboard({
       />
 
       {/* 1b. §W21 Admin profit strip (period selector + breakdown modal) */}
-      <AdminProfitStrip />
+      <AdminProfitStrip allTimeReport={report} />
 
       {/* 2. Offices (Remaining + per-office Profit) */}
       <OfficesGrid offices={officeCards} onProfit={setProfitOffice} />

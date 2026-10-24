@@ -90,12 +90,20 @@ export default function BotAdminPanel({
     setLoadingChats(false);
   }
 
+  // §W28 perf: training course par depend karti hai, conversations nahi —
+  // pehle selectedCourseId set hote hi conversations (cleanup DELETE ke
+  // saath) dobara fetch hoti thin (har page load par 2 dafa).
   useEffect(() => {
     if (!open) return;
     void loadTraining();
-    void loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedCourseId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void loadConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function saveTraining() {
     if (!canTrainingWrite) return;

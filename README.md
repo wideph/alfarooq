@@ -50,7 +50,10 @@ npm run dev
 3. **Install Command:** `npm install`
 4. **Build Command:** `prisma generate && next build`
 5. Add all environment variables from `.env.example` in Vercel → Settings → Environment Variables
-6. **Optional speed tip:** set Vercel project region to **Singapore (sin1)** — Supabase DB is in ap-southeast-1; closer region = faster admin/login/saves
+6. **Function region:** `vercel.json` pins functions to **Singapore (`sin1`)**, the
+   same AWS region as the Supabase DB (ap-southeast-1). Without it Vercel used
+   Washington (`iad1`) and every DB round trip crossed the Pacific. Hobby plans
+   allow exactly one region, so keep the list at one entry.
 
 **Important — connection strings (Supabase Dashboard → Database → Connect):**
 
@@ -60,6 +63,11 @@ npm run dev
 | `DIRECT_URL` | Session pooler | 5432 on `pooler.supabase.com` |
 
 Do **not** use `db.xxx.supabase.co:5432` as `DIRECT_URL` on Vercel — build/runtime often cannot reach it (P1001).
+
+The app talks to `DATABASE_URL` through Prisma's `pg` driver adapter
+(`src/lib/prisma.ts`), which sends each query in one round trip. The
+`pgbouncer=true` flag is only read by Prisma CLI tools; the app strips it.
+`DIRECT_URL` is still used by `prisma migrate`.
 
 **Database tables:** run once in Supabase SQL Editor before first deploy:
 
