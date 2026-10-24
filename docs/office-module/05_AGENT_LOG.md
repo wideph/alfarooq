@@ -1186,3 +1186,22 @@ Investigation-first (live DB audit):
 - **Next step**: deploy ke baad production par ek printing case mein 2 images + 1
   video upload kar ke dekhein. Agar ">4 MB ... CORS setting zaroori hai" error
   aaye to README wala CORS rule Cloudflare dashboard mein add karein.
+
+## WAVE 27 (2026-10-24) — printing queue mein inline proof upload (commit: pending)
+
+- **Owner report**: printing queue mein kisi case ke saamne "Printed proof upload
+  karein" button detail page par le jata tha — proof wahin upload hona chahiye.
+- **Fix (UI only, `DeptQueue.tsx`)**: printing row ka action ab button hai jo
+  filing wala inline modal kholta hai (modal ab 3 qisam: filing / sticker /
+  printing — `UPLOAD_MODAL` config). Printing modal: department PRINTING,
+  images / pdf / video, kai files ek sath (W26 `FileUploadBox`, direct R2), case #
+  + client naam + Roll/Reg header. Upload ke baad row foran "Proof upload ho
+  gaya ✓" + "Aur proof add karein" (local state); live refresh ke baad row queue
+  se hat jati hai kyun ke case PRINTED ho jata hai (§W23 queue rule). Row par
+  click (button ke bahar) pehle ki tarah detail page kholta hai. Attestation /
+  courier queue buttons unchanged (detail page).
+- **Verify**: tsc 0, lint 0. Headless Chrome (desktop + mobile, registration POST
+  intercepted, koi DB write nahi) 26/26: button navigate nahi karta, modal mein
+  2 files (jpg + mp4) → ek PRINTING registration, modal band, toast, row done.
+- **Next step**: deploy ke baad printing user se ek case par proof upload karwa
+  kar dekhein ke row queue se hat jaye aur case attestation queue mein aa jaye.

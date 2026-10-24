@@ -91,6 +91,43 @@ const ACCEPT_STICKER =
   "image/*,application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const STICKER_STEP_KEY = "VERIFICATION_STICKER";
 const STICKER_TITLE = "Verification Sticker/Picture of student";
+// §W27: printing proof — images / pdf / video (kai files ek sath).
+const ACCEPT_PROOF = "application/pdf,.pdf,image/*,video/*";
+
+// Inline upload modal ki qisam: filing files, verification sticker, printing proof.
+type UploadKind = "filing" | "sticker" | "printing";
+type UploadTarget = { item: DeptQueueRow; kind: UploadKind };
+
+const UPLOAD_MODAL: Record<
+  UploadKind,
+  {
+    heading: string;
+    department: "FILING" | "PRINTING";
+    accept: string;
+    hint: string;
+    fixedStepKey?: string;
+    fixedTitle?: string;
+    note?: string;
+  }
+> = {
+  filing: { heading: "Filing files upload karein", department: "FILING", accept: ACCEPT_FILING, hint: "Pdf ya image" },
+  sticker: {
+    heading: STICKER_TITLE,
+    department: "FILING",
+    accept: ACCEPT_STICKER,
+    hint: "Image / pdf / word",
+    fixedStepKey: STICKER_STEP_KEY,
+    fixedTitle: STICKER_TITLE,
+    note: `Title: ${STICKER_TITLE} — workflow aage nahi barhega, sirf sticker save hoga.`,
+  },
+  printing: {
+    heading: "Printed proof upload karein",
+    department: "PRINTING",
+    accept: ACCEPT_PROOF,
+    hint: "Printed proof (images / pdf / video)",
+    note: "Pehla proof upload hote hi case Printed ho jata hai aur attestation ko chala jata hai.",
+  },
+};
 
 // Current attestation step ka naam — full rows mein currentAttestationId hota hai;
 // slim cross-office rows mein nahi, wahan pehla non-DONE step current maana jata hai.
@@ -133,12 +170,15 @@ export default function DeptQueue({
   // pending rows amber tint; inline upload modal se hi filing complete hoti hai.
   const filingMode = dept === "filing" && !history;
   const { showToast, ToastElement } = useToast();
-  const [uploadFor, setUploadFor] = useState<{ item: DeptQueueRow; sticker: boolean } | null>(null);
+  const [uploadFor, setUploadFor] = useState<UploadTarget | null>(null);
   // FileUploadBox ka busy — upload ke dauran modal band na ho.
   const [uploading, setUploading] = useState(false);
   // Upload ke foran baad row foran done-color ho jaye (live-refresh 300ms mein
   // server truth la deta hai — ye sirf instant feedback hai).
   const [localFiling, setLocalFiling] = useState<Record<string, { done: boolean; count: number }>>({});
+  // §W27: printing queue — proof upload ke foran baad row "Printed" (live
+  // refresh ke baad row queue se hat jati hai kyun ke case PRINTED ho gaya).
+  const [localPrinted, setLocalPrinted] = useState<Record<string, boolean>>({});
 
   function openCase(item: DeptQueueRow) {
     router.push(`/office/cases/${item.id}`);
@@ -160,19 +200,30 @@ export default function DeptQueue({
       : "bg-amber-50/60 hover:bg-amber-100/60 border-amber-200";
   }
 
-  function openUpload(item: DeptQueueRow, sticker: boolean) {
-    setUploadFor({ item, sticker });
+  function openUpload(item: DeptQueueRow, kind: UploadKind) {
+    setUploadFor({ item, kind });
   }
 
   // §W26: FileUploadBox (kai files, browser se seedha R2) upload + office:changed
-  // announce khud karta hai; yahan sirf row ka instant done-color + modal band.
-  function handleUploaded(target: { item: DeptQueueRow; sticker: boolean }, result: UploadResult) {
-    if (!target.sticker && result.saved > 0) {
-      const { count } = filingState(target.item);
-      setLocalFiling((prev) => ({ ...prev, [target.item.id]: { done: true, count: count + result.saved } }));
+  // announce khud karta hai; yahan sirf row ka instant done-state + modal band.
+  function handleUploaded(target: UploadTarget, result: UploadResult) {
+    if (result.saved > 0) {
+      if (target.kind === "filing") {
+        const { count } = filingState(target.item);
+        setLocalFiling((prev) => ({ ...prev, [target.item.id]: { done: true, count: count + result.saved } }));
+      } else if (target.kind === "printing") {
+        setLocalPrinted((prev) => ({ ...prev, [target.item.id]: true }));
+      }
     }
     // Kuch files fail hon to modal khula rahe (retry ke liye list mein hain).
     if (result.failed === 0) setUploadFor(null);
+  }
+
+  function isPrinted(item: DeptQueueRow) {
+    // §W23: chip STATUS se decide hota hai, isPrinted flag se nahi —
+    // AF-2026-000016 jaisa stale state (status WAITING_FOR_PRINTING magar
+    // isPrinted=true) ghalat "Printed" dikhata tha.
+    return Boolean(localPrinted[item.id]) || (item.status !== "WAITING_FOR_PRINTING" && Boolean(item.isPrinted));
   }
 
   // Dept mode mein office chip HAMESHA — cross-office queues scannable hon.
@@ -224,10 +275,7 @@ export default function DeptQueue({
           </div>
         );
       case "printing": {
-        // §W23: chip STATUS se decide hota hai, isPrinted flag se nahi —
-        // AF-2026-000016 jaisa stale state (status WAITING_FOR_PRINTING magar
-        // isPrinted=true) ghalat "Printed" dikhata tha.
-        const printed = item.status !== "WAITING_FOR_PRINTING" && Boolean(item.isPrinted);
+        const printed = isPrinted(item);
         return (
           <div className="space-y-1 text-xs">
             <span
@@ -311,6 +359,43 @@ export default function DeptQueue({
     );
   }
 
+  // §W27: printing queue — "Printed proof upload karein" ab detail page par
+  // nahi le jata; isi jagah modal khulta hai (kai images / pdf / video ek sath).
+  // Row par click (button ke bahar) pehle ki tarah case detail kholta hai.
+  function printingActions(item: DeptQueueRow, fullWidth = false) {
+    const printed = isPrinted(item);
+    return (
+      <div
+        className={`flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[11rem]"}`}
+        onClick={stopRowClick}
+        onMouseEnter={stopRowClick}
+      >
+        {printed && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+            <BadgeCheck className="h-3.5 w-3.5" /> Proof upload ho gaya ✓
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => openUpload(item, "printing")}
+          className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold ${
+            printed
+              ? "border border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
+              : "bg-primary-600 text-white hover:bg-primary-700"
+          } ${fullWidth ? "w-full" : ""}`}
+        >
+          <Upload className="h-3.5 w-3.5" /> {printed ? "Aur proof add karein" : actionLabel}
+        </button>
+      </div>
+    );
+  }
+
+  function rowActions(item: DeptQueueRow, fullWidth = false) {
+    if (filingMode) return filingActions(item, fullWidth);
+    if (dept === "printing" && !history) return printingActions(item, fullWidth);
+    return actionButton(item, fullWidth);
+  }
+
   // §W21 filing actions: pending row → inline upload modal (detail page par
   // navigate nahi); sticker button pending + done DONO rows par (sticker kabhi
   // bhi add ho sakta hai). Done row apna files count subtly dikhati hai.
@@ -330,7 +415,7 @@ export default function DeptQueue({
         ) : (
           <button
             type="button"
-            onClick={() => openUpload(item, false)}
+            onClick={() => openUpload(item, "filing")}
             className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-700 ${
               fullWidth ? "w-full" : ""
             }`}
@@ -341,7 +426,7 @@ export default function DeptQueue({
         <button
           type="button"
           title={STICKER_TITLE}
-          onClick={() => openUpload(item, true)}
+          onClick={() => openUpload(item, "sticker")}
           className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-left text-[11px] font-semibold leading-tight text-indigo-700 hover:border-indigo-300 hover:bg-indigo-50 ${
             fullWidth ? "w-full" : ""
           }`}
@@ -392,7 +477,7 @@ export default function DeptQueue({
             </div>
             <p className="text-xs text-slate-500">{item.category?.name || "—"}</p>
             {workInfo(item)}
-            {filingMode ? filingActions(item, true) : actionButton(item, true)}
+            {rowActions(item, true)}
           </div>
         ))}
       </div>
@@ -421,31 +506,38 @@ export default function DeptQueue({
                 <td className="px-3 py-3 align-top text-xs text-slate-600">{item.category?.name || "—"}</td>
                 <td className="px-3 py-3 align-top">{officeChip(item)}</td>
                 <td className="px-3 py-3 align-top">{workInfo(item)}</td>
-                <td className="px-3 py-3 align-top">{filingMode ? filingActions(item) : actionButton(item)}</td>
+                <td className="px-3 py-3 align-top">{rowActions(item)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* §W21: inline filing upload modal — pending row ki filing files ya
-          kisi bhi row ka verification sticker yahin se upload hota hai
-          (detail page par jaye baghair). */}
+      {/* §W21: inline upload modal — pending row ki filing files, kisi bhi row
+          ka verification sticker, aur (§W27) printing proof yahin se upload
+          hota hai (detail page par jaye baghair). */}
       {uploadFor && (
         <div
           className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
           onClick={() => !uploading && setUploadFor(null)}
         >
           <div
-            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl"
+            className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  {uploadFor.sticker ? STICKER_TITLE : "Filing files upload karein"}
-                </h3>
-                <p className="text-xs text-slate-500">Case {uploadFor.item.caseNumber}</p>
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-slate-900">{UPLOAD_MODAL[uploadFor.kind].heading}</h3>
+                <p className="text-xs text-slate-500">
+                  Case {uploadFor.item.caseNumber}
+                  {uploadFor.item.clientName ? ` · ${uploadFor.item.clientName}` : ""}
+                </p>
+                {uploadFor.kind === "printing" && (
+                  <p className="text-xs text-slate-500">
+                    {uploadFor.item.rollNumber ? `Roll ${uploadFor.item.rollNumber}` : "Roll —"} ·{" "}
+                    {uploadFor.item.registrationNumber ? `Reg ${uploadFor.item.registrationNumber}` : "Reg —"}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -457,20 +549,20 @@ export default function DeptQueue({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            {uploadFor.sticker && (
+            {UPLOAD_MODAL[uploadFor.kind].note && (
               <p className="rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                Title: {STICKER_TITLE} — workflow aage nahi barhega, sirf sticker save hoga.
+                {UPLOAD_MODAL[uploadFor.kind].note}
               </p>
             )}
             {/* §W26: kai files ek sath (direct R2 upload + progress) */}
             <FileUploadBox
-              key={`${uploadFor.item.id}-${uploadFor.sticker ? "sticker" : "filing"}`}
+              key={`${uploadFor.item.id}-${uploadFor.kind}`}
               caseId={uploadFor.item.id}
-              department="FILING"
-              accept={uploadFor.sticker ? ACCEPT_STICKER : ACCEPT_FILING}
-              fixedStepKey={uploadFor.sticker ? STICKER_STEP_KEY : undefined}
-              fixedTitle={uploadFor.sticker ? STICKER_TITLE : undefined}
-              hint={uploadFor.sticker ? "Image / pdf / word" : "Pdf ya image"}
+              department={UPLOAD_MODAL[uploadFor.kind].department}
+              accept={UPLOAD_MODAL[uploadFor.kind].accept}
+              fixedStepKey={UPLOAD_MODAL[uploadFor.kind].fixedStepKey}
+              fixedTitle={UPLOAD_MODAL[uploadFor.kind].fixedTitle}
+              hint={UPLOAD_MODAL[uploadFor.kind].hint}
               onUploaded={(result) => handleUploaded(uploadFor, result)}
               onMessage={showToast}
               onBusyChange={setUploading}

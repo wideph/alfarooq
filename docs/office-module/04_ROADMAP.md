@@ -71,3 +71,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 ## Post-launch fixes
 
 - [x] W26 Printing/attestation proof upload: multi-file + video via direct R2 upload (Vercel 4.5 MB limit), stable file links, viewer fallbacks.
+- [x] W27 Printing queue: "Printed proof upload karein" inline modal (detail page par navigate nahi).
