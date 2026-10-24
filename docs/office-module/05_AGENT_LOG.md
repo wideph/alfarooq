@@ -1244,3 +1244,22 @@ Investigation-first (live DB audit):
   tests read-only harness (writes blocked) — live data par koi asar nahi.
 - **Next step**: deploy ke baad live `x-vercel-id` mein `::sin1::` confirm karein
   aur case page / finance page ka waqt dobara naapein.
+
+## WAVE 29 (2026-10-25) — payment requests list mein student details + pehle ka baqi (commit: pending)
+
+- **Owner request**: admin ki payment requests list (/office/payments) mein har
+  payment ke saath Roll / Registration number, student ka naam, agreed amount
+  aur "is payment se pehle" remaining.
+- **API** (`GET /api/office/payments`): case select +rollNumber,
+  registrationNumber; har item `balance { receivedBefore, remainingBefore,
+  remainingAfter, extraAfter }`. Formula BR1.4 (sirf RECEIVED, remaining =
+  max(agreed − received, 0)). "Pehle" = (paymentDate, createdAt, id) order;
+  non-RECEIVED payment ke liye case ki tamam RECEIVED payments pehle ginti
+  hoti hain (yani abhi ka baqi). Page ke cases ki RECEIVED payments admin names
+  ke saath EK parallel batch mein (koi N+1 nahi).
+- **UI** (`office/payments/page.tsx`): bold student naam, "Roll No | Reg No",
+  "Agreed" chip + amber "Is payment se pehle baqi" chip; PENDING/RECEIVED par
+  chhoti line "Is payment ke baad baqi" ya "X extra ho jayenge".
+- **Verify**: tsc 0, lint 0, build exit 0. Read-only harness: API ke balances
+  ek alag seedhi SQL se 62/62 match (PENDING 2, all 31, RECEIVED 29); desktop +
+  mobile render, page errors 0.

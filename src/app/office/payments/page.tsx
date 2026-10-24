@@ -25,9 +25,13 @@ type PaymentRow = {
     id: string;
     caseNumber: string;
     clientName: string;
+    rollNumber: string | null;
+    registrationNumber: string | null;
     agreedAmount: number;
     bookingOffice: { id: string; name: string; type: string };
   };
+  // §W29: is payment se pehle / baad ka baqi (server BR1.4 formula se).
+  balance?: { receivedBefore: number; remainingBefore: number; remainingAfter: number; extraAfter: number };
 };
 
 function PaymentsSkeleton() {
@@ -155,19 +159,47 @@ export default function OfficePaymentsPage() {
                   return (
                     <div key={p.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <Link href={`/office/cases/${p.case.id}`} className="font-semibold text-primary-700 hover:underline">
-                            {p.case.caseNumber}
-                          </Link>
-                          <span className="ml-2 text-slate-800">{p.case.clientName}</span>
-                          <p className="text-xs text-slate-500">
-                            {p.case.bookingOffice.name} · Agreed {formatMoney(p.case.agreedAmount)}
-                          </p>
-                          <p className="mt-1 text-sm">
+                        <div className="min-w-0 space-y-1.5">
+                          <div>
+                            <Link href={`/office/cases/${p.case.id}`} className="font-semibold text-primary-700 hover:underline">
+                              {p.case.caseNumber}
+                            </Link>
+                            <span className="ml-2 text-xs text-slate-500">{p.case.bookingOffice.name}</span>
+                          </div>
+                          {/* §W29: student ki pehchan — naam + Roll / Reg */}
+                          <div>
+                            <p className="text-base font-bold text-slate-900">{p.case.clientName || "—"}</p>
+                            <p className="text-xs text-slate-600">
+                              Roll No: <span className="font-semibold text-slate-800">{p.case.rollNumber || "—"}</span>
+                              <span className="mx-1.5 text-slate-300">|</span>
+                              Reg No: <span className="font-semibold text-slate-800">{p.case.registrationNumber || "—"}</span>
+                            </p>
+                          </div>
+                          {/* §W29: agreed amount + is payment se pehle ka baqi */}
+                          <div className="flex flex-wrap gap-1.5 text-xs">
+                            <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700">
+                              Agreed: <span className="font-bold text-slate-900">{formatMoney(p.case.agreedAmount)}</span>
+                            </span>
+                            {p.balance && (
+                              <span className="rounded-lg bg-amber-50 px-2 py-1 text-amber-800 ring-1 ring-amber-200">
+                                Is payment se pehle baqi:{" "}
+                                <span className="font-bold">{formatMoney(p.balance.remainingBefore)}</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm">
                             <span className="font-bold text-slate-900">{formatMoney(p.amount)}</span>
                             <span className="text-slate-500"> · {formatDate(p.paymentDate)} · {PAYMENT_METHOD_LABELS[p.method] || p.method}</span>
                             {p.reference && <span className="text-slate-500"> · Ref {p.reference}</span>}
                           </p>
+                          {/* NOT_RECEIVED / BOGUS ginti nahi hoti — un par "baad" ka hint nahi */}
+                          {p.balance && (p.status === "PENDING" || p.status === "RECEIVED") && (
+                            <p className="text-[11px] text-slate-500">
+                              {p.balance.extraAfter > 0
+                                ? `Is payment se ${formatMoney(p.balance.extraAfter)} extra ho jayenge`
+                                : `Is payment ke baad baqi: ${formatMoney(p.balance.remainingAfter)}`}
+                            </p>
+                          )}
                           {p.remarks && <p className="text-xs text-slate-500">{p.remarks}</p>}
                         </div>
                         <div className="flex flex-col items-end gap-2">

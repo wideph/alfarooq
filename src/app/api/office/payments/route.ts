@@ -6,7 +6,7 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, findAccessibleCase } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
-import { parseAmount } from "@/lib/office/money";
+import { dec, parseAmount, sum, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
 import { notifyPermission, notifyRole } from "@/lib/office/notifications";
 import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
             id: true,
             caseNumber: true,
             clientName: true,
+            // §W29: payment request list mein student ki pehchan (Roll / Reg).
+            rollNumber: true,
+            registrationNumber: true,
             agreedAmount: true,
             bookingOffice: { select: { id: true, name: true, type: true } },
           },
@@ -59,11 +62,62 @@ export async function GET(request: NextRequest) {
   // ki" chahiye: case + bookingOffice already included above; submittedByName
   // ke liye ek hi admin names query (payments par koi submittedBy relation
   // nahi hai, sirf id).
+  // §W29: isi parallel batch mein page ke cases ki RECEIVED payments — har
+  // payment ka "is payment se pehle baqi" (BR1.4: remaining = max(agreed −
+  // received, 0), sirf RECEIVED ginti hoti hain).
   const adminIds = [...new Set(items.map((item) => item.submittedById))];
-  const admins = adminIds.length
-    ? await prisma.admin.findMany({ where: { id: { in: adminIds } }, select: { id: true, name: true } })
-    : [];
+  const caseIds = [...new Set(items.map((item) => item.caseId))];
+  const [admins, receivedRows] = await Promise.all([
+    adminIds.length
+      ? prisma.admin.findMany({ where: { id: { in: adminIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    caseIds.length
+      ? prisma.payment.findMany({
+          where: { caseId: { in: caseIds }, status: "RECEIVED" },
+          select: { id: true, caseId: true, amount: true, paymentDate: true, createdAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const adminNames = new Map(admins.map((admin) => [admin.id, admin.name]));
+  const receivedByCase = new Map<string, typeof receivedRows>();
+  for (const row of receivedRows) {
+    const list = receivedByCase.get(row.caseId) ?? [];
+    list.push(row);
+    receivedByCase.set(row.caseId, list);
+  }
+
+  // "Pehle" = (paymentDate, createdAt, id) order. Jo payment abhi RECEIVED nahi
+  // (PENDING / NOT_RECEIVED / BOGUS) us ke liye case ki TAMAM RECEIVED payments
+  // pehle ki hain — yani abhi ka baqi. RECEIVED payment ke liye sirf us se
+  // pehle wali RECEIVED payments.
+  const isBefore = (
+    a: { paymentDate: Date; createdAt: Date; id: string },
+    b: { paymentDate: Date; createdAt: Date; id: string }
+  ) =>
+    a.paymentDate.getTime() !== b.paymentDate.getTime()
+      ? a.paymentDate < b.paymentDate
+      : a.createdAt.getTime() !== b.createdAt.getTime()
+        ? a.createdAt < b.createdAt
+        : a.id < b.id;
+
+  function balanceFor(item: (typeof items)[number]) {
+    const agreed = dec(item.case.agreedAmount);
+    const rows = receivedByCase.get(item.caseId) ?? [];
+    const receivedBefore = sum(
+      rows
+        .filter((row) => row.id !== item.id && (item.status !== "RECEIVED" || isBefore(row, item)))
+        .map((row) => row.amount)
+    );
+    const remainingBefore = Prisma.Decimal.max(agreed.minus(receivedBefore), 0);
+    const remainingAfter = Prisma.Decimal.max(remainingBefore.minus(item.amount), 0);
+    const extraAfter = Prisma.Decimal.max(dec(item.amount).minus(remainingBefore), 0);
+    return {
+      receivedBefore: toNumber(receivedBefore),
+      remainingBefore: toNumber(remainingBefore),
+      remainingAfter: toNumber(remainingAfter),
+      extraAfter: toNumber(extraAfter),
+    };
+  }
 
   return NextResponse.json({
     items: items.map((item) =>
@@ -72,6 +126,7 @@ export async function GET(request: NextRequest) {
         submittedByName: adminNames.get(item.submittedById) ?? null,
         hasSlip: Boolean(item.slipKey),
         slipKey: undefined,
+        balance: balanceFor(item),
       })
     ),
     total,
