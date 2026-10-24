@@ -121,15 +121,19 @@ export type FilingCaseDetail = {
 };
 
 // GET /api/office/cases/[id]/files item.
+// §W26: url / downloadUrl stable same-origin links hain (/files/<id>) jo taaza
+// signed R2 URL par redirect karte hain; fileName = original file ka naam.
 export type CaseFileItem = {
   id: string;
   department: "FILING" | "PRINTING" | "ATTESTATION" | "COURIER";
   stepKey: string | null;
   title: string | null;
-  fileType: "pdf" | "image" | "video";
+  fileName?: string | null;
+  fileType: "pdf" | "image" | "video" | "word";
   createdAt: string;
   uploadedByName: string | null;
   url: string;
+  downloadUrl?: string | null;
 };
 
 // GET /api/office/setup/sets item (with Roll Number dim info).

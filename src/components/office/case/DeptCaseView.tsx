@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,25 +10,22 @@ import {
   FileText,
   FolderOpen,
   Info,
-  Loader2,
   Stamp,
-  Upload,
 } from "lucide-react";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import CaseFileViewer, { type ViewableFile } from "@/components/office/case/CaseFileViewer";
+import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
-import { announceOfficeChange } from "@/lib/office/live";
 import {
   ATTESTATION_STATUS_LABELS,
   ATTESTATION_STATUS_STYLES,
   STATUS_LABELS,
   STATUS_STYLES,
 } from "@/lib/office/labels";
-import { inputClass, primaryBtnClass } from "@/lib/office/types";
 
 // §W18 — cross-office department worker ka limited case view. API (B2 contract)
 // `{ ok: true, limited: true, depts: [...], detail: {...} }` return karta hai —
@@ -76,11 +73,13 @@ type DeptFileItem = {
   department: DeptKey;
   stepKey: string | null;
   title: string | null;
-  fileType: "pdf" | "image" | "video";
+  // §W26: original file name (download + title na ho to display).
+  fileName?: string | null;
+  fileType: "pdf" | "image" | "video" | "word";
   createdAt: string;
   uploadedByName: string | null;
   url: string;
-  // §W21: signed download URL (download force karta hai) — contract field.
+  // §W21: download link (download force karta hai) — contract field.
   downloadUrl?: string | null;
 };
 
@@ -99,9 +98,9 @@ const DEPT_URL_KEYS: Record<DeptKey, string> = {
 };
 
 const UPLOAD_HINTS: Record<DeptKey, string> = {
-  FILING: "1–2 files (pdf ya image)",
-  PRINTING: "Printed proof (image / pdf / video)",
-  ATTESTATION: "Step file (optional step select karein) — FINAL file lazmi hai",
+  FILING: "Files (pdf ya image)",
+  PRINTING: "Printed proof (images / pdf / video)",
+  ATTESTATION: "Step files / proof (optional step select karein) — FINAL file lazmi hai",
   COURIER: "Courier slip (image / pdf / video) — admin + booking office ko dikhegi",
 };
 
@@ -136,7 +135,6 @@ function attestationStepOptions(attestations: DeptLimitedAttestation[]) {
       options.push({ stepKey: key, label: attestation.attestationType.name });
     }
   }
-  options.push({ stepKey: "FINAL", label: "FINAL — Final file (lazmi)" });
   return options;
 }
 
@@ -154,57 +152,47 @@ export default function DeptCaseView({
   const [filesLoading, setFilesLoading] = useState(true);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [viewer, setViewer] = useState<ViewableFile | null>(null);
-  const [busy, setBusy] = useState(false);
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
 
   const loadFiles = useCallback(async () => {
-    const res = await officeFetch<{ items: DeptFileItem[] }>(`/api/office/cases/${id}/files`);
-    if (res.ok) {
-      // Apne departments ki files + FILING files (§W24: printing/attestation
-      // worker ko filing files sirf dekhne ke liye milti hain — server bhi
-      // yahi set return karta hai; filter defensive hai).
-      setFiles(
-        res.data.items.filter((file) => depts.includes(file.department) || file.department === "FILING")
-      );
+    try {
+      const res = await officeFetch<{ items: DeptFileItem[] }>(`/api/office/cases/${id}/files`);
+      if (res.ok) {
+        // Apne departments ki files + FILING files (§W24: printing/attestation
+        // worker ko filing files sirf dekhne ke liye milti hain — server bhi
+        // yahi set return karta hai; filter defensive hai).
+        setFiles(
+          res.data.items.filter((file) => depts.includes(file.department) || file.department === "FILING")
+        );
+      }
+    } catch {
+      // network error — purani list rehne dein
+    } finally {
+      setFilesLoading(false);
     }
-    setFilesLoading(false);
   }, [id, depts]);
 
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
 
-  async function upload(department: DeptKey, stepKey: string, file: File | null, title: string) {
-    if (!file) return;
-    setBusy(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("department", department);
-    if (stepKey) fd.append("stepKey", stepKey);
-    if (title.trim()) fd.append("title", title.trim());
-    const res = await fetch(`/api/office/cases/${id}/files`, { method: "POST", body: fd });
-    const body = await res.json().catch(() => ({}));
-    if (res.ok) {
-      // officeFetch multipart nahi use karta — live refresh signal khud bhejein.
-      announceOfficeChange();
-      setMessage("File upload ho gayi");
-      await loadFiles();
-      await onReload(); // status aage barh sakta hai (workflow)
-    } else {
-      setMessage(body.error || "File upload nahi ho saki", "error");
-    }
-    setBusy(false);
+  // §W26: upload FileUploadBox karta hai (kai files, direct R2). Baad mein
+  // list + case reload (status workflow se aage barh sakta hai).
+  async function afterUpload() {
+    await loadFiles();
+    await onReload();
   }
 
   function fileRow(file: DeptFileItem) {
+    const label = file.title || file.fileName || `${DEPT_LABELS[file.department]} file`;
     return (
       <li key={file.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
         <span className="min-w-0">
-          <span className="font-medium text-slate-800">{file.title || `${DEPT_LABELS[file.department]} file`}</span>
+          <span className="break-all font-medium text-slate-800">{label}</span>
           {isVerificationSticker(file) && <StickerChip />}
           <span className="ml-2 text-xs text-slate-400">
-            {file.fileType.toUpperCase()}
+            {String(file.fileType || "file").toUpperCase()}
             {file.stepKey ? ` · ${file.stepKey}` : ""} · {formatDateTime(file.createdAt)}
             {file.uploadedByName ? ` · ${file.uploadedByName}` : ""}
           </span>
@@ -216,7 +204,8 @@ export default function DeptCaseView({
                 url: file.url,
                 downloadUrl: file.downloadUrl,
                 fileType: file.fileType,
-                title: file.title || "Case file",
+                title: label,
+                fileName: file.fileName,
               })
             }
             className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
@@ -225,9 +214,9 @@ export default function DeptCaseView({
           </button>
           <a
             href={file.downloadUrl || file.url}
-            download={file.title || "case-file"}
-            title={`Download — ${file.title || "case file"}`}
-            aria-label={`Download ${file.title || "case file"}`}
+            download={file.fileName || ""}
+            title={`Download — ${label}`}
+            aria-label={`Download ${label}`}
             className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
           >
             <Download className="h-3.5 w-3.5" /> Download
@@ -397,14 +386,29 @@ export default function DeptCaseView({
                         {deptFiles.map(fileRow)}
                       </ul>
                     )}
-                    <DeptUploadBox
+                    <FileUploadBox
+                      caseId={id}
                       department={department}
                       accept={department === "FILING" ? ACCEPT_DOC : ACCEPT_ALL}
                       hint={UPLOAD_HINTS[department]}
                       stepOptions={department === "ATTESTATION" ? attestationStepOptions(detail.attestations) : []}
-                      busy={busy}
-                      onUpload={upload}
+                      onUploaded={afterUpload}
+                      onMessage={setMessage}
                     />
+                    {/* ATTESTATION: FINAL file(s) lazmi — alag prominent box */}
+                    {department === "ATTESTATION" && (
+                      <FileUploadBox
+                        caseId={id}
+                        department="ATTESTATION"
+                        accept={ACCEPT_ALL}
+                        fixedStepKey="FINAL"
+                        tone="final"
+                        buttonLabel="Final upload"
+                        hint="Final proof (images / pdf / video)"
+                        onUploaded={afterUpload}
+                        onMessage={setMessage}
+                      />
+                    )}
                   </div>
                 </section>
               );
@@ -441,65 +445,6 @@ export default function DeptCaseView({
       </SectionCard>
 
       {viewer && <CaseFileViewer file={viewer} onClose={() => setViewer(null)} />}
-    </div>
-  );
-}
-
-// Per-department upload box: file + optional title (+ attestation ke liye optional
-// step selector). Multiple departments hon to har department ka apna box hota hai.
-function DeptUploadBox({
-  department,
-  accept,
-  hint,
-  stepOptions,
-  busy,
-  onUpload,
-}: {
-  department: DeptKey;
-  accept: string;
-  hint: string;
-  stepOptions: Array<{ stepKey: string; label: string }>;
-  busy: boolean;
-  onUpload: (department: DeptKey, stepKey: string, file: File | null, title: string) => Promise<void>;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState("");
-  const [stepKey, setStepKey] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  async function submit() {
-    await onUpload(department, stepKey, file, title);
-    setFile(null);
-    setTitle("");
-    setStepKey("");
-    if (inputRef.current) inputRef.current.value = "";
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {stepOptions.length > 0 && (
-          <select className={`${inputClass} sm:max-w-[12rem]`} value={stepKey} onChange={(e) => setStepKey(e.target.value)}>
-            <option value="">Step (optional)…</option>
-            {stepOptions.map((step) => (
-              <option key={step.stepKey} value={step.stepKey}>
-                {step.label}
-              </option>
-            ))}
-          </select>
-        )}
-        <input ref={inputRef} type="file" accept={accept} className="text-sm" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <input
-          className={`${inputClass} sm:max-w-[10rem]`}
-          placeholder="Title (optional)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button disabled={busy || !file} onClick={submit} className={`${primaryBtnClass} min-h-[40px] shrink-0`}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Upload
-        </button>
-      </div>
-      <p className="text-[11px] text-slate-400">{hint}</p>
     </div>
   );
 }

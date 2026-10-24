@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hasPermission } from "@/lib/auth";
+import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { deptPermissionsOf, findAccessibleCase } from "@/lib/office/case-access";
+import { findAccessibleCase } from "@/lib/office/case-access";
+import {
+  MAX_FILES_PER_UPLOAD,
+  caseFilePrefix,
+  caseFileVisibility,
+  registerCaseFiles,
+  type NewCaseFile,
+} from "@/lib/office/case-files";
 import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
-import { deleteOfficeFile, getOfficeFileSignedUrl, uploadDepartmentFile } from "@/lib/office/r2";
+import {
+  deleteOfficeFile,
+  departmentFileMaxBytes,
+  departmentFileTypeFromKey,
+  headOfficeFile,
+  originalFilenameFromKey,
+  planDepartmentUpload,
+  uploadDepartmentFile,
+} from "@/lib/office/r2";
 import { cleanText, toJson } from "@/lib/office/serializers";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   CASE_DEPARTMENTS,
   DEPARTMENT_PERMISSIONS,
-  VERIFICATION_STICKER_STEP_KEY,
-  autoBridgePrintingForDualDept,
-  evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
 
@@ -23,52 +35,19 @@ export const maxDuration = 300;
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// GET: department files of a case, with short-lived signed URLs (same pattern
-// as payment slips — private R2 bucket, never cached).
+// GET: department files of a case. §W26: url / downloadUrl ab STABLE same-origin
+// routes hain (/files/<fileId>) jo har click par taaza signed R2 URL par
+// redirect karte hain — pehle list ke signed URLs 15 min baad expire ho jate
+// the aur tab khula rehne par file "kharab"/blank dikhti thi.
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
   const { id } = await params;
   try {
-    const item = await findAccessibleCase(session, id);
-    // §W18: caseScope block kare to department workers (kisi dept ki write
-    // permission) cross-office files dekh sakte hain — magar SIRF apne
-    // departments ki files.
-    const deptOnly = item ? [] : deptPermissionsOf(session);
-    if (!item) {
-      if (deptOnly.length === 0) return notFound("Case nahi mila");
-      const exists = await prisma.case.findFirst({ where: { id }, select: { id: true } });
-      if (!exists) return notFound("Case nahi mila");
-    }
-    // §W24: printing / attestation dept workers ko FILING files bhi milti hain
-    // (READ-ONLY view — unhe source documents print/attest karne ke liye chahiye).
-    // Upload/delete server-side permission checks se protected hain, is liye yahan
-    // sirf visibility barh rahi hai. Filing worker ko pehle se apni files milti hain.
-    const visibleDepts = [...deptOnly];
-    if (
-      visibleDepts.length > 0 &&
-      !visibleDepts.includes("FILING") &&
-      (visibleDepts.includes("PRINTING") || visibleDepts.includes("ATTESTATION"))
-    ) {
-      visibleDepts.push("FILING");
-    }
+    const where = await caseFileVisibility(session, id);
+    if (!where) return notFound("Case nahi mila");
 
-    // §W11.6: booking office users ko FILING department ki files sirf tab
-    // dikhen jab admin ne is case par permission di ho.
-    const hideFilingFiles =
-      item !== null &&
-      session.role === "booking_office" &&
-      !item.filingFilesVisibleToBooking;
-
-    const files = await prisma.caseFile.findMany({
-      where:
-        visibleDepts.length > 0
-          ? { caseId: id, department: { in: visibleDepts } }
-          : hideFilingFiles
-            ? { caseId: id, department: { not: "FILING" } }
-            : { caseId: id },
-      orderBy: { createdAt: "asc" },
-    });
+    const files = await prisma.caseFile.findMany({ where, orderBy: { createdAt: "asc" } });
     const uploaderIds = [...new Set(files.map((file) => file.uploadedById))];
     const uploaders = await prisma.admin.findMany({
       where: { id: { in: uploaderIds } },
@@ -76,45 +55,67 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
     const names = Object.fromEntries(uploaders.map((uploader) => [uploader.id, uploader.name]));
 
-    const items = await Promise.all(
-      files.map(async (file) => ({
+    const items = files.map((file) => {
+      const base = `/api/office/cases/${id}/files/${file.id}`;
+      return {
         id: file.id,
         department: file.department,
         stepKey: file.stepKey,
         title: file.title,
+        // §W23: download filename hamesha ORIGINAL file name (title nahi).
+        fileName: originalFilenameFromKey(file.fileKey),
         fileType: file.fileType,
         createdAt: file.createdAt,
         uploadedById: file.uploadedById,
         uploadedByName: names[file.uploadedById] || null,
-        url: await getOfficeFileSignedUrl(file.fileKey),
-        // W21: forced-attachment download. §W23: filename hamesha ORIGINAL
-        // file name (title nahi — title mein extension nahi hoti, jis se
-        // Word/PDF download "corrupt" lagti thi aur name badal jata tha).
-        downloadUrl: await getOfficeFileSignedUrl(file.fileKey, 900, {
-          download: true,
-        }),
-      }))
-    );
+        url: base,
+        downloadUrl: `${base}?download=1`,
+      };
+    });
     return NextResponse.json({ items: toJson(items) });
   } catch (error) {
     return serverError(error);
   }
 }
 
-// POST multipart: file + department (FILING|PRINTING|ATTESTATION|COURIER) +
-// optional stepKey + title. Moves the case forward in the department workflow (§W11.1):
-//   first FILING file   → WAITING_FOR_FILE → WAITING_FOR_PRINTING
-//   first PRINTING file → WAITING_FOR_PRINTING → PRINTED (+ isPrinted)
-//   ATTESTATION step files → optional per step; FINAL file + all set steps
-//                         DONE → ATTESTATION_COMPLETE (see evaluateCaseCompletion)
-//   COURIER slip        → WAITING_FOR_COURIER → DELIVERED
+type UploadBody = {
+  department?: unknown;
+  stepKey?: unknown;
+  title?: unknown;
+  // title (optional) per file — client multi-file numbering ("x (2/3)") khud
+  // bhejta hai taake direct + fallback dono raaston ke titles ek jaise hon.
+  uploads?: Array<{ key?: unknown; title?: unknown }>;
+};
+
+// POST — department files register/upload karta hai (ek ya KAI files, §W26).
+// Do tareeqe:
+//   1. JSON { department, stepKey?, title?, uploads: [{ key }] } — browser ne
+//      files /files/upload-url ke signed URLs se SEEDHA R2 par upload ki hain
+//      (Vercel ki 4.5 MB body limit ke bahar; video / badi PDF / kai images).
+//      Server har key ka prefix + R2 par maujoodgi + size verify karta hai.
+//   2. multipart (file — ek ya kai, department, stepKey?, title?) — purana
+//      raasta; client sirf choti files ke fallback ke liye use karta hai.
+// Dono raaste registerCaseFiles() se EK transaction mein rows + workflow
+// transition (§W11.1) karte hain.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
   const { id } = await params;
+  // Fail hone par R2 se saaf karne wali keys (validation ke baad set hoti hain).
+  let cleanupKeys: string[] = [];
   try {
-    const formData = await request.formData();
-    const department = String(formData.get("department") || "").toUpperCase() as CaseDepartment;
+    const isJson = (request.headers.get("content-type") || "").includes("application/json");
+    let body: UploadBody | null = null;
+    let formData: FormData | null = null;
+    if (isJson) {
+      body = (await request.json().catch(() => null)) as UploadBody | null;
+      if (!body || typeof body !== "object") return badRequest("Request sahi nahi hai");
+    } else {
+      formData = await request.formData();
+    }
+    const read = (name: keyof UploadBody) => (isJson ? body?.[name] : formData?.get(name));
+
+    const department = String(read("department") || "").toUpperCase() as CaseDepartment;
     if (!(CASE_DEPARTMENTS as readonly string[]).includes(department)) {
       return badRequest("Department sahi nahi hai (FILING | PRINTING | ATTESTATION | COURIER)");
     }
@@ -132,151 +133,153 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!item) return notFound("Case nahi mila");
     if (item.status === "CANCELLED") return badRequest("Cancelled case par file upload nahi ho sakti");
 
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) return badRequest("File zaroori hai");
-    const stepKey = cleanText(formData.get("stepKey"), 60);
-    const title = cleanText(formData.get("title"), 200);
+    const stepKey = cleanText(read("stepKey"), 60);
+    const title = cleanText(read("title"), 200);
+    const prefix = caseFilePrefix(item.caseNumber, department);
 
-    const uploaded = await uploadDepartmentFile(
-      file,
-      `cases/${item.caseNumber}/${department.toLowerCase()}`
-    );
-
-    const result = await prisma.$transaction(async (tx) => {
-      const created = await tx.caseFile.create({
-        data: {
-          caseId: id,
-          department,
-          stepKey,
-          fileKey: uploaded.key,
-          fileType: uploaded.type,
-          title,
-          uploadedById: session.adminId,
-        },
+    const files: NewCaseFile[] = [];
+    if (isJson) {
+      const uploads = Array.isArray(body?.uploads) ? body.uploads : [];
+      if (uploads.length === 0) return badRequest("Koi file nahi bheji gayi");
+      if (uploads.length > MAX_FILES_PER_UPLOAD) {
+        return badRequest(`Ek dafa mein zyada se zyada ${MAX_FILES_PER_UPLOAD} files`);
+      }
+      const expected = `office/${prefix}/`;
+      const keys = uploads.map((upload) => (typeof upload?.key === "string" ? upload.key.trim() : ""));
+      for (const key of keys) {
+        const rest = key.startsWith(expected) ? key.slice(expected.length) : "";
+        if (!rest || rest.includes("/") || !/^[A-Za-z0-9._-]+$/.test(rest)) {
+          return badRequest("File key sahi nahi hai — dobara upload karein");
+        }
+      }
+      if (new Set(keys).size !== keys.length) return badRequest("Aik hi file do dafa bheji gayi");
+      const already = await prisma.caseFile.findFirst({
+        where: { fileKey: { in: keys } },
+        select: { id: true },
       });
+      if (already) return badRequest("Ye file pehle se save ho chuki hai");
 
-      let nextStatus = item.status;
-      const caseData: { status?: string; isPrinted?: boolean; printedAt?: Date } = {};
-      // W21: verification stickers (FILING + stepKey VERIFICATION_STICKER) are
-      // allowed ANYTIME — they never trigger the filing→printing transition
-      // and never count as the "first filing file".
-      const isSticker = department === "FILING" && stepKey === VERIFICATION_STICKER_STEP_KEY;
-
-      if (department === "FILING" && !isSticker && item.status === "WAITING_FOR_FILE") {
-        const earlier = await tx.caseFile.count({
-          where: {
-            caseId: id,
-            department: "FILING",
-            id: { not: created.id },
-            // Stickers uploaded earlier must not mark filing as done.
-            OR: [{ stepKey: null }, { stepKey: { not: VERIFICATION_STICKER_STEP_KEY } }],
-          },
-        });
-        if (earlier === 0) {
-          caseData.status = "WAITING_FOR_PRINTING";
-          nextStatus = "WAITING_FOR_PRINTING";
+      const heads = await Promise.all(keys.map((key) => headOfficeFile(key)));
+      for (const [index, key] of keys.entries()) {
+        const type = departmentFileTypeFromKey(key);
+        const head = heads[index];
+        const name = originalFilenameFromKey(key);
+        if (!type) return badRequest(`"${name}" — sirf PDF, image, video ya Word file allowed hai`);
+        if (!head) return badRequest(`"${name}" R2 par nahi mili — dobara upload karein`);
+        if (head.size <= 0 || head.size > departmentFileMaxBytes(type)) {
+          await deleteOfficeFile(key).catch(() => undefined);
+          return badRequest(
+            type === "video"
+              ? `"${name}" — video 100 MB se badi nahi ho sakti`
+              : `"${name}" — file 10 MB se badi nahi ho sakti`
+          );
         }
-      } else if (department === "PRINTING" && item.status === "WAITING_FOR_PRINTING") {
-        const earlier = await tx.caseFile.count({
-          where: { caseId: id, department: "PRINTING", id: { not: created.id } },
-        });
-        if (earlier === 0) {
-          caseData.status = "PRINTED";
-          caseData.isPrinted = true;
-          caseData.printedAt = new Date();
-          nextStatus = "PRINTED";
-        }
-      } else if (department === "COURIER") {
-        // §W11.1: courier slip sirf tab DELIVERED karta hai jab case courier
-        // stage par ho (payment complete ho chuki ho).
-        if (item.status === "WAITING_FOR_COURIER") {
-          caseData.status = "DELIVERED";
-          nextStatus = "DELIVERED";
-        }
+        const ownTitle = uploads[index]?.title;
+        files.push(
+          ownTitle === undefined ? { key, type } : { key, type, title: cleanText(ownTitle, 200) }
+        );
       }
-
-      if (Object.keys(caseData).length > 0) {
-        await tx.case.update({ where: { id }, data: caseData });
+      cleanupKeys = keys;
+    } else {
+      const picked = (formData?.getAll("file") || []).filter(
+        (entry): entry is File => entry instanceof File && entry.size > 0
+      );
+      if (picked.length === 0) return badRequest("File zaroori hai");
+      if (picked.length > MAX_FILES_PER_UPLOAD) {
+        return badRequest(`Ek dafa mein zyada se zyada ${MAX_FILES_PER_UPLOAD} files`);
       }
-
-      // ATTESTATION uploads (step files or the mandatory FINAL file) may
-      // complete the attestation stage (→ ATTESTATION_COMPLETE).
-      let completed = false;
-      // §F22.5: dual-perm actor (printing + attestation-dept) bridged the case
-      // WAITING_FOR_PRINTING → PRINTED inside this tx BEFORE the completion
-      // check, so the printing step (and its commission) is not skipped.
-      let bridged = false;
-      if (department === "ATTESTATION") {
-        bridged = await autoBridgePrintingForDualDept(id, session, tx);
-        completed = await evaluateCaseCompletion(id, tx);
-        if (completed) nextStatus = "ATTESTATION_COMPLETE";
-        else if (bridged) nextStatus = "PRINTED";
+      // Pehle SAB files validate — aadhi upload ho kar aadhi fail na hon.
+      try {
+        for (const file of picked) planDepartmentUpload({ name: file.name, type: file.type, size: file.size }, prefix);
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : "File sahi nahi hai");
       }
-
-      return { created, nextStatus, completed, bridged };
-    }, { maxWait: 10000, timeout: 30000 });
-
-    // F4: department commission credits (never throw, never fail the upload).
-    // PRINTING → the acting printing user earned when this first printing
-    // file moved the case to PRINTED; ATTESTATION → the acting attestation
-    // user earned when the case just flipped to ATTESTATION_COMPLETE.
-    const printedNow = result.nextStatus === "PRINTED" && item.status === "WAITING_FOR_PRINTING";
-    if (printedNow) {
-      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
-    }
-    // §F22.5: dual-perm bridge — case PRINTED ho gaya is attestation upload
-    // se → actor ko PRINTING commission bhi (idempotent; printedNow wali call
-    // ke saath overlap ho to second call no-op hai).
-    if (result.bridged) {
-      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
-    }
-    if (result.completed) {
-      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
+      for (const file of picked) {
+        const uploaded = await uploadDepartmentFile(file, prefix);
+        cleanupKeys.push(uploaded.key);
+        files.push({ key: uploaded.key, type: uploaded.type });
+      }
     }
 
-    // W13.2: audit log + notifications response ke baad (R2 upload request
-    // path mein rehta hai — file upload ke baghair row ka koi matlab nahi).
-    after(async () => {
-      await logOfficeAction(session, {
-        action: "case.file.upload",
-        entity: "CaseFile",
-        entityId: result.created.id,
-        after: { caseId: id, department, stepKey, fileType: uploaded.type, nextStatus: result.nextStatus },
-      });
+    const result = await registerCaseFiles({ session, item, department, stepKey, title, files });
+    cleanupKeys = [];
 
-      // §W11.8: file.upload → admins + next-stage department ke users.
-      if (result.nextStatus !== item.status) {
-        const link = `/office/cases/${id}`;
-        const title = `Case ${item.caseNumber}: ${department} file uploaded`;
-        if (result.nextStatus === "WAITING_FOR_PRINTING") {
-          await notifyRole("printing", { type: "file.upload", title, link });
-          await notifyAdmins({ type: "file.upload", title, link });
-        } else if (result.nextStatus === "PRINTED") {
-          await notifyRole("atta", { type: "file.upload", title, link });
-          await notifyAdmins({ type: "file.upload", title, link });
-        } else {
-          await notifyAdmins({ type: "file.upload", title, link });
-        }
-      }
-    });
+    await afterUpload(session, item, department, stepKey, result);
 
+    const created = result.created.map((row) => ({
+      id: row.id,
+      department: row.department,
+      stepKey: row.stepKey,
+      title: row.title,
+      fileType: row.fileType,
+      createdAt: row.createdAt,
+    }));
     return NextResponse.json(
-      toJson({
-        file: {
-          id: result.created.id,
-          department: result.created.department,
-          stepKey: result.created.stepKey,
-          title: result.created.title,
-          fileType: result.created.fileType,
-          createdAt: result.created.createdAt,
-        },
-        status: result.nextStatus,
-      }),
+      toJson({ file: created[0], files: created, status: result.nextStatus }),
       { status: 201 }
     );
   } catch (error) {
+    if (cleanupKeys.length > 0) {
+      await Promise.all(cleanupKeys.map((key) => deleteOfficeFile(key).catch(() => undefined)));
+    }
     return serverError(error);
   }
+}
+
+// Commission credits (never throw) + audit log + notifications — upload ke
+// baad, chahe kitni bhi files ek sath aayi hon (transition ek hi dafa).
+async function afterUpload(
+  session: AdminSession,
+  item: { id: string; caseNumber: string; status: string },
+  department: CaseDepartment,
+  stepKey: string | null,
+  result: Awaited<ReturnType<typeof registerCaseFiles>>
+) {
+  const id = item.id;
+  // F4: department commission credits (never throw, never fail the upload).
+  // PRINTING → the acting printing user earned when this first printing
+  // upload moved the case to PRINTED; ATTESTATION → the acting attestation
+  // user earned when the case just flipped to ATTESTATION_COMPLETE.
+  const printedNow = result.nextStatus === "PRINTED" && item.status === "WAITING_FOR_PRINTING";
+  if (printedNow) {
+    await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+  }
+  // §F22.5: dual-perm bridge — case PRINTED ho gaya is attestation upload
+  // se → actor ko PRINTING commission bhi (idempotent; printedNow wali call
+  // ke saath overlap ho to second call no-op hai).
+  if (result.bridged) {
+    await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
+  }
+  if (result.completed) {
+    await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
+  }
+
+  // W13.2: audit log + notifications response ke baad.
+  after(async () => {
+    for (const row of result.created) {
+      await logOfficeAction(session, {
+        action: "case.file.upload",
+        entity: "CaseFile",
+        entityId: row.id,
+        after: { caseId: id, department, stepKey, fileType: row.fileType, nextStatus: result.nextStatus },
+      });
+    }
+
+    // §W11.8: file.upload → admins + next-stage department ke users.
+    if (result.nextStatus !== item.status) {
+      const link = `/office/cases/${id}`;
+      const title = `Case ${item.caseNumber}: ${department} file uploaded`;
+      if (result.nextStatus === "WAITING_FOR_PRINTING") {
+        await notifyRole("printing", { type: "file.upload", title, link });
+        await notifyAdmins({ type: "file.upload", title, link });
+      } else if (result.nextStatus === "PRINTED") {
+        await notifyRole("atta", { type: "file.upload", title, link });
+        await notifyAdmins({ type: "file.upload", title, link });
+      } else {
+        await notifyAdmins({ type: "file.upload", title, link });
+      }
+    }
+  });
 }
 
 // DELETE ?id= — the uploader's own department (write permission) or super admin.

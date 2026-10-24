@@ -84,6 +84,27 @@ design, business rules, roadmap and agent log live in `docs/office-module/`.
 - Files (payment slips) go to **Cloudflare R2**, not Supabase. Create a private R2
   bucket, an API token with object read/write, and set in `.env` / Vercel:
   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
+- Department files (printing proof, attestation files, videos) upload **directly
+  from the browser to R2** with signed URLs, because Vercel functions reject
+  request bodies over 4.5 MB. The bucket therefore needs a CORS rule for the site
+  origin. The app tries to add it itself on the first upload (works only if the R2
+  token has admin/bucket permission). Otherwise add it once in Cloudflare →
+  R2 → bucket → Settings → CORS Policy:
+
+  ```json
+  [
+    {
+      "AllowedOrigins": ["https://YOUR-SITE-DOMAIN"],
+      "AllowedMethods": ["GET", "PUT", "HEAD"],
+      "AllowedHeaders": ["content-type"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+  ```
+
+  Without this rule, files up to 4 MB still upload through the server; bigger
+  files show a clear "CORS setting zaroori hai" error.
 - Expected printing date uses the bot AI configured in Admin → Settings (falls back
   to weekend-only skipping when no AI key is set); override from `/office/setup`.
 - Migration: `prisma/migrations/20261001120000_office_module/migration.sql`

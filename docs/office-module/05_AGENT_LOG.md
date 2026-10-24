@@ -1131,3 +1131,58 @@ Investigation-first (live DB audit):
   dono roles ko. Permission live DB mein pehle se maujood thi (verified) — code fix
   kaafi tha, koi data change nahi.
 - Verify: tsc 0, lint 0, build exit 0 (real DB). No migration.
+
+## WAVE 26 (2026-10-24) — printing/attestation proof upload fix (multi-file, video, direct R2) (commit: pending)
+
+- **Owner report**: office work mein printing/attestation ke baad proof (pdf / kai
+  images / video) upload karne par page "corrupt" ho jata tha; kai proofs add hon
+  aur file upload ke baad kharab na ho.
+- **Root cause (investigation-first)**:
+  1. Har file multipart ban kar Vercel function se guzarti thi — Vercel function ki
+     request body limit **4.5 MB** hai. Video / scanned PDF / phone photos wahin
+     reject hoti thin; browser ko aksar connection reset milta, `fetch` throw karta
+     aur `busy` kabhi reset nahi hota → upload button hamesha spinner par atka
+     ("page corrupt"). Live DB: aaj tak PRINTING/ATTESTATION ki ek bhi image/video
+     save nahi hui (sirf choti PDFs); kai cases WAITING_FOR_PRINTING par 0 printing
+     files ke saath; AF-2026-000025 FINAL 52s ke farq se 2 dafa (retry).
+  2. Upload input single-file tha — kai proofs ke liye har dafa poora cycle.
+  3. Files list ke signed URLs 15 min mein expire — tab khula rahe to file
+     blank/"kharab" dikhti. Video/HEIC jo browser play na kar sake → blank player.
+  4. Extra: AWS SDK v3 (>=3.729) presigned PUT URL mein khali body ka
+     `x-amz-checksum-crc32` daal deta — R2 asal file reject karta (direct upload
+     ke liye `requestChecksumCalculation: "WHEN_REQUIRED"` wala alag presign client).
+- **Fix**:
+  - `r2.ts`: `planDepartmentUpload` (shared validation/key/content-type; random
+    suffix taake multi-upload keys na takrayen; video mime map), presign PUT
+    (`content-type` signed), `headOfficeFile`, best-effort `ensureOfficeBucketCors`
+    (sirf same-site origin MERGE; token ke paas permission na ho to false),
+    `originalFilenameFromKey` naye + purane dono key formats.
+  - `lib/office/case-files.ts` (new): `caseFileVisibility` (GET list ka purana
+    rule move) + `registerCaseFiles` (N rows + workflow transition EK transaction
+    mein, ek dafa).
+  - API: `POST /files/upload-url` (signed PUT URLs, no DB write); `POST /files`
+    ab JSON `{ uploads: [{ key, title? }] }` (prefix + R2 HEAD + size verify) YA
+    multipart (kai `file`); `GET /files/[fileId]` (?download=1) stable link →
+    taaza signed URL redirect (10 min private cache). GET list url/downloadUrl
+    ab yahi stable links + `fileName`.
+  - Client: `lib/office/upload-files.ts` (direct R2 XHR + progress, parallel 3,
+    CORS/network fail par ≤4 MB files server raaste se, kabhi throw nahi) +
+    `FileUploadBox` (multi-select, "aur files add karein", drag-drop, per-file
+    progress, fail files retry ke liye list mein, busy hamesha `finally` mein
+    release, beforeunload warning). CaseFilesTab, DeptCaseView (FINAL ab alag
+    prominent box), DeptQueue filing modal is par. CaseFileViewer: word/unknown
+    → download card, image/video load error → saaf paigham + Download.
+- **Infra (owner action, ek dafa)**: R2 bucket CORS rule (README "Office Module"
+  section mein JSON). App pehli upload par khud add karne ki koshish karta hai.
+- **Verify**: tsc 0, lint 0, build exit 0. R2 helpers 40/40 (local S3 mock: 6 MB
+  pdf / 5 MB jpg / 30 MB mp4 byte-identical, content-type, download filename,
+  CORS merge). `registerCaseFiles` live DB par ROLLBACK-only transactions mein
+  13/13 (3 proofs → PRINTED ek dafa, numbered titles; kuch persist nahi hua —
+  verified). API smoke (dev server + S3 mock): validations/redirects sab sahi,
+  koi DB write nahi. Headless Chrome E2E 26/26 (registration POST intercepted):
+  3 files direct upload + 1 registration; storage blocked → 1 MB file fallback,
+  20/5 MB par CORS error, button atka nahi; network reset → error toast, button
+  free.
+- **Next step**: deploy ke baad production par ek printing case mein 2 images + 1
+  video upload kar ke dekhein. Agar ">4 MB ... CORS setting zaroori hai" error
+  aaye to README wala CORS rule Cloudflare dashboard mein add karein.

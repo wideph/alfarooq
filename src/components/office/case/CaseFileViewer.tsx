@@ -1,27 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { Download, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Download, FileText, X, ZoomIn, ZoomOut } from "lucide-react";
 
-// In-app viewer for office case files (R2 signed URLs) — image / pdf / video.
-// Same look & feel as the public ImageViewer / PdfViewer, lekin ye directly
-// signed URL se load karta hai (/api/media ke bajaye). Courier department
-// printing + atta files isi mein dekhta hai (docs 06 §N7).
+// In-app viewer for office case files (R2) — image / pdf / video (+ word /
+// unknown → download card). Same look & feel as the public ImageViewer /
+// PdfViewer. Courier department printing + atta files isi mein dekhta hai
+// (docs 06 §N7).
 //
-// §W21: PDF body ab pdf.js canvas ke bajaye browser ke NATIVE renderer
-// (iframe) se khulti hai — pdf.js build is stack mein reliably load nahi
-// hota tha ("pdf in-app view nahi hoti"). Header mein Download button har
-// file type ke liye (downloadUrl signed/forced-download, fallback url).
+// §W21: PDF body browser ke NATIVE renderer (iframe) se khulti hai — pdf.js
+// build is stack mein reliably load nahi hota tha. Header mein Download button
+// har file type ke liye (downloadUrl forced-download, fallback url).
+// §W26: file urls ab stable same-origin links hain (taaza signed URL par
+// redirect) — tab der tak khula rahe to bhi file expire/"kharab" nahi hoti.
+// Image/video browser na chala sake (HEIC, .mov/HEVC, .mkv) to blank/toota
+// player ke bajaye saaf paigham + Download.
 
 export type ViewableFile = {
   url: string;
-  // §W21: signed URL jo download force karta hai — na mile to url fallback.
+  // §W21: URL jo download force karta hai — na mile to url fallback.
   downloadUrl?: string | null;
-  fileType: "pdf" | "image" | "video";
+  fileType: "pdf" | "image" | "video" | "word" | string;
   title: string;
+  // Original file name (download ke liye) — title kabhi filename nahi (§W23).
+  fileName?: string | null;
 };
 
 export default function CaseFileViewer({ file, onClose }: { file: ViewableFile; onClose: () => void }) {
+  const downloadHref = file.downloadUrl || file.url;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-3 sm:p-6" onClick={onClose}>
       <div
@@ -32,8 +38,8 @@ export default function CaseFileViewer({ file, onClose }: { file: ViewableFile; 
           <p className="truncate text-sm font-semibold text-slate-800">{file.title}</p>
           <div className="flex shrink-0 items-center gap-1">
             <a
-              href={file.downloadUrl || file.url}
-              download={file.title || true}
+              href={downloadHref}
+              download={file.fileName || ""}
               title={`Download — ${file.title}`}
               className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-primary-700"
             >
@@ -45,10 +51,18 @@ export default function CaseFileViewer({ file, onClose }: { file: ViewableFile; 
           </div>
         </div>
         <div className="p-3 sm:p-4">
-          {file.fileType === "image" && <ImageBody url={file.url} title={file.title} />}
-          {file.fileType === "pdf" && <PdfBody url={file.url} downloadUrl={file.downloadUrl} title={file.title} />}
-          {file.fileType === "video" && (
-            <video controls className="mx-auto max-h-[70vh] w-full rounded-xl bg-black" src={file.url} />
+          {file.fileType === "image" ? (
+            <ImageBody url={file.url} title={file.title} downloadHref={downloadHref} fileName={file.fileName} />
+          ) : file.fileType === "pdf" ? (
+            <PdfBody url={file.url} downloadHref={downloadHref} title={file.title} fileName={file.fileName} />
+          ) : file.fileType === "video" ? (
+            <VideoBody url={file.url} downloadHref={downloadHref} fileName={file.fileName} />
+          ) : (
+            <NoPreview
+              downloadHref={downloadHref}
+              fileName={file.fileName}
+              message="Is file ka preview yahan nahi khulta — download kar ke dekhein."
+            />
           )}
         </div>
       </div>
@@ -56,8 +70,45 @@ export default function CaseFileViewer({ file, onClose }: { file: ViewableFile; 
   );
 }
 
-function ImageBody({ url, title }: { url: string; title: string }) {
+function NoPreview({ downloadHref, fileName, message }: { downloadHref: string; fileName?: string | null; message: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-xl bg-slate-50 px-4 py-10 text-center">
+      <FileText className="h-10 w-10 text-slate-300" />
+      <p className="text-sm text-slate-600">{message}</p>
+      {fileName && <p className="break-all text-xs text-slate-400">{fileName}</p>}
+      <a
+        href={downloadHref}
+        download={fileName || ""}
+        className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+      >
+        <Download className="h-4 w-4" /> Download karein
+      </a>
+    </div>
+  );
+}
+
+function ImageBody({
+  url,
+  title,
+  downloadHref,
+  fileName,
+}: {
+  url: string;
+  title: string;
+  downloadHref: string;
+  fileName?: string | null;
+}) {
   const [scale, setScale] = useState(1);
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <NoPreview
+        downloadHref={downloadHref}
+        fileName={fileName}
+        message="Browser ye image yahan nahi dikha saka (maslan HEIC format) — download kar ke dekhein."
+      />
+    );
+  }
   return (
     <div>
       <div className="mb-2 flex items-center justify-center gap-1">
@@ -74,6 +125,7 @@ function ImageBody({ url, title }: { url: string; title: string }) {
         <img
           src={url}
           alt={title}
+          onError={() => setFailed(true)}
           style={{ transform: `scale(${scale})`, transformOrigin: "center top" }}
           className="h-auto max-w-full rounded-lg shadow-md transition-transform duration-200"
         />
@@ -82,7 +134,40 @@ function ImageBody({ url, title }: { url: string; title: string }) {
   );
 }
 
-function PdfBody({ url, downloadUrl, title }: { url: string; downloadUrl?: string | null; title: string }) {
+function VideoBody({ url, downloadHref, fileName }: { url: string; downloadHref: string; fileName?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <NoPreview
+        downloadHref={downloadHref}
+        fileName={fileName}
+        message="Browser ye video format yahan play nahi kar saka — download kar ke dekhein (file theek hai)."
+      />
+    );
+  }
+  return (
+    <video
+      controls
+      playsInline
+      preload="metadata"
+      onError={() => setFailed(true)}
+      className="mx-auto max-h-[70vh] w-full rounded-xl bg-black"
+      src={url}
+    />
+  );
+}
+
+function PdfBody({
+  url,
+  downloadHref,
+  title,
+  fileName,
+}: {
+  url: string;
+  downloadHref: string;
+  title: string;
+  fileName?: string | null;
+}) {
   // Browser ka built-in PDF viewer — koi worker/bundle dependency nahi.
   // Mobile browsers jahan inline PDF support na ho, wahan download link fallback hai.
   return (
@@ -90,11 +175,7 @@ function PdfBody({ url, downloadUrl, title }: { url: string; downloadUrl?: strin
       <iframe src={url} title={title} className="h-[75vh] w-full rounded-lg border border-slate-200 bg-white" />
       <p className="mt-2 text-center text-xs text-slate-400">
         PDF nazar nahi aa rahi?{" "}
-        <a
-          href={downloadUrl || url}
-          download={title || true}
-          className="font-semibold text-primary-700 underline"
-        >
+        <a href={downloadHref} download={fileName || ""} className="font-semibold text-primary-700 underline">
           Download karein
         </a>
       </p>

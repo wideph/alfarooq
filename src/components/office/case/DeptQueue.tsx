@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Building2, CheckCircle2, Flame, ImagePlus, Loader2, Upload, X } from "lucide-react";
+import FileUploadBox from "@/components/office/case/FileUploadBox";
 import { formatDate } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
-import { announceOfficeChange } from "@/lib/office/live";
+import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
 
 // §W18 — department queues (?dept=filing|printing|attestation|courier). Cross-office
@@ -133,8 +134,7 @@ export default function DeptQueue({
   const filingMode = dept === "filing" && !history;
   const { showToast, ToastElement } = useToast();
   const [uploadFor, setUploadFor] = useState<{ item: DeptQueueRow; sticker: boolean } | null>(null);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState("");
+  // FileUploadBox ka busy — upload ke dauran modal band na ho.
   const [uploading, setUploading] = useState(false);
   // Upload ke foran baad row foran done-color ho jaye (live-refresh 300ms mein
   // server truth la deta hai — ye sirf instant feedback hai).
@@ -162,41 +162,17 @@ export default function DeptQueue({
 
   function openUpload(item: DeptQueueRow, sticker: boolean) {
     setUploadFor({ item, sticker });
-    setUploadFile(null);
-    setUploadTitle("");
   }
 
-  async function submitUpload() {
-    if (!uploadFor || !uploadFile) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("file", uploadFile);
-    fd.append("department", "FILING");
-    if (uploadFor.sticker) {
-      // stepKey VERIFICATION_STICKER — workflow advance nahi hota, sirf sticker save.
-      fd.append("stepKey", STICKER_STEP_KEY);
-      fd.append("title", STICKER_TITLE);
-    } else if (uploadTitle.trim()) {
-      fd.append("title", uploadTitle.trim());
+  // §W26: FileUploadBox (kai files, browser se seedha R2) upload + office:changed
+  // announce khud karta hai; yahan sirf row ka instant done-color + modal band.
+  function handleUploaded(target: { item: DeptQueueRow; sticker: boolean }, result: UploadResult) {
+    if (!target.sticker && result.saved > 0) {
+      const { count } = filingState(target.item);
+      setLocalFiling((prev) => ({ ...prev, [target.item.id]: { done: true, count: count + result.saved } }));
     }
-    const res = await fetch(`/api/office/cases/${uploadFor.item.id}/files`, { method: "POST", body: fd });
-    const data = await res.json().catch(() => ({}));
-    setUploading(false);
-    if (res.ok) {
-      // Raw fetch (multipart) office:changed khud nahi bhejta — khud announce karein
-      // taake queue/navbar 300ms mein refresh ho jayein.
-      announceOfficeChange();
-      showToast(uploadFor.sticker ? "Verification sticker upload ho gaya" : "File upload ho gayi — filing done");
-      if (!uploadFor.sticker) {
-        const { count } = filingState(uploadFor.item);
-        setLocalFiling((prev) => ({ ...prev, [uploadFor.item.id]: { done: true, count: count + 1 } }));
-      }
-      setUploadFor(null);
-      setUploadFile(null);
-      setUploadTitle("");
-    } else {
-      showToast(data.error || "File upload nahi ho saki", "error");
-    }
+    // Kuch files fail hon to modal khula rahe (retry ke liye list mein hain).
+    if (result.failed === 0) setUploadFor(null);
   }
 
   // Dept mode mein office chip HAMESHA — cross-office queues scannable hon.
@@ -473,56 +449,41 @@ export default function DeptQueue({
               </div>
               <button
                 type="button"
+                disabled={uploading}
                 onClick={() => setUploadFor(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
                 aria-label="Band karein"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">
-                File * {uploadFor.sticker ? "(image / pdf / word)" : "(pdf ya image)"}
-              </label>
-              <input
-                type="file"
-                accept={uploadFor.sticker ? ACCEPT_STICKER : ACCEPT_FILING}
-                className="w-full text-sm"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            {uploadFor.sticker ? (
+            {uploadFor.sticker && (
               <p className="rounded-xl bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
                 Title: {STICKER_TITLE} — workflow aage nahi barhega, sirf sticker save hoga.
               </p>
-            ) : (
-              <div>
-                <label className="mb-1 block text-xs text-slate-500">Title (optional)</label>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                  placeholder="Maslan: Degree front"
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
-                />
-              </div>
             )}
-            <div className="flex justify-end gap-2">
+            {/* §W26: kai files ek sath (direct R2 upload + progress) */}
+            <FileUploadBox
+              key={`${uploadFor.item.id}-${uploadFor.sticker ? "sticker" : "filing"}`}
+              caseId={uploadFor.item.id}
+              department="FILING"
+              accept={uploadFor.sticker ? ACCEPT_STICKER : ACCEPT_FILING}
+              fixedStepKey={uploadFor.sticker ? STICKER_STEP_KEY : undefined}
+              fixedTitle={uploadFor.sticker ? STICKER_TITLE : undefined}
+              hint={uploadFor.sticker ? "Image / pdf / word" : "Pdf ya image"}
+              onUploaded={(result) => handleUploaded(uploadFor, result)}
+              onMessage={showToast}
+              onBusyChange={setUploading}
+              stacked
+            />
+            <div className="flex justify-end">
               <button
                 type="button"
                 disabled={uploading}
                 onClick={() => setUploadFor(null)}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={uploading || !uploadFile}
-                onClick={submitUpload}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                Upload
+                Band karein
               </button>
             </div>
           </div>

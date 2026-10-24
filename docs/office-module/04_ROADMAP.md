@@ -67,3 +67,7 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] P7.2 `scripts/test-office.ts` smoke test (login as each role, create case, submit/verify payment, check ledger, finance).
 - [x] P7.3 README section "Office module" + R2 bucket setup steps.
 - [x] P7.4 `npm run verify` green; final log entry.
+
+## Post-launch fixes
+
+- [x] W26 Printing/attestation proof upload: multi-file + video via direct R2 upload (Vercel 4.5 MB limit), stable file links, viewer fallbacks.
