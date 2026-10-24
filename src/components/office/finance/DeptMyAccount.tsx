@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { HandCoins, Printer, Stamp } from "lucide-react";
+import { HandCoins, Printer, Stamp, Truck } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
-import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { DEPT_COMMISSION_KIND_LABELS, DEPT_COMMISSION_KIND_STYLES, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { EmptyState, SectionHeader, StatCard, TableSkeleton } from "./ui";
 import {
@@ -22,16 +22,15 @@ import {
 // Backend relaxed guard summary mein sirf own row aur entries?adminId=<self>
 // allow karta hai, is liye kisi aur user ka data yahan aa hi nahi sakta.
 
+// §W30: COURIER kind bhi.
 function DeptKindChip({ kind }: { kind: DeptCommissionEntry["kind"] }) {
-  const isPrinting = kind === "PRINTING";
+  const Icon = kind === "PRINTING" ? Printer : kind === "COURIER" ? Truck : Stamp;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-        isPrinting ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"
-      }`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${DEPT_COMMISSION_KIND_STYLES[kind]}`}
     >
-      {isPrinting ? <Printer className="h-3 w-3" /> : <Stamp className="h-3 w-3" />}
-      {isPrinting ? "Printing" : "Attestation"}
+      <Icon className="h-3 w-3" />
+      {DEPT_COMMISSION_KIND_LABELS[kind]}
     </span>
   );
 }

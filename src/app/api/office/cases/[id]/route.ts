@@ -11,7 +11,8 @@ import { parseAmount } from "@/lib/office/money";
 import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
 import { cleanText } from "@/lib/office/serializers";
 import { getOfficeCategories } from "@/lib/office/setup-cache";
-import { parseCaseInput } from "@/lib/office/workflow";
+import { advanceCourierStage, parseCaseInput } from "@/lib/office/workflow";
+import { notifyCourierStage } from "@/lib/office/notifications";
 
 export const preferredRegion = ["sin1"];
 
@@ -137,8 +138,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     // Business write stays in the request path (BR2 recompute); audit log
     // response ke baad chalti hai (W13.2).
+    let courierStage: Awaited<ReturnType<typeof advanceCourierStage>> = null;
     if (agreedChanged) {
       await recomputeCaseFinancials(id, session);
+      // §W30: agreed kam hone se baqi 0 ho gaya → courier stage (forward-only).
+      courierStage = await advanceCourierStage(id);
     }
     after(async () => {
       await logOfficeAction(session, {
@@ -148,6 +152,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         before: existing,
         after: data,
       });
+      await notifyCourierStage(id, courierStage);
     });
 
     // Full detail is intentionally returned here: multiple detail-tab callers

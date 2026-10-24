@@ -150,3 +150,30 @@ the migration.
 
 Every mutating office API writes `OfficeAuditLog` (actor, action, entity, id, before,
 after). Case detail page shows the last 20 audit rows to super admin.
+
+## BR10. Department commissions (printing / attestation / courier) — §W30
+
+- Rules per dept user × category × Set of Attestations (`DepartmentCommissionRule`,
+  set row overrides the category-level row). Amounts: `printAmount`,
+  `attestationAmount`, `courierAmount`. No rule or 0 → commission 0.
+- Credit (one `DEPT_COMMISSION` ledger CREDIT per case + kind + user, idempotent)
+  happens at the event, with the rule amount **at that moment**:
+  - PRINTING — the user's first printing proof moves the case to PRINTED.
+  - ATTESTATION — the user's action completes the attestation stage.
+  - COURIER — the user's courier slip moves the case to DELIVERED.
+- Changing a rate affects only later events; already credited cases never change.
+- Admin status-dropdown jumps credit nobody.
+
+## BR11. Courier stage (automatic, forward-only) — §W30
+
+- After ATTESTATION_COMPLETE ("final payment pending"): when
+  `remaining = max(agreed − RECEIVED, 0) = 0` (agreed > 0) the case moves to
+  `WAITING_FOR_COURIER_ADDRESS` if it has no delivery address, else straight to
+  `WAITING_FOR_COURIER` ("waiting for courier slip"). Adding an address moves the
+  address stage to the slip stage. Checked after payments, agreed-amount changes
+  (remaining accept, discount, case edit), address add, attestation completion
+  and admin setting ATTESTATION_COMPLETE.
+- A courier slip upload (courier permission) in either courier stage → DELIVERED.
+- A user with BOTH printing and attestation-department permissions (not super
+  admin) may complete the attestation stage without the FINAL attestation file once
+  the case has a printing proof.

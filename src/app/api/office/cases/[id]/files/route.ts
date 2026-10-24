@@ -11,7 +11,7 @@ import {
   registerCaseFiles,
   type NewCaseFile,
 } from "@/lib/office/case-files";
-import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
+import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import {
   deleteOfficeFile,
   departmentFileMaxBytes,
@@ -253,6 +253,11 @@ async function afterUpload(
   if (result.completed) {
     await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
   }
+  // §W30: courier slip ne case DELIVERED kiya → acting courier user ka
+  // commission (rule na ho to 0; idempotent, never throws).
+  if (result.delivered) {
+    await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "COURIER" });
+  }
 
   // W13.2: audit log + notifications response ke baad.
   after(async () => {
@@ -278,6 +283,8 @@ async function afterUpload(
       } else {
         await notifyAdmins({ type: "file.upload", title, link });
       }
+      // §W30: attestation complete + payment pehle se poori → courier stage.
+      await notifyCourierStage(id, result.nextStatus);
     }
   });
 }

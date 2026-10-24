@@ -83,7 +83,7 @@ function NavLinks({ admin, counts }: { admin: AdminNavUser | null; counts: Offic
     // read) bhi Finance tab dekhein — unka scoped "Mera account" view page par hai.
     if (
       item.href === "/office/finance" &&
-      adminCanAny(admin, ["office:printing:write", ATTESTATION_DEPT_PERMISSION])
+      adminCanAny(admin, ["office:printing:write", ATTESTATION_DEPT_PERMISSION, "office:courier:write"])
     )
       return true;
     return adminCanAny(admin, item.permissions);

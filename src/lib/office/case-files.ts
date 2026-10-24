@@ -5,10 +5,16 @@ import { deptPermissionsOf, findAccessibleCase } from "@/lib/office/case-access"
 import type { DepartmentFileType } from "@/lib/office/r2";
 import {
   VERIFICATION_STICKER_STEP_KEY,
+  advanceCourierStage,
   autoBridgePrintingForDualDept,
+  canCompleteAttestationWithoutFinal,
   evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
+
+// §W30: courier slip in dono stages se case ko DELIVERED karti hai (slip =
+// courier bhej diya gaya).
+const COURIER_DELIVERABLE_STATUSES = ["WAITING_FOR_COURIER", "WAITING_FOR_COURIER_ADDRESS"];
 
 // §W26 — department files (printing proof, attestation step/FINAL files,
 // filing files, courier slip) ka shared server logic: kaun si files kaun dekh
@@ -77,7 +83,7 @@ export function titleFor(title: string | null, index: number, total: number) {
 //   first FILING file   → WAITING_FOR_FILE → WAITING_FOR_PRINTING
 //   first PRINTING file → WAITING_FOR_PRINTING → PRINTED (+ isPrinted)
 //   ATTESTATION files   → FINAL + tamam steps DONE → ATTESTATION_COMPLETE
-//   COURIER slip        → WAITING_FOR_COURIER → DELIVERED
+//   COURIER slip        → WAITING_FOR_COURIER(_ADDRESS) → DELIVERED (§W30)
 export async function registerCaseFiles(params: {
   session: AdminSession;
   item: { id: string; status: string };
@@ -142,8 +148,9 @@ export async function registerCaseFiles(params: {
         }
       } else if (department === "COURIER") {
         // §W11.1: courier slip sirf tab DELIVERED karta hai jab case courier
-        // stage par ho (payment complete ho chuki ho).
-        if (item.status === "WAITING_FOR_COURIER") {
+        // stage par ho (payment complete ho chuki ho). §W30: address wala
+        // stage bhi (slip khud saboot hai ke courier chala gaya).
+        if (COURIER_DELIVERABLE_STATUSES.includes(item.status)) {
           caseData.status = "DELIVERED";
           nextStatus = "DELIVERED";
         }
@@ -162,12 +169,16 @@ export async function registerCaseFiles(params: {
       let bridged = false;
       if (department === "ATTESTATION") {
         bridged = await autoBridgePrintingForDualDept(caseId, session, tx);
-        completed = await evaluateCaseCompletion(caseId, tx);
-        if (completed) nextStatus = "ATTESTATION_COMPLETE";
-        else if (bridged) nextStatus = "PRINTED";
+        const allowWithoutFinal = await canCompleteAttestationWithoutFinal(session, caseId, tx);
+        completed = await evaluateCaseCompletion(caseId, tx, { allowWithoutFinal });
+        if (completed) {
+          // §W30: payment pehle se poori ho to seedha courier stage.
+          nextStatus = (await advanceCourierStage(caseId, tx)) ?? "ATTESTATION_COMPLETE";
+        } else if (bridged) nextStatus = "PRINTED";
       }
 
-      return { created, nextStatus, completed, bridged };
+      const delivered = department === "COURIER" && nextStatus === "DELIVERED" && item.status !== "DELIVERED";
+      return { created, nextStatus, completed, bridged, delivered };
     },
     { maxWait: 10000, timeout: 30000 }
   );

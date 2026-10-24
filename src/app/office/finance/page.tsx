@@ -45,6 +45,8 @@ export default function OfficeFinancePage() {
         // §W22 (F22.3): dept users bhi apna scoped view dekh sakein.
         "office:printing:write",
         "office:attestation-dept:write",
+        // §W30: courier dept user bhi apna commission account dekhe.
+        "office:courier:write",
       ]}
     >
       {(admin) =>
@@ -56,7 +58,7 @@ export default function OfficeFinancePage() {
           // §W21: cashier (ledger:read, bina finance:read) — sirf dept
           // commissions card; profit/company data is scope mein nahi.
           <CashierDeptView />
-        ) : adminCanAny(admin, ["office:printing:write", "office:attestation-dept:write"]) ? (
+        ) : adminCanAny(admin, ["office:printing:write", "office:attestation-dept:write", "office:courier:write"]) ? (
           // §W22 (F22.3): dept user (bina finance/ledger read) — sirf apni dept
           // commission ka read-only "Mera account" view.
           <DeptMyAccount admin={admin} />

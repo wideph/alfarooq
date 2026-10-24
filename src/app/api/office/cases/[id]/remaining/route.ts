@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
@@ -7,6 +7,8 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { computeTotals, recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount } from "@/lib/office/money";
+import { notifyCourierStage } from "@/lib/office/notifications";
+import { advanceCourierStage } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
@@ -65,6 +67,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         after: { agreedAmount, remaining },
       });
       const result = await recomputeCaseFinancials(id, session);
+      // §W30: agreed badalne se baqi 0 ho gaya → courier stage (forward-only).
+      const courierStage = await advanceCourierStage(id);
+      after(() => notifyCourierStage(id, courierStage));
       const detail = await loadCaseDetail(session, id);
       return NextResponse.json({ ...(detail as object), needsExtraDecision: result.needsExtraDecision });
     }

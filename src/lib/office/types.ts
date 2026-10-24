@@ -75,7 +75,7 @@ export type CaseDetail = {
   // unaffected). Ledger DEPT_COMMISSION entries se banti hain.
   deptCommissions: Array<{
     id: string;
-    kind: "PRINTING" | "ATTESTATION" | null;
+    kind: "PRINTING" | "ATTESTATION" | "COURIER" | null;
     amount: number;
     adminName: string | null;
     entryDate: string;

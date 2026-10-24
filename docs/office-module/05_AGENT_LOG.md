@@ -1263,3 +1263,55 @@ Investigation-first (live DB audit):
 - **Verify**: tsc 0, lint 0, build exit 0. Read-only harness: API ke balances
   ek alag seedhi SQL se 62/62 match (PENDING 2, all 31, RECEIVED 29); desktop +
   mobile render, page errors 0.
+
+## WAVE 30 (2026-10-25) — dept commissions (printing/attestation/courier) + auto courier stage (migration live applied)
+
+- **Owner report**: printing / attestation / courier ki commission ka option na
+  setup mein dikhta tha na admin user mein; har user ka alag commission, set na ho
+  to 0, rate badle to sirf naye cases; attestation mein har set ka alag rate.
+  Printing + attestation + courier wala user printed proof ke baad attestation
+  proof ke baghair "attestation complete — final payment pending" kar sake; baqi 0
+  ho to auto "waiting for courier address", address ho to "waiting for courier
+  slip", courier slip par DELIVERED.
+- **Root cause (live DB)**: dept user "rwp prnt att courier" (role attestation,
+  perms printing + attestation-dept + courier) kisi booking office se jura NAHI —
+  setup panel sirf `office.users` dikhata tha; SubAdminPanel mein option hi nahi
+  tha. 0 rules, 0 credits. Courier commission maujood hi nahi tha. Fully-paid
+  case attestation complete ho kar "final payment pending" par atak jata tha
+  (payment ke baad hi WAITING_FOR_COURIER hota tha, address check nahi).
+- **DB**: migration `20261025120000_office_wave30` — DepartmentCommissionRule
+  +courierAmount DECIMAL(12,2) default 0. **Live applied** (`prisma migrate
+  deploy`, verified column). Naya status `WAITING_FOR_COURIER_ADDRESS` (TEXT,
+  koi SQL nahi); WAITING_FOR_COURIER label → "Waiting for courier slip".
+- **Server**: dept-commission.ts kind COURIER + shared parser/permission
+  helpers; rules API courierAmount; naya GET `/dept-commissions/users` (tamam
+  dept users, office ho ya na ho); summary har dept user (0 bhi) + courier
+  self-view; entries courier self-view. workflow.ts: status order renumber,
+  `evaluateCaseCompletion(..., { allowWithoutFinal })`,
+  `canCompleteAttestationWithoutFinal` (printing + attestation-dept, super admin
+  nahi, ≥1 PRINTING file), `advanceCourierStage` (forward-only). Call sites:
+  files POST (attestation completion → courier stage; COURIER slip dono courier
+  stages se DELIVERED + COURIER credit), complete-all (skip-FINAL + dept
+  cross-office access + `completed` flag), attestation step PATCH, admin status
+  route, payments create/verify, remaining accept, case PATCH (agreed), discount
+  accept, address add. `notifyCourierStage` (slip stage → courier PERMISSION
+  users; address stage → case creator + admins).
+- **UI**: DeptCommissionGrid courier column + per-user kinds columns; setup panel
+  API-driven list (kind chips, "Commission set nahi (0)", office ke baghair
+  users); SubAdminPanel "Commission" button + inline grid; finance drawer / Mera
+  account / case attached list COURIER chip; Finance tab + Mera account courier
+  users ke liye. CaseStatusHeader hints + dual-dept "Attestation complete
+  karein" button; DeptCaseView same button; Files tab FINAL box "optional" dual
+  user ke liye; complete-all toast `completed` ke hisaab se.
+- **Verify**: tsc 0, lint 0, build exit 0. Live DB rollback-only integration
+  (app prisma → outer tx proxy) 23/23: no rule → 0; rule 100 credit +
+  idempotent; rate 999 sirf naye case par, purana 100 hi; set-level attestation
+  300; skip-FINAL rules (dual yes, printing-only no, admin no); remaining > 0 →
+  no move; 0 + no address → ADDRESS; address → SLIP; slip → DELIVERED (+ address
+  stage se bhi); COURIER 50; forward-only; rollback ke baad 0 entries/rules,
+  status same. API + UI (read-only harness, admin + dual-dept tokens): users /
+  summary / rules API, setup panel, admin users Commission grid, status labels,
+  dual user ka complete button + optional FINAL + Mera account — sab pass.
+- **Next step**: admin setup / Admins page se "rwp prnt att courier" ke rates set
+  karein (category + set ke hisaab se); agla printing / attestation / courier
+  event Finance → Department commissions mein credit dikhaye ga.

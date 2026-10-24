@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { cleanText } from "@/lib/office/serializers";
+import { notifyCourierStage } from "@/lib/office/notifications";
+import { advanceCourierStage } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
@@ -23,8 +25,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const row = await prisma.caseAddress.create({
       data: { caseId: id, address, label: cleanText(body.label, 60) },
     });
-    await logOfficeAction(session, { action: "case.address.add", entity: "Case", entityId: id, after: row });
-    return NextResponse.json(row, { status: 201 });
+    // §W30: payment poori + address ka intezar tha → ab courier slip ka intezar.
+    const courierStage = await advanceCourierStage(id);
+    await logOfficeAction(session, {
+      action: "case.address.add",
+      entity: "Case",
+      entityId: id,
+      after: courierStage ? { ...row, caseStatus: courierStage } : row,
+    });
+    after(() => notifyCourierStage(id, courierStage));
+    return NextResponse.json({ ...row, caseStatus: courierStage }, { status: 201 });
   } catch (error) {
     return serverError(error);
   }

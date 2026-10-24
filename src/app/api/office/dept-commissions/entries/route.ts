@@ -4,7 +4,11 @@ import { hasPermission } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, serverError } from "@/lib/office/guard";
 import { toNumber } from "@/lib/office/money";
 import { toJson } from "@/lib/office/serializers";
-import { DEPT_COMMISSION_TYPE, type DeptCommissionKind } from "@/lib/office/dept-commission";
+import {
+  DEPT_COMMISSION_TYPE,
+  hasAnyDeptCommissionPermission,
+  parseDeptCommissionKind,
+} from "@/lib/office/dept-commission";
 
 export const preferredRegion = ["sin1"];
 
@@ -22,9 +26,8 @@ export async function GET(request: NextRequest) {
   if (!adminId) return badRequest("adminId zaroori hai");
 
   if (!hasPermission(session, "office:ledger:read")) {
-    const selfDept =
-      hasPermission(session, "office:printing:write") ||
-      hasPermission(session, "office:attestation-dept:write");
+    // §W30: courier dept user bhi apna statement dekhe.
+    const selfDept = hasAnyDeptCommissionPermission(session);
     if (!selfDept || adminId !== session.adminId) return forbidden();
   }
 
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
         entries: entries.map((entry) => ({
           id: entry.id,
           entryDate: entry.entryDate,
-          kind: parseKind(entry.remarks),
+          kind: parseDeptCommissionKind(entry.remarks),
           amount: toNumber(entry.amount),
           caseId: entry.caseId,
           caseNumber: entry.case?.caseNumber ?? null,
@@ -67,10 +70,4 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return serverError(error);
   }
-}
-
-function parseKind(remarks: string | null): DeptCommissionKind | null {
-  if (remarks?.startsWith("PRINTING commission")) return "PRINTING";
-  if (remarks?.startsWith("ATTESTATION commission")) return "ATTESTATION";
-  return null;
 }

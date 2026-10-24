@@ -91,6 +91,7 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
                 "PRINTED",
                 "ATTESTATION",
                 "ATTESTATION_COMPLETE",
+                "WAITING_FOR_COURIER_ADDRESS",
                 "WAITING_FOR_COURIER",
                 "DELIVERED",
                 "MUSADIQA_APPLIED",
@@ -120,6 +121,9 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
     case "courier":
       // §W11.1: courier stage starts when payment is complete
       // (WAITING_FOR_COURIER) and stays visible after DELIVERED.
+      // §W30: WAITING_FOR_COURIER = payment poori + delivery address maujood
+      // (slip ka intezar). Address ke baghair (WAITING_FOR_COURIER_ADDRESS)
+      // courier kuch bhej nahi sakta — wo booking office / admin ka kaam hai.
       return { status: { in: ["WAITING_FOR_COURIER", "DELIVERED"] } };
     default:
       return null;
@@ -217,18 +221,21 @@ export const CASE_STATUS_ORDER: Record<string, number> = {
   PRINTED: 4,
   ATTESTATION: 5,
   ATTESTATION_COMPLETE: 6,
-  WAITING_FOR_COURIER: 7,
-  DELIVERED: 8,
-  MUSADIQA_APPLIED: 9,
-  MUSADIQA_FEES_PAID: 10,
-  MUSADIQA_SENT_BY_BOARD: 11,
-  MUSADIQA_VERIFIED: 12,
+  // §W30: payment poori, delivery address ka intezar.
+  WAITING_FOR_COURIER_ADDRESS: 7,
+  WAITING_FOR_COURIER: 8,
+  DELIVERED: 9,
+  MUSADIQA_APPLIED: 10,
+  MUSADIQA_FEES_PAID: 11,
+  MUSADIQA_SENT_BY_BOARD: 12,
+  MUSADIQA_VERIFIED: 13,
 };
 
 // Forward-only guard: once a case reaches ATTESTATION_COMPLETE (or beyond, or
 // CANCELLED) the completion evaluator must never move it again.
 const COMPLETION_GUARD_STATUSES = [
   "ATTESTATION_COMPLETE",
+  "WAITING_FOR_COURIER_ADDRESS",
   "WAITING_FOR_COURIER",
   "DELIVERED",
   "MUSADIQA_APPLIED",
@@ -243,9 +250,13 @@ const COMPLETION_GUARD_STATUSES = [
 // (b) the attestation department uploaded the mandatory final file (department=ATTESTATION,
 // stepKey=FINAL). Forward-only: never touches ATTESTATION_COMPLETE-or-later /
 // CANCELLED cases.
+// §W30: `allowWithoutFinal` — printing + attestation dono ka kaam karne wala
+// user (canCompleteAttestationWithoutFinal) printed proof ke baad FINAL
+// attestation file ke baghair bhi stage complete kar sakta hai.
 export async function evaluateCaseCompletion(
   caseId: string,
-  db: Prisma.TransactionClient | typeof prisma = prisma
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+  options: { allowWithoutFinal?: boolean } = {}
 ): Promise<boolean> {
   const item = await db.case.findUnique({
     where: { id: caseId },
@@ -264,17 +275,76 @@ export async function evaluateCaseCompletion(
     : item.attestations;
   if (relevant.length === 0 || !relevant.every((a) => a.status === "DONE")) return false;
 
-  const finalFile = await db.caseFile.findFirst({
-    where: { caseId, department: "ATTESTATION", stepKey: "FINAL" },
-    select: { id: true },
-  });
-  if (!finalFile) return false;
+  if (!options.allowWithoutFinal) {
+    const finalFile = await db.caseFile.findFirst({
+      where: { caseId, department: "ATTESTATION", stepKey: "FINAL" },
+      select: { id: true },
+    });
+    if (!finalFile) return false;
+  }
 
   await db.case.update({
     where: { id: caseId },
     data: { status: "ATTESTATION_COMPLETE", currentAttestationId: null },
   });
   return true;
+}
+
+// §W30 — jo user printing AUR attestation-department dono ka kaam karta hai
+// (dono write permissions), us ne printed proof upload kar diya ho (case par
+// kam az kam ek PRINTING file) to attestation stage FINAL attestation file ke
+// baghair complete kar sakta hai — printed proof hi us ka saboot hai. Super
+// admin is mein shamil NAHI (us ke paas status dropdown hai; us ka FINAL wala
+// purana rule nahi badla).
+export async function canCompleteAttestationWithoutFinal(
+  session: AdminSession,
+  caseId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<boolean> {
+  if (session.role === "admin") return false;
+  if (!hasPermission(session, "office:printing:write")) return false;
+  if (!hasPermission(session, "office:attestation-dept:write")) return false;
+  const printedProof = await db.caseFile.findFirst({
+    where: { caseId, department: "PRINTING" },
+    select: { id: true },
+  });
+  return Boolean(printedProof);
+}
+
+// §W30 — attestation ke baad courier stage, khud-ba-khud (forward-only):
+//   ATTESTATION_COMPLETE + baqi payment 0  → WAITING_FOR_COURIER_ADDRESS
+//                                            (ya address ho to seedha ↓)
+//   WAITING_FOR_COURIER_ADDRESS + address  → WAITING_FOR_COURIER (slip ka intezar)
+// Baqi = max(agreed − RECEIVED, 0) (BR1.4); agreed 0 wale case nahi barhte
+// (purana §W11.1 rule). Payment, agreed amount, address ya attestation
+// completion ke har raaste ke baad call hota hai. Naya status return karta hai
+// (kuch na badle to null). Kabhi peeche nahi le jata.
+export async function advanceCourierStage(
+  caseId: string,
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<"WAITING_FOR_COURIER_ADDRESS" | "WAITING_FOR_COURIER" | null> {
+  const item = await db.case.findUnique({
+    where: { id: caseId },
+    select: {
+      status: true,
+      agreedAmount: true,
+      payments: { where: { status: "RECEIVED" }, select: { amount: true } },
+      _count: { select: { addresses: true } },
+    },
+  });
+  if (!item) return null;
+  if (item.status !== "ATTESTATION_COMPLETE" && item.status !== "WAITING_FOR_COURIER_ADDRESS") return null;
+
+  const agreed = Number(item.agreedAmount);
+  const received = item.payments.reduce((total, payment) => total + Number(payment.amount), 0);
+  // Paisa 2 decimal tak — floating noise se bachne ke liye paisa (×100) mein.
+  const remainingPaisa = Math.max(Math.round(agreed * 100) - Math.round(received * 100), 0);
+  if (agreed <= 0 || remainingPaisa > 0) return null;
+
+  const next = item._count.addresses > 0 ? "WAITING_FOR_COURIER" : "WAITING_FOR_COURIER_ADDRESS";
+  if (next === item.status) return null;
+  await db.case.update({ where: { id: caseId }, data: { status: next } });
+  return next;
 }
 
 // §F22.5 — dual-permission auto-bridge. Jab actor ke paas office:printing:write

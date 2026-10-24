@@ -7,8 +7,15 @@ import type { ToastKind } from "@/components/Toast";
 
 // §W21 Task 3 — Dept commission rule grid (Printing / Attestation dept users).
 // Rows: [Category ▾] [Set of Attestations ▾ (+ "Poore category (default)")]
-// [Printing commission Rs] [Attestation commission Rs] [✕].
+// [Printing commission Rs] [Attestation commission Rs] [Courier Rs] [✕].
 // Save: PUT /api/office/dept-commissions/rules { adminId, rules }.
+// §W30: courier column; `kinds` di jaye to sirf user ke kaam wale columns
+// dikhte hain (baqi values save mein waise hi rehti hain). Rate badalna sirf
+// AAGE ke cases par lagta hai; khali / 0 = commission 0.
+
+export type DeptKind = "PRINTING" | "ATTESTATION" | "COURIER";
+
+export const ALL_DEPT_KINDS: DeptKind[] = ["PRINTING", "ATTESTATION", "COURIER"];
 
 export type CommissionRuleDraft = {
   key: string;
@@ -17,26 +24,45 @@ export type CommissionRuleDraft = {
   setId: string | null;
   printAmount: string;
   attestationAmount: string;
+  courierAmount: string;
 };
 
 let rowSeq = 0;
 export function emptyRuleRow(): CommissionRuleDraft {
   rowSeq += 1;
-  return { key: `row-${Date.now()}-${rowSeq}`, categoryId: "", setId: null, printAmount: "", attestationAmount: "" };
+  return {
+    key: `row-${Date.now()}-${rowSeq}`,
+    categoryId: "",
+    setId: null,
+    printAmount: "",
+    attestationAmount: "",
+    courierAmount: "",
+  };
 }
 
 // Dept role (ya us permission wala user) ke liye hi grid dikhti hai.
+// §W30: courier role / permission bhi.
+export function deptKindsOf(role: string | null | undefined, permissions?: string[] | null): DeptKind[] {
+  const perms = permissions ?? [];
+  const kinds: DeptKind[] = [];
+  if (role === "printing" || perms.includes("office:printing:write")) kinds.push("PRINTING");
+  if (role === "attestation_dept" || perms.includes("office:attestation-dept:write")) kinds.push("ATTESTATION");
+  if (role === "courier" || perms.includes("office:courier:write")) kinds.push("COURIER");
+  return kinds;
+}
+
 export function isDeptCommissionRole(role: string | null | undefined, permissions?: string[] | null) {
-  return (
-    role === "printing" ||
-    role === "attestation_dept" ||
-    Boolean(permissions?.includes("office:printing:write")) ||
-    Boolean(permissions?.includes("office:attestation-dept:write"))
-  );
+  return deptKindsOf(role, permissions).length > 0;
 }
 
 export const DEPT_COMMISSION_HINT =
-  "Printing complete hone par printing commission aur attestation complete hone par attestation commission case-by-case credit hoti hai.";
+  "Printing complete hone par printing, attestation complete hone par attestation (har Set of Attestations ka alag rate), aur courier slip se delivered hone par courier commission case-by-case credit hoti hai. Rate set na ho to 0. Rate badalne se sirf aage ke cases par asar hota hai.";
+
+const KIND_FIELDS: Record<DeptKind, { field: "printAmount" | "attestationAmount" | "courierAmount"; label: string }> = {
+  PRINTING: { field: "printAmount", label: "Printing Rs" },
+  ATTESTATION: { field: "attestationAmount", label: "Attestation Rs" },
+  COURIER: { field: "courierAmount", label: "Courier Rs" },
+};
 
 type CategoryOption = { id: string; name: string };
 type SetOption = { id: string; name: string };
@@ -50,6 +76,7 @@ export function serializeRuleRows(rows: CommissionRuleDraft[]) {
       setId: row.setId,
       printAmount: Number(row.printAmount) || 0,
       attestationAmount: Number(row.attestationAmount) || 0,
+      courierAmount: Number(row.courierAmount) || 0,
     }));
 }
 
@@ -67,6 +94,11 @@ export async function saveCommissionRules(
 const input =
   "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100";
 
+// lg grid template: Category, Set, har kind ka amount, delete.
+function gridTemplate(kindCount: number) {
+  return `minmax(0,1fr) minmax(0,1fr) ${"7rem ".repeat(kindCount)}2.5rem`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Rows editor (controlled) — create form aur existing-user edit dono  */
 /* ------------------------------------------------------------------ */
@@ -74,13 +106,17 @@ const input =
 export function DeptCommissionRowsEditor({
   rows,
   onChange,
+  kinds = ALL_DEPT_KINDS,
 }: {
   rows: CommissionRuleDraft[];
   onChange: (rows: CommissionRuleDraft[]) => void;
+  kinds?: DeptKind[];
 }) {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [setsByCategory, setSetsByCategory] = useState<Record<string, SetOption[]>>({});
   const loadingSetsRef = useRef<Set<string>>(new Set());
+  const visibleKinds = kinds.length > 0 ? kinds : ALL_DEPT_KINDS;
+  const template = gridTemplate(visibleKinds.length);
 
   useEffect(() => {
     officeFetch<Array<{ id: string; name: string; isActive?: boolean }>>("/api/office/setup/categories").then(
@@ -122,21 +158,27 @@ export function DeptCommissionRowsEditor({
     <div className="space-y-2">
       {rows.length === 0 ? (
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400">
-          Koi rule row nahi — &quot;Add row&quot; se category/set ke hisaab se commission set karein.
+          Koi rule row nahi — &quot;Add row&quot; se category / Set of Attestations ke hisaab se commission set
+          karein. Rule na ho to commission 0.
         </p>
       ) : (
         <div className="space-y-2">
-          <div className="hidden grid-cols-[1fr_1fr_7rem_7rem_2.5rem] gap-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 lg:grid">
+          <div
+            className="hidden gap-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 lg:grid"
+            style={{ gridTemplateColumns: template }}
+          >
             <span>Category</span>
             <span>Set of Attestations</span>
-            <span>Printing Rs</span>
-            <span>Attestation Rs</span>
+            {visibleKinds.map((kind) => (
+              <span key={kind}>{KIND_FIELDS[kind].label}</span>
+            ))}
             <span />
           </div>
           {rows.map((row) => (
             <div
               key={row.key}
-              className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-white p-2 lg:grid-cols-[1fr_1fr_7rem_7rem_2.5rem] lg:border-0 lg:bg-transparent lg:p-0"
+              className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-white p-2 lg:grid-cols-[var(--dept-grid)] lg:border-0 lg:bg-transparent lg:p-0"
+              style={{ ["--dept-grid" as string]: template }}
             >
               <select
                 className={input}
@@ -167,20 +209,20 @@ export function DeptCommissionRowsEditor({
                   </option>
                 ))}
               </select>
-              <input
-                className={input}
-                inputMode="decimal"
-                placeholder="Printing Rs"
-                value={row.printAmount}
-                onChange={(e) => updateRow(row.key, { printAmount: e.target.value })}
-              />
-              <input
-                className={input}
-                inputMode="decimal"
-                placeholder="Attestation Rs"
-                value={row.attestationAmount}
-                onChange={(e) => updateRow(row.key, { attestationAmount: e.target.value })}
-              />
+              {visibleKinds.map((kind) => {
+                const { field, label } = KIND_FIELDS[kind];
+                return (
+                  <input
+                    key={kind}
+                    className={input}
+                    inputMode="decimal"
+                    placeholder={label}
+                    aria-label={label}
+                    value={row[field]}
+                    onChange={(e) => updateRow(row.key, { [field]: e.target.value })}
+                  />
+                );
+              })}
               <button
                 type="button"
                 className="grid h-9 w-9 place-items-center justify-self-start rounded-xl bg-red-50 text-red-600 hover:bg-red-100"
@@ -215,16 +257,19 @@ type RuleRow = {
   setName?: string | null;
   printAmount: number;
   attestationAmount: number;
+  courierAmount?: number;
 };
 
 export function DeptCommissionGridEditor({
   adminId,
   userName,
+  kinds,
   onMessage,
   onSaved,
 }: {
   adminId: string;
   userName: string;
+  kinds?: DeptKind[];
   onMessage: (message: string, kind?: ToastKind) => void;
   onSaved?: () => void | Promise<void>;
 }) {
@@ -247,6 +292,7 @@ export function DeptCommissionGridEditor({
             setId: rule.setId ? String(rule.setId) : null,
             printAmount: rule.printAmount ? String(rule.printAmount) : "",
             attestationAmount: rule.attestationAmount ? String(rule.attestationAmount) : "",
+            courierAmount: rule.courierAmount ? String(rule.courierAmount) : "",
           }))
         );
       }
@@ -261,7 +307,7 @@ export function DeptCommissionGridEditor({
     setSaving(true);
     const result = await saveCommissionRules(adminId, rows);
     onMessage(
-      result.ok ? "Commission rules save ho gaye" : result.error,
+      result.ok ? "Commission rules save ho gaye — naye cases par lagenge" : result.error,
       result.ok ? "success" : "error"
     );
     if (result.ok && onSaved) await onSaved();
@@ -279,7 +325,7 @@ export function DeptCommissionGridEditor({
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rules load ho rahe hain
         </div>
       ) : (
-        <DeptCommissionRowsEditor rows={rows} onChange={setRows} />
+        <DeptCommissionRowsEditor rows={rows} onChange={setRows} kinds={kinds} />
       )}
       <div>
         <button

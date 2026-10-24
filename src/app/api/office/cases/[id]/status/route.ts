@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
-import { notifyRole, notifyUsers } from "@/lib/office/notifications";
+import { notifyCourierStage, notifyRole, notifyUsers } from "@/lib/office/notifications";
 import { CASE_STATUSES, type CaseStatus } from "@/lib/office/permissions";
 import { STATUS_LABELS } from "@/lib/office/labels";
 import { cleanText } from "@/lib/office/serializers";
-import { applyAttestationJump, applyStatusSideEffects } from "@/lib/office/workflow";
+import { advanceCourierStage, applyAttestationJump, applyStatusSideEffects } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
@@ -28,7 +28,7 @@ const STAGE_ROLE: Record<string, string> = {
   WAITING_FOR_PRINTING: "printing",
   PRINTED: "attestation_dept",
   ATTESTATION: "attestation_dept",
-  WAITING_FOR_COURIER: "courier",
+  // §W30: courier stages ki notification notifyCourierStage se (permission based).
 };
 
 // Attestation office / super admin: printed flag + manual case status.
@@ -111,6 +111,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       { maxWait: 10000, timeout: 30000 }
     );
 
+    // §W30: ATTESTATION_COMPLETE / address-stage set hua aur payment poori hai
+    // → courier stage khud-ba-khud (address ke hisaab se). Forward-only.
+    const courierStage =
+      data.status === "ATTESTATION_COMPLETE" || data.status === "WAITING_FOR_COURIER_ADDRESS"
+        ? await advanceCourierStage(id)
+        : null;
+    if (courierStage) data.status = courierStage;
+
     // W13.2: audit log + notifications response ke baad (after) chalte hain
     // taake mutation response foran return ho. Sab values plain hain aur
     // yahan pehle se capture ho chuki hain (koi request-scoped object nahi).
@@ -156,6 +164,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             })
           );
         }
+      }
+      // §W30: courier stage (address / slip) ki notification permission ke hisaab se.
+      if (newStatus === "WAITING_FOR_COURIER" || newStatus === "WAITING_FOR_COURIER_ADDRESS") {
+        sideEffects.push(notifyCourierStage(id, newStatus));
       }
       await Promise.all(sideEffects);
     });

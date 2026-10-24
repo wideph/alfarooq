@@ -389,7 +389,8 @@ export type DeptCommissionSummaryUser = {
 export type DeptCommissionEntry = {
   id: string;
   entryDate: string;
-  kind: "PRINTING" | "ATTESTATION";
+  // §W30: COURIER bhi.
+  kind: "PRINTING" | "ATTESTATION" | "COURIER";
   amount: number;
   caseId: string;
   caseNumber: string;
@@ -424,7 +425,7 @@ export function normalizeDeptEntries(data: any): { entries: DeptCommissionEntry[
   const entries = (Array.isArray(data?.entries) ? data.entries : []).map((raw: any) => ({
     id: String(raw?.id ?? ""),
     entryDate: String(raw?.entryDate ?? raw?.date ?? ""),
-    kind: (raw?.kind === "ATTESTATION" ? "ATTESTATION" : "PRINTING") as "PRINTING" | "ATTESTATION",
+    kind: (raw?.kind === "ATTESTATION" || raw?.kind === "COURIER" ? raw.kind : "PRINTING") as DeptCommissionEntry["kind"],
     amount: num(raw?.amount),
     caseId: String(raw?.caseId ?? ""),
     caseNumber: String(raw?.caseNumber ?? "—"),

@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { notifyUsers } from "@/lib/office/notifications";
+import { notifyCourierStage, notifyUsers } from "@/lib/office/notifications";
+import { advanceCourierStage } from "@/lib/office/workflow";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, round2, toNumber } from "@/lib/office/money";
 import { todayPakistan, toJson } from "@/lib/office/serializers";
@@ -155,8 +156,11 @@ export async function PATCH(request: NextRequest) {
     }, { maxWait: 10000, timeout: 30000 });
 
     const result = await recomputeCaseFinancials(existing.caseId, session);
+    // §W30: discount se baqi 0 ho gaya → courier stage (forward-only).
+    const courierStage = await advanceCourierStage(existing.caseId);
     // W13.2: audit log + requester notification response ke baad.
     after(async () => {
+      await notifyCourierStage(existing.caseId, courierStage);
       await logOfficeAction(session, {
         action: "discount.accept",
         entity: "DiscountRequest",

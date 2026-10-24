@@ -28,14 +28,17 @@ import {
   type OfficeRole,
 } from "@/lib/office/permissions";
 import type { ToastKind } from "@/components/Toast";
+import { DEPT_COMMISSION_KIND_LABELS, DEPT_COMMISSION_KIND_STYLES } from "@/lib/office/labels";
 import {
   DEPT_COMMISSION_HINT,
   DeptCommissionGridEditor,
   DeptCommissionRowsEditor,
+  deptKindsOf,
   isDeptCommissionRole,
   saveCommissionRules,
   serializeRuleRows,
   type CommissionRuleDraft,
+  type DeptKind,
 } from "./setup/DeptCommissionGrid";
 
 type Category = { id: string; name: string; defaultAmount: number | null; order: number; isActive: boolean };
@@ -692,7 +695,7 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
 
       {/* §W22 (F22.2): sab dept users ke commission rates aik jagah — admin ko
           office/user dhoondna na pare. */}
-      <DeptCommissionRatesPanel offices={offices} onChanged={load} onMessage={onMessage} />
+      <DeptCommissionRatesPanel onMessage={onMessage} />
     </Panel>
   );
 }
@@ -779,7 +782,8 @@ function OfficeUsersEditor({
                   {!user.isActive && (
                     <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
                   )}
-                  {isDeptCommissionRole(user.role) && (
+                  {/* §W30: role ya dept permission (printing/attestation/courier) */}
+                  {isDeptCommissionRole(user.role, user.permissions) && (
                     <button
                       type="button"
                       className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
@@ -790,10 +794,11 @@ function OfficeUsersEditor({
                   )}
                 </div>
               </div>
-              {gridFor === user.id && isDeptCommissionRole(user.role) && (
+              {gridFor === user.id && isDeptCommissionRole(user.role, user.permissions) && (
                 <DeptCommissionGridEditor
                   adminId={user.id}
                   userName={user.name}
+                  kinds={deptKindsOf(user.role, user.permissions)}
                   onMessage={onMessage}
                   onSaved={onChanged}
                 />
@@ -827,26 +832,41 @@ function OfficeUsersEditor({
   );
 }
 
-// §W22 (F22.2) — Department commission rates: tamam offices ke dept users
-// (printing / attestation_dept role ya dept write permissions) aik collapsible
-// section mein, har user ke neeche inline commission grid editor — admin ko
-// pehle office select kar ke user dhoondna na pare.
+// §W22 (F22.2) — Department commission rates: tamam dept users aik
+// collapsible section mein, har user ke neeche inline commission grid editor.
+// §W30: list ab /api/office/dept-commissions/users se — har printing /
+// attestation-dept / courier user (role ya permission), chahe kisi booking
+// office se jura ho ya NAHI (pehle sirf office users aate the, is liye
+// office ke baghair bane dept user ka commission set hi nahi ho sakta tha).
+type DeptCommissionUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  officeName: string | null;
+  kinds: DeptKind[];
+  ruleCount: number;
+};
+
 function DeptCommissionRatesPanel({
-  offices,
-  onChanged,
   onMessage,
 }: {
-  offices: Office[];
-  onChanged: () => Promise<void>;
   onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [users, setUsers] = useState<DeptCommissionUser[] | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const deptUsers = offices.flatMap((office) =>
-    office.users
-      .filter((user) => isDeptCommissionRole(user.role, user.permissions))
-      .map((user) => ({ user, officeName: office.name }))
-  );
+  const load = useCallback(async () => {
+    const res = await officeFetch<{ ok: boolean; users: DeptCommissionUser[] }>("/api/office/dept-commissions/users");
+    if (res.ok) setUsers(res.data.users ?? []);
+    else setUsers([]);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <div className="rounded-xl border border-slate-200 p-4 space-y-3">
@@ -857,9 +877,9 @@ function DeptCommissionRatesPanel({
         aria-expanded={open}
       >
         <div>
-          <p className="font-semibold text-slate-800">Department commission rates (Printing / Attestation)</p>
+          <p className="font-semibold text-slate-800">Department commission rates (Printing / Attestation / Courier)</p>
           <p className="text-xs text-slate-500">
-            Tamam printing/attestation department users ke commission rates aik jagah — per category + per set.
+            Har department user ka alag commission — per category + har Set of Attestations. Set na ho to 0.
           </p>
         </div>
         {open ? (
@@ -870,32 +890,63 @@ function DeptCommissionRatesPanel({
       </button>
 
       {open &&
-        (deptUsers.length === 0 ? (
+        (users === null ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Department users load ho rahe hain
+          </div>
+        ) : users.length === 0 ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400">
-            Abhi koi printing/attestation department user nahi
+            Abhi koi printing / attestation / courier department user nahi — Admins page par user ko in mein se koi
+            permission dein.
           </p>
         ) : (
-          <div className="space-y-4">
-            {deptUsers.map(({ user, officeName }) => (
-              <div key={user.id} className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <p className={`font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>{user.name}</p>
-                  <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
-                    {ROLE_LABELS[user.role] || user.role}
-                  </span>
-                  <span className="text-xs text-slate-400">{officeName}</span>
-                  {!user.isActive && (
-                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
+          <div className="space-y-3">
+            {users.map((user) => {
+              const isOpen = expanded[user.id] ?? users.length <= 3;
+              return (
+                <div key={user.id} className="space-y-2 rounded-xl border border-slate-100 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <p className={`font-medium ${user.isActive ? "text-slate-800" : "text-slate-400"}`}>{user.name}</p>
+                    <span className="rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary-700">
+                      {ROLE_LABELS[user.role] || user.role}
+                    </span>
+                    {user.kinds.map((kind) => (
+                      <span
+                        key={kind}
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${DEPT_COMMISSION_KIND_STYLES[kind]}`}
+                      >
+                        {DEPT_COMMISSION_KIND_LABELS[kind]}
+                      </span>
+                    ))}
+                    <span className="text-xs text-slate-400">{user.officeName || "Office ke baghair"}</span>
+                    {!user.isActive && (
+                      <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
+                    )}
+                    <span
+                      className={`text-xs font-semibold ${user.ruleCount > 0 ? "text-emerald-700" : "text-amber-700"}`}
+                    >
+                      {user.ruleCount > 0 ? `${user.ruleCount} rule set` : "Commission set nahi (0)"}
+                    </span>
+                    <button
+                      type="button"
+                      className="ml-auto rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                      onClick={() => setExpanded((prev) => ({ ...prev, [user.id]: !isOpen }))}
+                    >
+                      {isOpen ? "Grid band karein" : "Commission set karein"}
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <DeptCommissionGridEditor
+                      adminId={user.id}
+                      userName={user.name}
+                      kinds={user.kinds}
+                      onMessage={onMessage}
+                      onSaved={load}
+                    />
                   )}
                 </div>
-                <DeptCommissionGridEditor
-                  adminId={user.id}
-                  userName={user.name}
-                  onMessage={onMessage}
-                  onSaved={onChanged}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
     </div>

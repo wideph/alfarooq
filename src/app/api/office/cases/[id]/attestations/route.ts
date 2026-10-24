@@ -5,11 +5,16 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
-import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
+import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
-import { autoBridgePrintingForDualDept, evaluateCaseCompletion } from "@/lib/office/workflow";
+import {
+  advanceCourierStage,
+  autoBridgePrintingForDualDept,
+  canCompleteAttestationWithoutFinal,
+  evaluateCaseCompletion,
+} from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
 
@@ -149,10 +154,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // agar case abhi WAITING_FOR_PRINTING par hai to pehle auto PRINTED
     // (bridge) phir completion check; dono ek hi tx mein (atomic).
     // Single-perm actor ke liye bridge kabhi fire nahi hota (purana behavior).
-    const { bridged, completed } = await prisma.$transaction(async (tx) => {
+    // §W30: dual-dept user (printed proof ke baad) ke liye FINAL file zaroori
+    // nahi; completion ke baad payment poori ho to courier stage.
+    const { bridged, completed, courierStage } = await prisma.$transaction(async (tx) => {
       const bridgedNow = await autoBridgePrintingForDualDept(id, session, tx);
-      const completedNow = await evaluateCaseCompletion(id, tx);
-      return { bridged: bridgedNow, completed: completedNow };
+      const allowWithoutFinal = await canCompleteAttestationWithoutFinal(session, id, tx);
+      const completedNow = await evaluateCaseCompletion(id, tx, { allowWithoutFinal });
+      const stage = completedNow ? await advanceCourierStage(id, tx) : null;
+      return { bridged: bridgedNow, completed: completedNow, courierStage: stage };
     });
     if (bridged) {
       nextStatus = completed ? "ATTESTATION_COMPLETE" : "PRINTED";
@@ -161,7 +170,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
     }
     if (completed) {
-      nextStatus = "ATTESTATION_COMPLETE";
+      nextStatus = courierStage ?? "ATTESTATION_COMPLETE";
       // F4: the acting attestation user earns the rule's attestationAmount
       // (idempotent, never throws). Admin status-dropdown jumps do NOT credit
       // anyone — no dept worker acted (see dept-commission.ts).
@@ -178,6 +187,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         await notifyRole("attestation_dept", { type: "attestation", title, link });
         await notifyAdmins({ type: "attestation", title, link });
       }
+      // §W30: completion ke saath courier stage aaya ho to notification.
+      await notifyCourierStage(id, courierStage);
 
       await logOfficeAction(session, {
         action: "case.attestation.update",

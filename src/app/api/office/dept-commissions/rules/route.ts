@@ -13,7 +13,10 @@ export const preferredRegion = ["sin1"];
 // ---------------------------------------------------------------------------
 // F4 — department commission rules grid (DepartmentCommissionRule).
 // GET  ?adminId= → that admin's rules with category/set names.
-// PUT  { adminId, rules: [{ categoryId, setId?, printAmount, attestationAmount }] }
+// PUT  { adminId, rules: [{ categoryId, setId?, printAmount, attestationAmount, courierAmount }] }
+//      (§W30: courierAmount — courier slip se case DELIVERED hone par).
+//      Rate badalna sirf AAGE ke events par lagta hai — pehle se credit hui
+//      DEPT_COMMISSION ledger entries ko yahan koi nahi chhuta.
 //      → replace that admin's ENTIRE grid in one transaction (upsert per row
 //        by the (adminId, categoryId, setId) unique key; rows missing from the
 //        payload are deleted). setId "" / omitted = category-level fallback row.
@@ -38,6 +41,7 @@ async function serializeRules(adminId: string) {
     setName: rule.setId ? (setNames.get(rule.setId) ?? null) : null,
     printAmount: toNumber(rule.printAmount),
     attestationAmount: toNumber(rule.attestationAmount),
+    courierAmount: toNumber(rule.courierAmount),
   }));
 }
 
@@ -78,10 +82,22 @@ export async function PUT(request: NextRequest) {
     // Validate + normalize; dedupe by the (categoryId, setId) unique key.
     const normalized = new Map<
       string,
-      { categoryId: string; setId: string; printAmount: Prisma.Decimal; attestationAmount: Prisma.Decimal }
+      {
+        categoryId: string;
+        setId: string;
+        printAmount: Prisma.Decimal;
+        attestationAmount: Prisma.Decimal;
+        courierAmount: Prisma.Decimal;
+      }
     >();
     for (const row of rows) {
-      const input = row as { categoryId?: unknown; setId?: unknown; printAmount?: unknown; attestationAmount?: unknown };
+      const input = row as {
+        categoryId?: unknown;
+        setId?: unknown;
+        printAmount?: unknown;
+        attestationAmount?: unknown;
+        courierAmount?: unknown;
+      };
       const categoryId = typeof input.categoryId === "string" ? input.categoryId.trim() : "";
       if (!categoryId || !categoryIds.has(categoryId)) return badRequest("Category nahi mili");
       const setId = typeof input.setId === "string" && input.setId.trim() ? input.setId.trim() : "";
@@ -92,7 +108,8 @@ export async function PUT(request: NextRequest) {
       }
       const printAmount = parseAmount(input.printAmount ?? 0);
       const attestationAmount = parseAmount(input.attestationAmount ?? 0);
-      if (printAmount === null || attestationAmount === null) {
+      const courierAmount = parseAmount(input.courierAmount ?? 0);
+      if (printAmount === null || attestationAmount === null || courierAmount === null) {
         return badRequest("Amounts 0 ya positive hone chahiye");
       }
       normalized.set(`${categoryId}:${setId}`, {
@@ -100,6 +117,7 @@ export async function PUT(request: NextRequest) {
         setId,
         printAmount: round2(printAmount),
         attestationAmount: round2(attestationAmount),
+        courierAmount: round2(courierAmount),
       });
     }
     const desired = [...normalized.values()];
@@ -123,10 +141,12 @@ export async function PUT(request: NextRequest) {
             setId: row.setId,
             printAmount: row.printAmount,
             attestationAmount: row.attestationAmount,
+            courierAmount: row.courierAmount,
           },
           update: {
             printAmount: row.printAmount,
             attestationAmount: row.attestationAmount,
+            courierAmount: row.courierAmount,
           },
         });
       }

@@ -21,6 +21,7 @@ import CaseFileViewer, { type ViewableFile } from "@/components/office/case/Case
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDateTime, officeFetch } from "@/lib/office/client";
+import { caseStatusLabel } from "@/lib/office/labels";
 import type { CaseFileItem, CategorySetWithSteps } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 
@@ -92,6 +93,12 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
   });
 
   const canCompleteAll = adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION, "office:attestation:write"]);
+  // §W30: printing + attestation-dept dono ka kaam karne wala user (super
+  // admin nahi) printed proof ke baad FINAL file ke baghair complete kar sakta hai.
+  const dualDept =
+    admin.role !== "admin" &&
+    adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.PRINTING]) &&
+    adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION]);
 
   const load = useCallback(async () => {
     try {
@@ -143,9 +150,18 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     if (!confirm("Saari attestations complete karein? Tamam steps DONE mark ho jayen gi.")) return;
     setCompleting(true);
     try {
-      const res = await officeFetch(`/api/office/cases/${detail.id}/attestations/complete-all`, { method: "POST" });
+      const res = await officeFetch<{ status: string; completed?: boolean }>(
+        `/api/office/cases/${detail.id}/attestations/complete-all`,
+        { method: "POST" }
+      );
       if (res.ok) {
-        onMessage("Saari attestations complete ho gayi — case COMPLETED");
+        // §W30: status ab courier stage (address / slip) tak bhi ja sakta hai.
+        onMessage(
+          res.data.completed
+            ? `Attestation complete — ${caseStatusLabel(res.data.status)}`
+            : "Saare steps DONE ho gaye, magar case status nahi badla (set ke steps check karein)",
+          res.data.completed ? "success" : "info"
+        );
         await onReload();
       } else onMessage(res.error, "error");
     } catch {
@@ -352,6 +368,11 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                       accept={ACCEPT_ALL}
                       fixedStepKey="FINAL"
                       tone="final"
+                      finalHeading={
+                        dualDept
+                          ? "Final file (optional) — aap printing + attestation dono karte hain, printed proof ke baad iske baghair bhi complete ho sakta hai"
+                          : undefined
+                      }
                       buttonLabel="Final upload"
                       hint="Final proof (images / pdf / video)"
                       onUploaded={afterUpload}

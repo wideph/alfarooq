@@ -70,3 +70,40 @@ export async function notifyPermission(permission: string, n: NotificationInput)
     console.error("[notify] notifyPermission fail", error);
   }
 }
+
+/**
+ * §W30 — courier stage ki notification (advanceCourierStage ke baad):
+ *   WAITING_FOR_COURIER_ADDRESS → case creator + admins: address add karein.
+ *   WAITING_FOR_COURIER         → courier PERMISSION wale users (+ admins) —
+ *     role nahi, kyun ke combined users (maslan "attestation" role + courier
+ *     permission) bhi courier ka kaam karte hain.
+ * Kabhi throw nahi karta.
+ */
+export async function notifyCourierStage(caseId: string, stage: string | null | undefined): Promise<void> {
+  if (stage !== "WAITING_FOR_COURIER" && stage !== "WAITING_FOR_COURIER_ADDRESS") return;
+  try {
+    const item = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: { caseNumber: true, createdByAdminId: true },
+    });
+    if (!item) return;
+    const link = `/office/cases/${caseId}`;
+    if (stage === "WAITING_FOR_COURIER") {
+      await notifyPermission("office:courier:write", {
+        type: "case.status",
+        title: `Case ${item.caseNumber}: payment complete — courier slip upload karein`,
+        link,
+      });
+    } else {
+      const n = {
+        type: "case.status",
+        title: `Case ${item.caseNumber}: payment complete — courier address add karein`,
+        link,
+      };
+      await notifyUsers([item.createdByAdminId], n);
+      await notifyAdmins(n);
+    }
+  } catch (error) {
+    console.error("[notify] notifyCourierStage fail", error);
+  }
+}

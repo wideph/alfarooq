@@ -1,6 +1,7 @@
 "use client";
 
-import { Printer, Stamp } from "lucide-react";
+import { Printer, Stamp, Truck } from "lucide-react";
+import { DEPT_COMMISSION_KIND_LABELS, DEPT_COMMISSION_KIND_STYLES } from "@/lib/office/labels";
 import SectionCard from "@/components/ui/SectionCard";
 import { formatDate, formatMoney } from "@/lib/office/client";
 import type { CaseDetail } from "@/lib/office/types";
@@ -10,7 +11,7 @@ import type { CaseDetail } from "@/lib/office/types";
 // intersection type: src/lib/office/types.ts backend contract file hai.
 export type DeptCommissionAttachment = {
   id: string;
-  kind: "PRINTING" | "ATTESTATION" | null;
+  kind: "PRINTING" | "ATTESTATION" | "COURIER" | null;
   amount: number;
   adminName: string;
   entryDate: string;
@@ -30,16 +31,16 @@ export default function DeptCommissionsAttached({ detail }: { detail: CaseDetail
     <SectionCard icon={Printer} title="Department commissions (attached)" count={items.length}>
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {items.map((item) => {
-          const isPrinting = item.kind !== "ATTESTATION";
+          // §W30: COURIER bhi (kind null purane rows = printing fallback).
+          const kind = item.kind ?? "PRINTING";
+          const Icon = kind === "ATTESTATION" ? Stamp : kind === "COURIER" ? Truck : Printer;
           return (
             <li key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                  isPrinting ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"
-                }`}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${DEPT_COMMISSION_KIND_STYLES[kind]}`}
               >
-                {isPrinting ? <Printer className="h-3 w-3" /> : <Stamp className="h-3 w-3" />}
-                {isPrinting ? "Printing" : "Attestation"}
+                <Icon className="h-3 w-3" />
+                {DEPT_COMMISSION_KIND_LABELS[kind]}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="font-medium text-slate-800">{item.adminName}</span>

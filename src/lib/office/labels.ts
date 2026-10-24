@@ -8,7 +8,9 @@ export const STATUS_LABELS: Record<string, string> = {
   PRINTED: "Printed",
   ATTESTATION: "Attestation",
   ATTESTATION_COMPLETE: "Attestation complete — final payment pending",
-  WAITING_FOR_COURIER: "Payment complete — waiting for courier",
+  // §W30: payment poori → address ka intezar → courier slip ka intezar.
+  WAITING_FOR_COURIER_ADDRESS: "Payment complete — waiting for courier address",
+  WAITING_FOR_COURIER: "Waiting for courier slip",
   DELIVERED: "Delivered",
   MUSADIQA_APPLIED: "Musadiqa applied",
   MUSADIQA_FEES_PAID: "Fees paid for Musadiqa",
@@ -30,6 +32,7 @@ export const STATUS_STYLES: Record<string, string> = {
   PRINTED: "bg-indigo-100 text-indigo-700",
   ATTESTATION: "bg-violet-100 text-violet-700",
   ATTESTATION_COMPLETE: "bg-emerald-100 text-emerald-700",
+  WAITING_FOR_COURIER_ADDRESS: "bg-orange-100 text-orange-800",
   WAITING_FOR_COURIER: "bg-teal-100 text-teal-700",
   DELIVERED: "bg-emerald-200 text-emerald-800",
   MUSADIQA_APPLIED: "bg-sky-100 text-sky-700",
@@ -101,4 +104,18 @@ export const LEDGER_TYPE_LABELS: Record<string, string> = {
   PAYOUT: "Payout",
   ADJUSTMENT: "Adjustment",
   EXPENSE: "Office expense",
+};
+
+// §W30 — department commission kinds (finance drawer, Mera account, case
+// detail attached list) — ek hi jagah labels/rang.
+export const DEPT_COMMISSION_KIND_LABELS: Record<string, string> = {
+  PRINTING: "Printing",
+  ATTESTATION: "Attestation",
+  COURIER: "Courier",
+};
+
+export const DEPT_COMMISSION_KIND_STYLES: Record<string, string> = {
+  PRINTING: "bg-sky-100 text-sky-700",
+  ATTESTATION: "bg-amber-100 text-amber-700",
+  COURIER: "bg-teal-100 text-teal-700",
 };

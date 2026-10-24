@@ -17,6 +17,13 @@ import {
 const KIND_CHIP: Record<DeptCommissionEntry["kind"], string> = {
   PRINTING: "bg-sky-100 text-sky-700",
   ATTESTATION: "bg-amber-100 text-amber-700",
+  COURIER: "bg-teal-100 text-teal-700",
+};
+
+const KIND_LABEL: Record<DeptCommissionEntry["kind"], string> = {
+  PRINTING: "Printing",
+  ATTESTATION: "Attestation",
+  COURIER: "Courier",
 };
 
 // §W21 — Dept commission details drawer: case-by-case entries + payout
@@ -121,7 +128,7 @@ export default function DeptDetailsDrawer({
                             <span
                               className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${KIND_CHIP[entry.kind]}`}
                             >
-                              {entry.kind === "PRINTING" ? "Printing" : "Attestation"}
+                              {KIND_LABEL[entry.kind]}
                             </span>
                             {entry.caseId ? (
                               <Link

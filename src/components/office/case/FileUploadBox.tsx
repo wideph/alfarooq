@@ -34,6 +34,8 @@ type Props = {
   fixedTitle?: string;
   buttonLabel?: string;
   tone?: "default" | "final";
+  // §W30: final tone ki heading (default: "Final file (lazmi) …").
+  finalHeading?: string;
   // Tang jagah (modal) — controls hamesha ek ke neeche ek.
   stacked?: boolean;
   onUploaded: (result: UploadResult) => void | Promise<void>;
@@ -61,6 +63,7 @@ export default function FileUploadBox({
   fixedTitle,
   buttonLabel = "Upload",
   tone = "default",
+  finalHeading = "Final file (lazmi) — attestation complete karne ke liye zaroori",
   stacked = false,
   onUploaded,
   onMessage,
@@ -187,7 +190,7 @@ export default function FileUploadBox({
       }}
     >
       {final && (
-        <p className="text-xs font-bold text-amber-800">Final file (lazmi) — attestation complete karne ke liye zaroori</p>
+        <p className="text-xs font-bold text-amber-800">{finalHeading}</p>
       )}
       <div className={`flex flex-col gap-2 ${stacked ? "" : "sm:flex-row sm:items-center"}`}>
         {!fixedStepKey && stepOptions.length > 0 && (

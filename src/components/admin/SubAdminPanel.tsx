@@ -13,6 +13,7 @@ import {
   type BookingOfficeType,
 } from "@/lib/office/permissions";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
+import { DeptCommissionGridEditor, deptKindsOf } from "@/components/office/setup/DeptCommissionGrid";
 
 const WEBSITE_PERMISSIONS = [
   { key: "settings", label: "Website settings", read: "settings:read", write: "settings:write" },
@@ -75,6 +76,8 @@ export default function SubAdminPanel({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
+  // §W30: kis dept user ka commission grid khula hai.
+  const [commissionFor, setCommissionFor] = useState<string | null>(null);
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
 
@@ -371,8 +374,15 @@ export default function SubAdminPanel({
             </div>
           ) : (
             <div className="space-y-2">
-              {admins.map((admin) => (
-                <div key={admin.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              {admins.map((admin) => {
+                // §W30: printing / attestation-dept / courier user ka commission
+                // isi list se set ho (super admin) — pehle sirf setup ke office
+                // users mein option tha.
+                const deptKinds = admin.role === "admin" ? [] : deptKindsOf(admin.role, admin.permissions);
+                const showCommission = isSuperAdmin && deptKinds.length > 0;
+                return (
+                <div key={admin.id} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold text-slate-900">
                       {admin.name}{" "}
@@ -389,7 +399,16 @@ export default function SubAdminPanel({
                         : admin.permissions.join(", ") || "No permissions"}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {showCommission && (
+                      <button
+                        type="button"
+                        onClick={() => setCommissionFor(commissionFor === admin.id ? null : admin.id)}
+                        className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm font-semibold text-primary-700"
+                      >
+                        {commissionFor === admin.id ? "Commission band karein" : "Commission"}
+                      </button>
+                    )}
                     {canWrite && (isSuperAdmin || !isOfficeRole(admin.role)) && (
                       <>
                         <button
@@ -426,7 +445,17 @@ export default function SubAdminPanel({
                     )}
                   </div>
                 </div>
-              ))}
+                {showCommission && commissionFor === admin.id && (
+                  <DeptCommissionGridEditor
+                    adminId={admin.id}
+                    userName={admin.name}
+                    kinds={deptKinds}
+                    onMessage={setMessage}
+                  />
+                )}
+                </div>
+                );
+              })}
             </div>
           )}
         </div>

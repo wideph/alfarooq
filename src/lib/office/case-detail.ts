@@ -11,7 +11,7 @@ import {
   serializeFilingCase,
   setMissingWarning,
 } from "@/lib/office/workflow";
-import { DEPT_COMMISSION_TYPE, type DeptCommissionKind } from "@/lib/office/dept-commission";
+import { DEPT_COMMISSION_TYPE, parseDeptCommissionKind } from "@/lib/office/dept-commission";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
@@ -79,12 +79,6 @@ async function adminNameMap(ids: Array<string | null | undefined>) {
 // Ye REAL CaseExpense rows NAHI hain — expenses array ke BAHAR alag field,
 // taake pool/member formulas double-count na karein (DEPT_COMMISSION bucket
 // profit mein already deduct hota hai).
-function parseDeptCommissionKind(remarks: string | null): DeptCommissionKind | null {
-  if (remarks?.startsWith("PRINTING commission [")) return "PRINTING";
-  if (remarks?.startsWith("ATTESTATION commission [")) return "ATTESTATION";
-  return null;
-}
-
 async function loadDeptCommissions(caseId: string) {
   const rows = await prisma.ledgerEntry.findMany({
     where: { caseId, type: DEPT_COMMISSION_TYPE },

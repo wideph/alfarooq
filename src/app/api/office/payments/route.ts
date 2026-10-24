@@ -8,10 +8,10 @@ import { caseScope, findAccessibleCase } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, sum, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
-import { notifyPermission, notifyRole } from "@/lib/office/notifications";
+import { notifyCourierStage, notifyPermission } from "@/lib/office/notifications";
 import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
 import { uploadOfficeFile } from "@/lib/office/r2";
-import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
+import { activateWorkflowOnFirstPayment, advanceCourierStage } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
@@ -190,20 +190,13 @@ export async function POST(request: NextRequest) {
 
     const result = await recomputeCaseFinancials(caseId, session, { paymentId: payment.id });
 
-    // §W11.1: direct RECEIVED payment se agar poora hisaab clear ho gaya aur
-    // case ATTESTATION_COMPLETE par hai → WAITING_FOR_COURIER. Business write
-    // request path mein rehti hai; courier notification after() mein (W13.2).
-    let notifyCourier = false;
-    if (status === "RECEIVED" && result.remaining === 0 && result.agreedAmount > 0) {
-      const caseRow = await prisma.case.findUnique({
-        where: { id: caseId },
-        select: { status: true },
-      });
-      if (caseRow?.status === "ATTESTATION_COMPLETE") {
-        await prisma.case.update({ where: { id: caseId }, data: { status: "WAITING_FOR_COURIER" } });
-        notifyCourier = true;
-      }
-    }
+    // §W11.1/§W30: direct RECEIVED payment se poora hisaab clear ho gaya aur
+    // case ATTESTATION_COMPLETE par hai → courier stage (address ke hisaab
+    // se). Business write request path mein; notification after() mein.
+    const courierStage =
+      status === "RECEIVED" && result.remaining === 0 && result.agreedAmount > 0
+        ? await advanceCourierStage(caseId)
+        : null;
 
     // §N7: a payment recorded directly as RECEIVED (cashier/admin) activates
     // the department workflow when it is the case's first RECEIVED payment.
@@ -237,13 +230,7 @@ export async function POST(request: NextRequest) {
           link: `/office/cases/${caseId}`,
         });
       }
-      if (notifyCourier) {
-        await notifyRole("courier", {
-          type: "case.status",
-          title: `Case ${item.caseNumber}: Payment complete — waiting for courier`,
-          link: `/office/cases/${caseId}`,
-        });
-      }
+      await notifyCourierStage(caseId, courierStage);
       if (datesNeeded) {
         try {
           await generateSetDates(caseId);

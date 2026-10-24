@@ -277,6 +277,8 @@ model DepartmentCommissionRule {
   setId             String   @default("")
   printAmount       Decimal  @default(0) @db.Decimal(12, 2)
   attestationAmount Decimal  @default(0) @db.Decimal(12, 2)
+  // §W30: courier department commission (courier slip → DELIVERED).
+  courierAmount     Decimal  @default(0) @db.Decimal(12, 2)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

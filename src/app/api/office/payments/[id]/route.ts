@@ -6,12 +6,12 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
-import { notifyRole, notifyUsers } from "@/lib/office/notifications";
+import { notifyCourierStage, notifyUsers } from "@/lib/office/notifications";
 import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
 import { PAYMENT_STATUS_LABELS } from "@/lib/office/labels";
 import { deleteOfficeFile } from "@/lib/office/r2";
-import { activateWorkflowOnFirstPayment } from "@/lib/office/workflow";
+import { activateWorkflowOnFirstPayment, advanceCourierStage } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
@@ -63,23 +63,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
 
-    // §W11.1: ATTESTATION_COMPLETE par poora payment (remaining=0, agreed>0)
-    // → WAITING_FOR_COURIER. Business write request path mein; courier
+    // §W11.1/§W30: ATTESTATION_COMPLETE par poora payment (remaining=0,
+    // agreed>0) → courier stage (address na ho to WAITING_FOR_COURIER_ADDRESS,
+    // ho to WAITING_FOR_COURIER). Business write request path mein;
     // notification after() mein (W13.2).
-    let notifyCourier = false;
-    if (result.remaining === 0 && result.agreedAmount > 0) {
-      const caseRow = await prisma.case.findUnique({
-        where: { id: existing.caseId },
-        select: { status: true },
-      });
-      if (caseRow?.status === "ATTESTATION_COMPLETE") {
-        await prisma.case.update({
-          where: { id: existing.caseId },
-          data: { status: "WAITING_FOR_COURIER" },
-        });
-        notifyCourier = true;
-      }
-    }
+    const courierStage = result.remaining === 0 && result.agreedAmount > 0
+      ? await advanceCourierStage(existing.caseId)
+      : null;
 
     // Wave 2 (§N5/N7): the FIRST payment that turns RECEIVED activates the
     // workflow — case becomes WAITING_FOR_FILE (visible to filing). Runs AFTER
@@ -108,17 +98,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         before: existing,
         after: data,
       });
-      if (notifyCourier) {
-        const caseRow = await prisma.case.findUnique({
-          where: { id: existing.caseId },
-          select: { caseNumber: true },
-        });
-        await notifyRole("courier", {
-          type: "case.status",
-          title: `Case ${caseRow?.caseNumber || ""}: Payment complete — waiting for courier`,
-          link: `/office/cases/${existing.caseId}`,
-        });
-      }
+      await notifyCourierStage(existing.caseId, courierStage);
       // §W11.8: verify decision → payment submitter + case creator.
       if (newStatus && statusChanged) {
         const caseRow = await prisma.case.findUnique({

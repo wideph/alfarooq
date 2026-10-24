@@ -116,7 +116,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                     mein pehle se thi, teen jagah repeat ho rahi thi. Roll/Reg/
                     Online-Verification # ab command bar ke chips mein hain. */}
                 <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
-                <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} />
+                <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} onMessage={setMessage} />
                 <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
 
                 {/* Tab bar — mobile par horizontally scrollable */}
