@@ -29,6 +29,41 @@ export function isOfficeRole(role?: string | null): role is OfficeRole {
   return OFFICE_ROLES.includes(role as OfficeRole);
 }
 
+// §W36 — "department worker": printing / attestation / courier ka kaam, paison
+// se koi taluq nahi. Kisi case ki raqam (agreed / received / remaining /
+// commission / payments / ledger / expenses) na API se milti hai na UI mein, aur
+// case detail page tabs ki bajaye ek hi page (sections). Jis ke paas paison
+// wali koi permission ho (cashier, booking office, case edit, payments, ledger,
+// finance, expenses) woh is mein shamil nahi. Filing ka apna stripped view
+// pehle se hai (§N7).
+const DEPT_WORK_PERMISSIONS: readonly string[] = [
+  "office:printing:write",
+  "office:attestation-dept:write",
+  "office:courier:write",
+  "office:attestation:write",
+];
+const MONEY_PERMISSIONS: readonly string[] = [
+  "office:cases:write",
+  "office:payments:submit",
+  "office:payments:verify",
+  "office:ledger:read",
+  "office:ledger:write",
+  "office:finance:read",
+  "office:expenses:write",
+];
+
+export function isDeptWorkerAccess(
+  role: string | null | undefined,
+  permissions: readonly string[] | null | undefined
+): boolean {
+  if (!role || ["admin", "cashier", "booking_office", "filing"].includes(role)) return false;
+  const granted = permissions ?? [];
+  return (
+    granted.some((permission) => DEPT_WORK_PERMISSIONS.includes(permission)) &&
+    !granted.some((permission) => MONEY_PERMISSIONS.includes(permission))
+  );
+}
+
 // Default permission set per role (docs/office-module/02_ARCHITECTURE.md §2).
 // Super admin may still tick extra permissions per user.
 export const ROLE_PRESETS: Record<OfficeRole, AdminPermission[]> = {

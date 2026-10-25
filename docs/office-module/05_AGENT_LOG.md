@@ -1489,3 +1489,33 @@ Investigation-first (live DB audit):
   fake) 33/33: chips + counts (jor = total 26), navbar bubble = unread 26,
   Read payload + row update, Read all, queue filter totals, dept chip, mobile,
   dept user ko Read controls nahi.
+
+## WAVE 36 (2026-10-28) — dept worker ko raqam nahi + case page ek hi page
+
+- **Owner request**: printing / attestation / courier user ko kisi case ki
+  agreed aur remaining amount (poora section) nazar na aaye, sirf status;
+  case page par Payments tab nahi; History/Finance ki ghair-zaroori cheezein
+  nahi; is user ke liye tabs ki bajaye ek hi page par sections.
+- **Pehchaan**: `permissions.ts` isDeptWorkerAccess(role, permissions) —
+  dept work permission (printing / attestation-dept / courier /
+  attestation:write) ho aur money permission (cases:write, payments,
+  ledger, finance, expenses) na ho; admin / cashier / booking_office /
+  filing kabhi nahi. `case-access.ts` isDeptWorker(session). Live user
+  "rwp prnt att courier" (role attestation) is mein aata hai.
+- **API**: `case-detail.ts` stripCaseMoney (money fields neutral: 0 / null /
+  [] / zero totals) — loadCaseDetail dept worker branch (`deptWorker: true`,
+  bookingOffice.type null, deptCommissions sirf apni — rows mein adminId,
+  contacts/addresses sirf courier). Cases list rows bhi strip. payments GET,
+  cases/[id]/discount-requests GET, bonus-requests GET → 403
+  (DEPT_WORKER_MONEY_DENIED, guard.ts).
+- **UI**: cases list Money column / mobile money line nahi. Detail page:
+  `DeptWorkerCaseSections` (Overview variant "dept" = sirf Client info +
+  courier ke liye contacts/addresses, Attestations, Files, Remarks,
+  DeptCommissionsAttached variant "own"); warning strip links section tak
+  scroll. CommandBar office type label sirf jab type ho.
+- **Verify**: tsc 0, lint 0, build exit 0. Read-only payload test 27/27
+  (rule cases, admin asal raqam, dept 0/khali/apni commission, JSON mein
+  asal agreed raqam nahi, printing-only ko contacts nahi). Browser 20/20:
+  dept API list/detail 0, payments + discount 403, list mein Money / Rs
+  nahi, detail tablist nahi, sections ek page par, Payments/History nahi,
+  admin ke tabs + Money summary pehle jaise.

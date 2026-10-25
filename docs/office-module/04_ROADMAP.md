@@ -80,3 +80,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W33 Navbar side scroll: admin/office nav ke saare options scroll se pohnch mein (safe centering, ‹ › buttons, mouse wheel, active tab nazar mein).
 - [x] W34 Case detail origin tab: navbar mein wahi tab, back/delete wapsi wahin, dept ka kaam mukammal hone par khud wapsi (banner, "Yahin rahein").
 - [x] W35 Cases queues: har status/dept queue par count (final payment pending, address, delivery, delivered, musadiqa…); super admin unread (navbar Cases count, Read / Read all, queue badle to phir unread).
+- [x] W36 Dept worker (printing/attestation/courier): koi raqam nahi (API + UI), Payments/History tabs nahi, case detail ek hi page par sections.

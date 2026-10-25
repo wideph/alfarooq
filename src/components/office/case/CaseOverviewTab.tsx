@@ -38,7 +38,29 @@ type TabProps = {
 // Overview tab: client info (edit), money summary tiles + agreed remarks,
 // contacts/addresses compact. Logic pehle CaseInfoCard / CaseContacts /
 // CaseMoneyCard (read parts) mein tha.
-export default function CaseOverviewTab({ detail, admin, onUpdated, onReload, onMessage }: TabProps) {
+export default function CaseOverviewTab({
+  detail,
+  admin,
+  onUpdated,
+  onReload,
+  onMessage,
+  variant = "full",
+}: TabProps & { variant?: "full" | "dept" }) {
+  // §W36: printing / attestation / courier worker — sirf client info; koi
+  // money summary nahi. Contacts / delivery addresses sirf courier ke kaam ke
+  // liye (API bhi baqi ko khali bhejta hai).
+  if (variant === "dept") {
+    const showContacts =
+      detail.contacts.length > 0 || detail.addresses.length > 0 || adminCanAny(admin, ["office:courier:write"]);
+    return (
+      <div className={`grid grid-cols-1 gap-4 ${showContacts ? "lg:grid-cols-3" : ""}`}>
+        <div className={showContacts ? "lg:col-span-2" : ""}>
+          <ClientInfoPanel detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
+        </div>
+        {showContacts && <ContactsPanel detail={detail} admin={admin} onReload={onReload} onMessage={onMessage} />}
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">

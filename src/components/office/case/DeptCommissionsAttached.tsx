@@ -23,12 +23,24 @@ export type CaseDetailWithDeptCommissions = CaseDetail & { deptCommissions?: Dep
 // unaffected; DEPT_COMMISSION bucket admin profit mein pehle se deduct hota
 // hai) — sirf display taake case ke sath attached commission nazar aaye.
 // Dono tabs (Payments + History/expenses) mein render hota hai.
-export default function DeptCommissionsAttached({ detail }: { detail: CaseDetail }) {
+// §W36: variant "own" — department worker ke case page par (API sirf us ki
+// apni rows bhejta hai): "Is case par aap ka commission".
+export default function DeptCommissionsAttached({
+  detail,
+  variant = "attached",
+}: {
+  detail: CaseDetail;
+  variant?: "attached" | "own";
+}) {
   const items = (detail as CaseDetailWithDeptCommissions).deptCommissions;
   if (!items || items.length === 0) return null;
 
   return (
-    <SectionCard icon={Printer} title="Department commissions (attached)" count={items.length}>
+    <SectionCard
+      icon={Printer}
+      title={variant === "own" ? "Is case par aap ka commission" : "Department commissions (attached)"}
+      count={items.length}
+    >
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {items.map((item) => {
           // §W30: COURIER bhi (kind null purane rows = printing fallback).
@@ -51,9 +63,11 @@ export default function DeptCommissionsAttached({ detail }: { detail: CaseDetail
           );
         })}
       </ul>
-      <p className="mt-2 text-xs text-slate-500">
-        Ye commission case ke sath attached hai — member shares se nahi kat-ti.
-      </p>
+      {variant === "attached" && (
+        <p className="mt-2 text-xs text-slate-500">
+          Ye commission case ke sath attached hai — member shares se nahi kat-ti.
+        </p>
+      )}
     </SectionCard>
   );
 }

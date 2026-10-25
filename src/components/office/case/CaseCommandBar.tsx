@@ -131,7 +131,9 @@ export default function CaseCommandBar({
 
         <div className="ms-auto flex flex-wrap items-center gap-2">
           <p className="hidden text-[11px] leading-tight text-slate-400 xl:block">
-            {detail.bookingOffice.name} · {BOOKING_OFFICE_TYPE_LABELS[detail.bookingOffice.type]}
+            {detail.bookingOffice.name}
+            {/* §W36: dept worker ke payload mein office type nahi (commission model). */}
+            {detail.bookingOffice.type ? ` · ${BOOKING_OFFICE_TYPE_LABELS[detail.bookingOffice.type]}` : ""}
             <br />
             Created {formatDate(detail.createdAt)}
             {detail.createdByName ? ` by ${detail.createdByName}` : ""}

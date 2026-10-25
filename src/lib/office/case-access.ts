@@ -6,6 +6,13 @@ import {
   DEPARTMENT_PERMISSIONS,
   type CaseDepartment,
 } from "@/lib/office/workflow";
+import { isDeptWorkerAccess } from "@/lib/office/permissions";
+
+// §W36 — printing / attestation / courier worker (paison wali koi permission
+// nahi): case ki raqam API se kabhi nahi (permissions.ts isDeptWorkerAccess).
+export function isDeptWorker(session: AdminSession): boolean {
+  return isDeptWorkerAccess(session.role, session.permissions);
+}
 
 // docs/office-module/02_ARCHITECTURE.md §4 + 06 §N9 — booking office users only
 // see their own office's cases unless admin granted `office:cases:read-all`;

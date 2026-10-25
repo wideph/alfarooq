@@ -211,3 +211,19 @@ Seeing a remark does not remove it.
   barabar ho. Naya case = unread; case doosri queue (status) mein jaye = phir
   unread. Har row par "Read", upar "Read all". Read wahi status save karta hai
   jo user ne dekha (beech mein queue badli ho to case unread hi rehta hai).
+
+## BR14. Department worker ko raqam nahi — §W36
+
+"Department worker" = printing / attestation / courier ka kaam (dept write
+permission ya attestation office), aur paison wali koi permission nahi (cases
+edit, payments, ledger, finance, expenses; cashier / booking office / admin /
+filing is mein nahi) — `isDeptWorkerAccess` (permissions.ts).
+- Kisi case ki agreed / received / remaining / commission / extra / payments /
+  expenses / ledger na API se (detail + list payload neutral 0 / khali), na UI
+  mein; sirf status. Payments list, case discount requests, bonus requests
+  GET → 403. Dept commissions mein sirf apni rows. Contacts / delivery
+  addresses sirf courier permission par.
+- Case detail page tabs ki bajaye ek hi page (sections): Client info
+  (+ contacts / addresses courier ke liye), Set + Steps & dates, Files,
+  Remarks, aur "Is case par aap ka commission". Payments tab aur History /
+  Finance ki baqi cheezein nahi.

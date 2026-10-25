@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
+import { badRequest, DEPT_WORKER_MONEY_DENIED, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { notifyAdmins } from "@/lib/office/notifications";
-import { findAccessibleCase } from "@/lib/office/case-access";
+import { findAccessibleCase, isDeptWorker } from "@/lib/office/case-access";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, toJson } from "@/lib/office/serializers";
 
@@ -15,6 +15,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
+  // §W36: printing / attestation / courier worker ko raqam ki maloomat nahi.
+  if (isDeptWorker(session)) return forbidden(DEPT_WORKER_MONEY_DENIED);
   const { id } = await params;
   try {
     const item = await findAccessibleCase(session, id);

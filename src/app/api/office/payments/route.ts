@@ -2,9 +2,9 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
-import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
+import { badRequest, DEPT_WORKER_MONEY_DENIED, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { caseScope, findAccessibleCase } from "@/lib/office/case-access";
+import { caseScope, findAccessibleCase, isDeptWorker } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, sum, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
@@ -23,6 +23,8 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
+  // §W36: printing / attestation / courier worker ko raqam ki maloomat nahi.
+  if (isDeptWorker(session)) return forbidden(DEPT_WORKER_MONEY_DENIED);
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status") || "";

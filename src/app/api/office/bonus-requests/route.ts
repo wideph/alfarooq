@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
-import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
+import { badRequest, DEPT_WORKER_MONEY_DENIED, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
+import { isDeptWorker } from "@/lib/office/case-access";
 import { logOfficeAction } from "@/lib/office/audit";
 import { notifyAdmins, notifyUsers } from "@/lib/office/notifications";
 import { parseAmount } from "@/lib/office/money";
@@ -20,6 +21,8 @@ function canDecide(session: AdminSession) {
 export async function GET(request: NextRequest) {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
+  // §W36: printing / attestation / courier worker ko raqam ki maloomat nahi.
+  if (isDeptWorker(session)) return forbidden(DEPT_WORKER_MONEY_DENIED);
 
   const { searchParams } = new URL(request.url);
   const status = (searchParams.get("status") || "").toUpperCase();

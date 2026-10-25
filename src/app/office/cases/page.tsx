@@ -11,7 +11,7 @@ import DeptQueue, { type DeptQueueKey, type DeptQueueRow } from "@/components/of
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
-import { CASE_STATUSES, CLOSED_CASE_STATUSES } from "@/lib/office/permissions";
+import { CASE_STATUSES, CLOSED_CASE_STATUSES, isDeptWorkerAccess } from "@/lib/office/permissions";
 import { useToast } from "@/hooks/useToast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { CASES_HREF, caseDetailHref, locationOf } from "@/lib/office/case-nav";
@@ -449,7 +449,12 @@ function CasesList() {
 
   return (
     <OfficePageFrame>
-      {(admin) => (
+      {(admin) => {
+        // §W36: printing / attestation / courier worker — Money column nahi
+        // (API bhi rows mein koi raqam nahi bhejta).
+        const deptWorker = isDeptWorkerAccess(admin.role, admin.permissions);
+        const columnCount = 5 + (deptWorker ? 0 : 1) + (unread !== null ? 1 : 0);
+        return (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-slate-900">
@@ -615,7 +620,7 @@ function CasesList() {
                     <div>{statusCell(item, admin)}</div>
                     {readControl(item)}
                   </div>
-                  <div className="text-xs">{moneyLine(item)}</div>
+                  {!deptWorker && <div className="text-xs">{moneyLine(item)}</div>}
                   {attestationChips(item)}
                 </div>
               ))
@@ -635,7 +640,7 @@ function CasesList() {
                     <th className="px-3 py-2">Case</th>
                     <th className="px-3 py-2">Office / Category</th>
                     <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Money</th>
+                    {!deptWorker && <th className="px-3 py-2">Money</th>}
                     <th className="px-3 py-2">Print</th>
                     <th className="px-3 py-2">Attestations</th>
                     {unread !== null && <th className="px-3 py-2">Read</th>}
@@ -644,7 +649,7 @@ function CasesList() {
                 <tbody className="divide-y divide-slate-100">
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={unread !== null ? 7 : 6} className="px-3 py-8 text-center text-slate-400">
+                      <td colSpan={columnCount} className="px-3 py-8 text-center text-slate-400">
                         Koi case nahi mila
                       </td>
                     </tr>
@@ -657,7 +662,7 @@ function CasesList() {
                         <p className="text-xs text-slate-500">{item.category?.name || "—"}</p>
                       </td>
                       <td className="px-3 py-3 align-top">{statusCell(item, admin)}</td>
-                      <td className="px-3 py-3 align-top text-xs">{moneyLine(item)}</td>
+                      {!deptWorker && <td className="px-3 py-3 align-top text-xs">{moneyLine(item)}</td>}
                       <td className="px-3 py-3 align-top text-xs">
                         {item.isPrinted !== undefined ? (
                           <>
@@ -780,7 +785,8 @@ function CasesList() {
 
           {ToastElement}
         </div>
-      )}
+        );
+      }}
     </OfficePageFrame>
   );
 }

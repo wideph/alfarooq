@@ -30,6 +30,10 @@ export function forbidden(message = "Is action ki permission nahi hai") {
   return NextResponse.json({ error: message }, { status: 403 });
 }
 
+// §W36: department worker (printing / attestation / courier) ke liye paison
+// wale endpoints ka jawab.
+export const DEPT_WORKER_MONEY_DENIED = "Raqam ki maloomat department users ke liye nahi hai";
+
 export function serverError(error: unknown, fallback = "Request fail ho gayi") {
   const message = error instanceof Error ? error.message : fallback;
   return NextResponse.json({ error: message }, { status: 500 });

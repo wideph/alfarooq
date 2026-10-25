@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
-import { caseScope, deptPermissionsOf } from "@/lib/office/case-access";
+import { caseScope, deptPermissionsOf, isDeptWorker } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
 import { sum, toNumber } from "@/lib/office/money";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
@@ -23,6 +23,35 @@ export const caseListInclude = {
   },
   payments: { select: { id: true, amount: true, status: true, paymentDate: true } },
 };
+
+// §W36 — department worker (printing / attestation / courier) ke payload se
+// case ki har raqam bahar: fields neutral values par (UI components ki shape
+// wahi rehti hai, crash nahi) — asal value kabhi browser tak nahi jati.
+const ZERO_TOTALS = { received: 0, remaining: 0, extra: 0, pendingCount: 0, agreedAmount: 0 };
+
+export function stripCaseMoney<T extends Record<string, unknown>>(row: T): T {
+  return {
+    ...row,
+    agreedAmount: 0,
+    claimedRemaining: null,
+    claimedRemainingStatus: "NONE",
+    commissionAmount: 0,
+    commissionHalfCreditedAt: null,
+    commissionFullCreditedAt: null,
+    extraSharePercent: null,
+    extraShareCreditedAt: null,
+    profitFinalizedAt: null,
+    profitShareSnapshot: null,
+    profitStale: false,
+    agreedAmountRemarks: null,
+    totals: ZERO_TOTALS,
+    expenseSummary: { count: 0, total: 0, reasons: [] },
+    payments: [],
+    expenses: [],
+    ledger: [],
+    needsExtraDecision: null,
+  };
+}
 
 // §W14.2 — compact expense summary for list rows (and detail payload).
 // `expenses` newest-first hon (list include expenseDate desc se aata hai);
@@ -87,6 +116,7 @@ async function loadDeptCommissions(caseId: string) {
   });
   return rows.map((row) => ({
     id: row.id,
+    adminId: row.admin?.id ?? null,
     kind: parseDeptCommissionKind(row.remarks),
     amount: toNumber(row.amount),
     adminName: row.admin?.name ?? null,
@@ -217,6 +247,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   ]);
 
   const totals = computeTotals(item.payments, item.agreedAmount);
+  const deptWorker = isDeptWorker(session);
 
   // BR4.4: profit share needs re-finalize when money moved after finalize.
   const lastMoneyChange = Math.max(
@@ -238,7 +269,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   // is liye booking-office payload mein filing file entries kahin expose nahi
   // hoti.
 
-  return toJson({
+  const payload = {
     profitStale,
     ...item,
     // §W14.2 — detail mein bhi wahi summary (expenses asc loaded hain → reverse).
@@ -275,5 +306,19 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       item.extraSharePercent === null
         ? totals.extra
         : null,
+  };
+  if (!deptWorker) return toJson(payload);
+
+  // §W36: department worker — koi raqam nahi; dept commissions mein sirf
+  // apni; office ka commission type nahi; contacts / delivery addresses sirf
+  // courier ke kaam ke liye.
+  const courier = hasPermission(session, "office:courier:write");
+  return toJson({
+    ...stripCaseMoney(payload),
+    deptWorker: true,
+    bookingOffice: { id: item.bookingOffice.id, name: item.bookingOffice.name, type: null },
+    deptCommissions: deptCommissions.filter((row) => row.adminId === session.adminId),
+    contacts: courier ? item.contacts : [],
+    addresses: courier ? item.addresses : [],
   });
 }

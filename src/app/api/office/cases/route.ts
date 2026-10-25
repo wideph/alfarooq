@@ -4,14 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { caseScope, canSeeOffice } from "@/lib/office/case-access";
+import { caseScope, canSeeOffice, isDeptWorker } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
 import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
 import { notifyAdmins } from "@/lib/office/notifications";
-import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
+import { caseListInclude, serializeCaseRow, stripCaseMoney } from "@/lib/office/case-detail";
 import { caseQueueCounts, DEPT_QUEUE_PERMISSIONS } from "@/lib/office/case-queues";
 import { tracksCaseReads, unreadCaseCount, unreadCaseIds } from "@/lib/office/case-read";
 import { uploadOfficeFile } from "@/lib/office/r2";
@@ -147,6 +147,8 @@ export async function GET(request: NextRequest) {
   // §W35: har queue ke upar us ke cases ki tadad (status + dept queues) aur
   // super admin ka unread count — isi request mein (alag API call nahi).
   const filingLimited = isFilingLimited(session);
+  // §W36: printing / attestation / courier worker — rows mein koi raqam nahi.
+  const deptWorker = isDeptWorker(session);
   const tracksReads = tracksCaseReads(session);
   const [items, total, counts, unread] = await Promise.all([
     prisma.case.findMany({
@@ -209,6 +211,14 @@ export async function GET(request: NextRequest) {
       row.filingDone = item._count.files > 0;
       row.limited = false;
       if (unreadIds) row.unread = unreadIds.has(item.id);
+      if (deptWorker) {
+        const safe = stripCaseMoney(row);
+        delete safe.payments;
+        delete safe.expenses;
+        delete safe.ledger;
+        safe.bookingOffice = { id: item.bookingOffice.id, name: item.bookingOffice.name, type: null };
+        return safe;
+      }
       return row;
     })
   );

@@ -17,6 +17,8 @@ import CaseHistoryTab from "@/components/office/case/CaseHistoryTab";
 import FilingCaseView from "@/components/office/case/FilingCaseView";
 import DeptCaseView, { type DeptLimitedResponse } from "@/components/office/case/DeptCaseView";
 import ReturnToOriginBanner from "@/components/office/case/ReturnToOriginBanner";
+import DeptWorkerCaseSections from "@/components/office/case/DeptWorkerCaseSections";
+import { isDeptWorkerAccess } from "@/lib/office/permissions";
 import { officeFetch } from "@/lib/office/client";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { CASES_HREF, deptWorkFinished, originDept, originLabel, safeOfficeFrom } from "@/lib/office/case-nav";
@@ -130,6 +132,11 @@ export default function CaseDetailPage({
     setVisited((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }
 
+  // §W36: dept worker ke ek-page view mein "tab kholna" = us section tak scroll.
+  function scrollToSection(tab: string) {
+    document.getElementById(`case-section-${tab}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <>
     <OfficePageFrame>
@@ -169,7 +176,27 @@ export default function CaseDetailPage({
                   backLabel={backLabel}
                 />
                 <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} onMessage={setMessage} />
-                <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
+                <CaseWarningStrip
+                  detail={detail}
+                  pendingReasons={pendingReasons}
+                  onOpenTab={isDeptWorkerAccess(admin.role, admin.permissions) ? scrollToSection : openTab}
+                />
+
+                {/* §W36: printing / attestation / courier worker — tabs ki bajaye
+                    ek hi page (sections); Payments tab nahi, History/Finance mein
+                    se sirf apna commission. */}
+                {isDeptWorkerAccess(admin.role, admin.permissions) ? (
+                  <DeptWorkerCaseSections
+                    detail={detail}
+                    admin={admin}
+                    onUpdated={setDetail}
+                    onReload={reload}
+                    onMessage={setMessage}
+                    pendingReasons={pendingReasons}
+                    setPendingReasons={setPendingReasons}
+                  />
+                ) : (
+                <>
 
                 {/* Tab bar — mobile par horizontally scrollable */}
                 <div
@@ -255,6 +282,8 @@ export default function CaseDetailPage({
                     </div>
                   )}
                 </div>
+                </>
+                )}
               </>
             )}
           </div>
