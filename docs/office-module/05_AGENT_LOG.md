@@ -1315,3 +1315,15 @@ Investigation-first (live DB audit):
 - **Next step**: admin setup / Admins page se "rwp prnt att courier" ke rates set
   karein (category + set ke hisaab se); agla printing / attestation / courier
   event Finance → Department commissions mein credit dikhaye ga.
+
+## WAVE 30.1 (2026-10-25) — setup panel "koi dept user nahi" ki asal wajah
+
+- **Owner report**: setup mein "Abhi koi printing/attestation department user
+  nahi" — jab ke user ke paas printing / attestation / courier permissions hain.
+- **Wajah**: ye W30 se PEHLE wale code ka text tha — W30 commit (fe0de01) GitHub
+  credential expire hone ki wajah se push nahi hua tha (production par
+  `/api/office/dept-commissions/users` 404). Live DB check: "rwp prnt att
+  courier" (role attestation, office nahi) → kinds PRINTING, ATTESTATION,
+  COURIER — naya panel isay dikhata hai. Push ab ho gaya.
+- **Fix**: panel load fail ho to "koi user nahi" ke bajaye asal error +
+  "Dobara koshish karein" (gumrah-kun empty state khatam).

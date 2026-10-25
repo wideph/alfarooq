@@ -856,12 +856,18 @@ function DeptCommissionRatesPanel({
 }) {
   const [open, setOpen] = useState(true);
   const [users, setUsers] = useState<DeptCommissionUser[] | null>(null);
+  // Load fail ho to "koi user nahi" NAHI dikhana (gumrah-kun) — asal error + retry.
+  const [loadError, setLoadError] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
+    setLoadError("");
     const res = await officeFetch<{ ok: boolean; users: DeptCommissionUser[] }>("/api/office/dept-commissions/users");
     if (res.ok) setUsers(res.data.users ?? []);
-    else setUsers([]);
+    else {
+      setUsers(null);
+      setLoadError(res.error || "Department users load nahi ho sake");
+    }
   }, []);
 
   useEffect(() => {
@@ -890,7 +896,18 @@ function DeptCommissionRatesPanel({
       </button>
 
       {open &&
-        (users === null ? (
+        (loadError ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+            Department users load nahi ho sake: {loadError}
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="rounded-lg border border-red-200 bg-white px-2 py-1 font-semibold text-red-700 hover:bg-red-100"
+            >
+              Dobara koshish karein
+            </button>
+          </div>
+        ) : users === null ? (
           <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Department users load ho rahe hain
           </div>
