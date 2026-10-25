@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { AdminPermission } from "@/lib/auth";
 import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
+import ScrollableNavStrip from "@/components/ui/ScrollableNavStrip";
 
 export type { AdminPermission };
 
@@ -159,9 +160,10 @@ export default function AdminNav({
             {admin && <p className="max-w-28 truncate text-xs text-slate-500">{admin.name}</p>}
           </div>
 
-          {/* CENTER — nav links (khud scroll karte hain, scrollbar hidden) */}
-          <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex items-center justify-start gap-1.5 md:justify-center">
+          {/* CENTER — nav links. §W33: ScrollableNavStrip — poora scroll
+              (pehle centered patti ke shuru/aakhir ke options chhup jate the),
+              ‹ › buttons, mouse wheel, khula page nazar mein. */}
+          <ScrollableNavStrip label="Admin navigation">
               {visibleItems.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
@@ -171,6 +173,7 @@ export default function AdminNav({
                     href={item.href}
                     prefetch
                     title={item.label}
+                    aria-current={active ? "page" : undefined}
                     className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
                       active
                         ? "bg-primary-600 text-white"
@@ -183,8 +186,7 @@ export default function AdminNav({
                   </Link>
                 );
               })}
-            </div>
-          </nav>
+          </ScrollableNavStrip>
 
           {/* RIGHT — actions cluster */}
           <div className="ml-1 flex shrink-0 items-center gap-1">

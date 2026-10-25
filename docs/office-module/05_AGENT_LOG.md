@@ -1400,3 +1400,24 @@ Investigation-first (live DB audit):
   live 24 rules rollback ke baad same). UI (read-only, POST intercept) 12/12:
   dept + admin Remarks tab, Done payload, wajah modal disabled/enabled +
   reason payload, no page errors.
+
+## WAVE 33 (2026-10-27) — navbar side scroll fix (admin + office)
+
+- **Owner request**: admin navbar ka side scroll poora kaam nahi karta, kuch
+  options nazar hi nahi aate.
+- **Wajah**: AdminNav aur OfficeNav mein links ki patti `md:justify-center`
+  thi, ek `overflow-x-auto` nav ke andar jis ka scrollbar bhi hidden tha. Jab
+  links jagah se zyada hon to patti dono taraf bahar nikalti thi — baayen wala
+  hissa scroll se kabhi nahi pohnchta (pehla option kat jata) aur aakhir ke
+  options (Finance / Setup) dhoondna mushkil.
+- **Fix**: naya `src/components/ui/ScrollableNavStrip.tsx` — `mx-auto w-max`
+  safe centering (jagah ho to beech mein, na ho to baayen se shuru + poora
+  scroll), jis taraf aur options hon wahan ‹ › button + fade, mouse wheel
+  (upar/neeche) se side scroll, khula hua tab (`aria-current="page"`) sirf
+  tab badalne par khud nazar mein aata hai (badge refresh par scroll nahi
+  kheenchta), `py-1.5` taake count bubbles clip na hon. AdminNav + OfficeNav
+  dono isi par; active links par `aria-current`.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser (read-only) — admin
+  1366 / 1024 / 390 px: 11 ke 11 options scroll se poore nazar, › / ‹ buttons,
+  wheel scroll; dept user 1366 / 1920 px: sab fit, koi arrow nahi; page
+  errors 0.

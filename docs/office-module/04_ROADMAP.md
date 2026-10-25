@@ -77,3 +77,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W30 Dept commissions: courier kind, per-user rates har jagah (setup + Admins), set-wise attestation, 0 default; auto courier stage (address → slip → delivered); dual-dept skip-FINAL.
 - [x] W31 Dept commission simple form: printing per category, attestation per set, courier one amount.
 - [x] W32 Remarks tab (per-user Done), wajah ke saath attestation complete (printing/attestation/courier), bina-set auto complete + courier stage, bina-set attestation dates (AI working day).
+- [x] W33 Navbar side scroll: admin/office nav ke saare options scroll se pohnch mein (safe centering, ‹ › buttons, mouse wheel, active tab nazar mein).

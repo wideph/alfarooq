@@ -28,6 +28,7 @@ import NotificationBell, {
   type OfficeNavCounts,
 } from "@/components/office/NotificationBell";
 import { ROLE_LABELS } from "@/lib/office/permissions";
+import ScrollableNavStrip from "@/components/ui/ScrollableNavStrip";
 
 // §W18: atta department ka rename — permission ab office:attestation-dept:write
 // hai (auth.ts mid-flight update; cast dono states mein compile hota hai).
@@ -109,6 +110,7 @@ function NavLinks({ admin, counts }: { admin: AdminNavUser | null; counts: Offic
             href={item.href}
             prefetch
             title={item.label}
+            aria-current={active ? "page" : undefined}
             className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
               active
                 ? "bg-primary-600 text-white"
@@ -187,9 +189,9 @@ export default function OfficeNav({
             )}
           </div>
 
-          {/* CENTER — nav links (khud scroll karte hain, scrollbar hidden) */}
-          <nav className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex items-center justify-start gap-1.5 md:justify-center">
+          {/* CENTER — nav links. §W33: ScrollableNavStrip — poora scroll,
+              ‹ › buttons, mouse wheel, khula page nazar mein. */}
+          <ScrollableNavStrip label="Office navigation">
               <Suspense fallback={null}>
                 <NavLinks admin={admin} counts={counts} />
               </Suspense>
@@ -224,8 +226,7 @@ export default function OfficeNav({
                   <span className="hidden md:inline">Links</span>
                 </button>
               )}
-            </div>
-          </nav>
+          </ScrollableNavStrip>
 
           {/* RIGHT — actions cluster (kabhi shrink nahi) */}
           <div className="ml-1 flex shrink-0 items-center gap-1">
