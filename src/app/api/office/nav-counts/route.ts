@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminPermission } from "@/lib/auth";
 import { guardOffice, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
-import { SET_WARNING_STATUSES } from "@/lib/office/workflow";
 import { remarkInboxCount } from "@/lib/office/remark-inbox";
+import { unreadCaseCount } from "@/lib/office/case-read";
 
 export const preferredRegion = ["sin1"];
 
@@ -36,10 +36,6 @@ const DEPT_COUNT_STATUS_TO_DEPT: Record<string, DeptCountKey> = {
   ATTESTATION: "attestation",
   WAITING_FOR_COURIER: "courier",
 };
-
-// Set-missing warning SIRF SET_WARNING_STATUSES (PRINTED + ATTESTATION —
-// §W14.8, src/lib/office/workflow.ts) ke dauraan; stale local list NA use
-// karein warna badge atak jata hai (§W11.7).
 
 // GET — navbar badges ke liye ONE aggregated call (har logged-in user 30s
 // polling karta hai, is liye sirf count queries, sab parallel). §W11.7.
@@ -74,21 +70,12 @@ export async function GET() {
           },
         });
         break;
-      case "admin": {
-        // Unseen ADMIN remarks wale cases + set-missing warnings.
-        casesQuery = (async () => {
-          const [unseenRemarks, setMissing] = await Promise.all([
-            prisma.case.count({
-              where: { remarks: { some: { recipients: { some: { target: "ADMIN", seenAt: null } } } } },
-            }),
-            prisma.case.count({
-              where: { setId: null, status: { in: [...SET_WARNING_STATUSES] } },
-            }),
-          ]);
-          return unseenRemarks + setMissing;
-        })();
+      case "admin":
+        // §W35: super admin — unread cases (naye + jo doosri queue mein gaye).
+        // Pehle unseen ADMIN remarks + set-missing ginte the; remarks ab apne
+        // Remarks tab (§W32) par, set-missing warning list ki row par.
+        casesQuery = unreadCaseCount(session.adminId);
         break;
-      }
       default:
         casesQuery = Promise.resolve(0);
     }

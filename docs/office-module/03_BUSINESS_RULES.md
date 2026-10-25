@@ -197,3 +197,17 @@ targets (role target + every department write permission: FILING / PRINTING /
 ATTESTATION / COURIER; booking office = BOOKING on own-office cases; super admin =
 ADMIN), except their own, until THEY press "Done" (per user, `CaseRemarkDone`).
 Seeing a remark does not remove it.
+
+## BR13. Cases tab — queue counts + unread — §W35
+
+- Cases page par har queue ke upar us ke TAMAM cases ki tadad: status queues
+  (1st payment pending … Final payment pending (ATTESTATION_COMPLETE), Waiting for
+  address, Waiting for delivery (WAITING_FOR_COURIER), Delivered, Musadiqa stages,
+  Cancelled, aur "Open") aur department queues (deptQueueWhere ke mutabiq — filing
+  queue mein done filing rows bhi, courier queue mein delivered bhi). Scope wahi jo
+  list ka (caseScope + office filter; dept queue permission par tamam offices).
+- Super admin (role admin) ke liye per-case "Read": navbar Cases tab par unread
+  cases ki tadad. Read = `CaseRead` row jis ka status case ke maujooda status ke
+  barabar ho. Naya case = unread; case doosri queue (status) mein jaye = phir
+  unread. Har row par "Read", upar "Read all". Read wahi status save karta hai
+  jo user ne dekha (beech mein queue badli ho to case unread hi rehta hai).

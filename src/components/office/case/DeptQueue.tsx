@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Building2, CheckCircle2, Flame, ImagePlus, Loader2, Upload, X } from "lucide-react";
@@ -48,6 +48,8 @@ export type DeptQueueRow = {
   filingFilesCount?: number;
   filingDone?: boolean;
   onlineVerificationNumber?: string | null;
+  // §W35: super admin ke liye — case unread (naya ya doosri queue mein gaya).
+  unread?: boolean;
 };
 
 const DEPT_CONFIG: Record<
@@ -157,6 +159,7 @@ export default function DeptQueue({
   loading,
   history = false,
   from,
+  readControl,
 }: {
   dept: DeptQueueKey;
   items: DeptQueueRow[];
@@ -164,6 +167,8 @@ export default function DeptQueue({
   history?: boolean;
   // §W34: ye queue (path + query) — detail page se wapsi isi tab par.
   from?: string;
+  // §W35: super admin ka har row par Read button (cases page deta hai).
+  readControl?: (item: DeptQueueRow) => ReactNode;
 }) {
   const router = useRouter();
   const config = DEPT_CONFIG[dept];
@@ -397,9 +402,18 @@ export default function DeptQueue({
   }
 
   function rowActions(item: DeptQueueRow, fullWidth = false) {
-    if (filingMode) return filingActions(item, fullWidth);
-    if (dept === "printing" && !history) return printingActions(item, fullWidth);
-    return actionButton(item, fullWidth);
+    const actions = filingMode
+      ? filingActions(item, fullWidth)
+      : dept === "printing" && !history
+        ? printingActions(item, fullWidth)
+        : actionButton(item, fullWidth);
+    if (!readControl) return actions;
+    return (
+      <div className={`flex flex-col gap-1.5 ${fullWidth ? "w-full" : "items-start"}`}>
+        {actions}
+        {readControl(item)}
+      </div>
+    );
   }
 
   // §W21 filing actions: pending row → inline upload modal (detail page par

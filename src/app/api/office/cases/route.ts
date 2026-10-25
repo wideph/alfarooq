@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { hasPermission, type AdminPermission } from "@/lib/auth";
+import { hasPermission } from "@/lib/auth";
 import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, canSeeOffice } from "@/lib/office/case-access";
@@ -9,9 +9,11 @@ import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount } from "@/lib/office/money";
 import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
 import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
-import { CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
+import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
 import { notifyAdmins } from "@/lib/office/notifications";
 import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
+import { caseQueueCounts, DEPT_QUEUE_PERMISSIONS } from "@/lib/office/case-queues";
+import { tracksCaseReads, unreadCaseCount, unreadCaseIds } from "@/lib/office/case-read";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import {
   findCachedOffice,
@@ -31,17 +33,8 @@ export const preferredRegion = ["sin1"];
 
 const PAGE_SIZE = 50;
 
-// §W18: department-queue permission map (dept URL key → write permission).
-// Jab viewer ke paas us department ki write permission ho (ya role admin/
-// cashier ho — hasPermission admin ke liye true, cashier ka scope waise bhi
-// poora), to queue TAMAM offices ke matching cases dikhati hai; caseScope ki
-// own-office restriction dept-queue mode mein nahi lagti.
-const DEPT_QUEUE_PERMISSIONS: Record<string, AdminPermission> = {
-  filing: "office:filing:write",
-  printing: "office:printing:write",
-  attestation: "office:attestation-dept:write",
-  courier: "office:courier:write",
-};
+// §W18: department-queue permission map → lib/office/case-queues.ts
+// (DEPT_QUEUE_PERMISSIONS; §W35 queue counts bhi wahi use karte hain).
 
 type DeptQueueRow = Prisma.CaseGetPayload<{ include: typeof caseListRowInclude }>;
 
@@ -133,16 +126,7 @@ export async function GET(request: NextRequest) {
   // "open" = abhi main flow mein hai (DELIVERED + musadiqa post-delivery
   // stages aur CANCELLED ke ilawa).
   if (status === "open") {
-    where.status = {
-      notIn: [
-        "DELIVERED",
-        "MUSADIQA_APPLIED",
-        "MUSADIQA_FEES_PAID",
-        "MUSADIQA_SENT_BY_BOARD",
-        "MUSADIQA_VERIFIED",
-        "CANCELLED",
-      ],
-    };
+    where.status = { notIn: [...CLOSED_CASE_STATUSES] };
   }
   if (officeId && canSeeOffice(session, officeId)) where.bookingOfficeId = officeId;
   // §N7 department queues: ?dept=filing|printing|attestation|courier.
@@ -160,7 +144,11 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  const [items, total] = await Promise.all([
+  // §W35: har queue ke upar us ke cases ki tadad (status + dept queues) aur
+  // super admin ka unread count — isi request mein (alag API call nahi).
+  const filingLimited = isFilingLimited(session);
+  const tracksReads = tracksCaseReads(session);
+  const [items, total, counts, unread] = await Promise.all([
     prisma.case.findMany({
       where,
       orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }],
@@ -169,6 +157,8 @@ export async function GET(request: NextRequest) {
       include: caseListRowInclude,
     }),
     prisma.case.count({ where }),
+    filingLimited ? Promise.resolve(null) : caseQueueCounts(session, officeId),
+    tracksReads ? unreadCaseCount(session.adminId) : Promise.resolve(null),
   ]);
 
   // W21: filing queue (non-history) — pending (WAITING_FOR_FILE) pehle, phir
@@ -185,22 +175,27 @@ export async function GET(request: NextRequest) {
   // §N7: filing department gets the stripped payload (no money fields).
   // Cache-Control: no-store — list har waqt fresh honi chahiye (live refresh).
   const NO_STORE = { "Cache-Control": "no-store" };
-  if (isFilingLimited(session)) {
+  if (filingLimited) {
     const rows = await Promise.all(items.map((item) => serializeFilingCase(item)));
     return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE }, { headers: NO_STORE });
   }
 
-  const unseen = await unseenWarningCaseIds(
-    session,
-    items.map((item) => item.id)
-  );
+  const [unseen, unreadIds] = await Promise.all([
+    unseenWarningCaseIds(
+      session,
+      items.map((item) => item.id)
+    ),
+    tracksReads ? unreadCaseIds(session.adminId, items) : Promise.resolve(null),
+  ]);
 
   const rows = await Promise.all(
     items.map(async (item) => {
       // §W18 privacy: doosre offices ki rows (jo sirf dept-queue permission
       // ki wajah se visible hain) slim shape mein — koi money field nahi.
       if (!canSeeOffice(session, item.bookingOfficeId)) {
-        return serializeDeptQueueCase(item);
+        const slim = (await serializeDeptQueueCase(item)) as Record<string, unknown>;
+        if (unreadIds) slim.unread = unreadIds.has(item.id);
+        return slim;
       }
       const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
       // F6: raw payment/expense rows list payload mein nahi — totals aur
@@ -213,6 +208,7 @@ export async function GET(request: NextRequest) {
       row.filingFilesCount = item._count.files;
       row.filingDone = item._count.files > 0;
       row.limited = false;
+      if (unreadIds) row.unread = unreadIds.has(item.id);
       return row;
     })
   );
@@ -223,6 +219,8 @@ export async function GET(request: NextRequest) {
       total,
       page,
       pageSize: PAGE_SIZE,
+      counts,
+      unread,
     },
     { headers: NO_STORE }
   );

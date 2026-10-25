@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Flame, Loader2, Plus, Search, Wallet, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCheck, Flame, Loader2, Plus, Search, Wallet, X } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import CaseStatusSelect from "@/components/office/case/CaseStatusSelect";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
@@ -11,10 +11,11 @@ import DeptQueue, { type DeptQueueKey, type DeptQueueRow } from "@/components/of
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
-import { CASE_STATUSES } from "@/lib/office/permissions";
+import { CASE_STATUSES, CLOSED_CASE_STATUSES } from "@/lib/office/permissions";
 import { useToast } from "@/hooks/useToast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { CASES_HREF, caseDetailHref, locationOf } from "@/lib/office/case-nav";
+import type { CaseQueueCounts } from "@/lib/office/case-queues";
 import type { AdminPermission } from "@/components/admin/AdminNav";
 
 // §W18: atta → attestation rename (permission office:attestation-dept:write);
@@ -33,6 +34,43 @@ const DEPT_TABS: Array<{ key: DeptQueueKey; label: string; permission: AdminPerm
 function canSeeDeptTab(admin: AdminNavUser, permission: AdminPermission) {
   return adminCanAny(admin, [permission]) || admin.role === "cashier";
 }
+
+// §W35: status queues (workflow order) — har queue ke upar us ke TAMAM cases
+// ki tadad. Labels chhote (poora label tooltip mein).
+const STATUS_QUEUE_LABELS: Record<string, string> = {
+  FIRST_PAYMENT_PENDING: "1st payment pending",
+  WAITING_FOR_FILE: "Waiting for file",
+  WAITING_FOR_PRINTING: "Waiting for printing",
+  PRINTED: "Printed",
+  ATTESTATION: "Attestation",
+  ATTESTATION_COMPLETE: "Final payment pending",
+  WAITING_FOR_COURIER_ADDRESS: "Waiting for address",
+  WAITING_FOR_COURIER: "Waiting for delivery",
+  DELIVERED: "Delivered",
+  MUSADIQA_APPLIED: "Musadiqa applied",
+  MUSADIQA_FEES_PAID: "Musadiqa fees paid",
+  MUSADIQA_SENT_BY_BOARD: "Musadiqa sent by board",
+  MUSADIQA_VERIFIED: "Musadiqa verified",
+  CANCELLED: "Cancelled",
+};
+
+function CountPill({ count, active }: { count: number | undefined; active: boolean }) {
+  if (count === undefined) return null;
+  return (
+    <span
+      className={`ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-[11px] font-bold ${
+        active ? "bg-white/25 text-white" : count > 0 ? "bg-primary-50 text-primary-700" : "bg-slate-100 text-slate-400"
+      }`}
+    >
+      {count}
+    </span>
+  );
+}
+
+const chipClass = (active: boolean) =>
+  `inline-flex shrink-0 items-center rounded-full px-3.5 py-1.5 text-sm font-semibold ${
+    active ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-primary-300"
+  }`;
 
 // Filing department ko stripped payload milta hai (no money/office fields),
 // is liye baqi fields optional hain. §W18: base row shape DeptQueue se aati hai
@@ -62,6 +100,10 @@ function CasesList() {
   const searchParams = useSearchParams();
   const [items, setItems] = useState<CaseRow[]>([]);
   const [total, setTotal] = useState(0);
+  // §W35: queue counts + super admin ka unread (null = read tracking nahi).
+  const [counts, setCounts] = useState<CaseQueueCounts | null>(null);
+  const [unread, setUnread] = useState<number | null>(null);
+  const [readBusy, setReadBusy] = useState<string | null>(null);
   const [offices, setOffices] = useState<Office[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState(searchParams.get("q") || "");
@@ -130,10 +172,17 @@ function CasesList() {
       if (history) params.set("history", "1");
       if (searchParams.get("q")) params.set("q", searchParams.get("q") || "");
       params.set("page", String(page));
-      const res = await officeFetch<{ items: CaseRow[]; total: number }>(`/api/office/cases?${params}`);
+      const res = await officeFetch<{
+        items: CaseRow[];
+        total: number;
+        counts?: CaseQueueCounts | null;
+        unread?: number | null;
+      }>(`/api/office/cases?${params}`);
       if (res.ok) {
         setItems(res.data.items);
         setTotal(res.data.total);
+        setCounts(res.data.counts ?? null);
+        setUnread(res.data.unread ?? null);
       }
       if (!silent) setLoading(false);
     },
@@ -163,13 +212,76 @@ function CasesList() {
     router.push(`/office/cases?${params}`);
   }
 
+  // §W35: dept queue aur status queue ek waqt mein ek hi — dono chips ek
+  // doosre ka filter saaf karte hain (chhupa hua filter list khali na kare).
   function selectDept(key: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (key && dept !== key) params.set("dept", key);
     else params.delete("dept");
+    params.delete("status");
     params.delete("history");
     params.delete("page");
     router.push(`/office/cases?${params}`);
+  }
+
+  function selectStatus(key: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (key && status !== key) params.set("status", key);
+    else params.delete("status");
+    params.delete("dept");
+    params.delete("history");
+    params.delete("page");
+    router.push(`/office/cases?${params}`);
+  }
+
+  // §W35: Read — row ka wahi status jo user ne dekha (beech mein queue badli
+  // ho to case unread hi rehta hai). Jawab ka unread count foran header mein;
+  // navbar badge office:changed se khud refresh.
+  async function markRead(item: DeptQueueRow) {
+    setReadBusy(item.id);
+    const res = await officeFetch<{ unread: number }>("/api/office/case-reads", {
+      method: "POST",
+      json: { items: [{ id: item.id, status: item.status }] },
+    });
+    setReadBusy(null);
+    if (res.ok) {
+      setItems((prev) => prev.map((row) => (row.id === item.id ? { ...row, unread: false } : row)));
+      setUnread(res.data.unread);
+    } else showToast(res.error, "error");
+  }
+
+  async function markAllRead() {
+    setReadBusy("all");
+    const res = await officeFetch<{ unread: number }>("/api/office/case-reads", { method: "POST", json: { all: true } });
+    setReadBusy(null);
+    if (res.ok) {
+      setItems((prev) => prev.map((row) => (row.unread ? { ...row, unread: false } : row)));
+      setUnread(res.data.unread);
+      showToast("Sab cases read ho gaye", "success");
+    } else showToast(res.error, "error");
+  }
+
+  function readControl(item: DeptQueueRow) {
+    if (item.unread === undefined) return null;
+    return (
+      <span onClick={stopRowClick} onMouseEnter={(e) => e.stopPropagation()}>
+        {item.unread ? (
+          <button
+            type="button"
+            onClick={() => void markRead(item)}
+            disabled={readBusy === item.id || readBusy === "all"}
+            title="Read mark karein (doosri queue mein jaye to phir unread)"
+            className="inline-flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {readBusy === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Read
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+            <CheckCheck className="h-3.5 w-3.5" /> Read
+          </span>
+        )}
+      </span>
+    );
   }
 
   // §W11.2: poori row clickable → detail page (hover par prefetch).
@@ -177,7 +289,7 @@ function CasesList() {
     return {
       onClick: () => router.push(detailHref(item.id)),
       onMouseEnter: () => router.prefetch(detailHref(item.id)),
-      className: "cursor-pointer hover:bg-slate-50",
+      className: `cursor-pointer hover:bg-slate-50 ${item.unread ? "bg-primary-50/40" : ""}`,
     };
   }
 
@@ -225,6 +337,7 @@ function CasesList() {
     return (
       <>
         <div className="flex flex-wrap items-center gap-1.5">
+          {item.unread && <span title="Unread" className="inline-block h-2.5 w-2.5 rounded-full bg-primary-600" />}
           <span className="font-semibold text-primary-700">{item.caseNumber}</span>
           {item.isUrgent && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -342,35 +455,43 @@ function CasesList() {
             <h2 className="text-xl font-bold text-slate-900">
               Cases <span className="text-sm font-normal text-slate-400">({total})</span>
             </h2>
-            {adminCanAny(admin, ["office:cases:write"]) && (
-              <Link
-                href="/office/cases/new"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white"
-              >
-                <Plus className="w-4 h-4" /> New case
-              </Link>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* §W35: super admin — saare unread cases read (navbar count 0). */}
+              {unread !== null && (
+                <button
+                  type="button"
+                  onClick={() => void markAllRead()}
+                  disabled={unread === 0 || readBusy !== null}
+                  className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-50"
+                >
+                  {readBusy === "all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                  Read all
+                  {unread > 0 && (
+                    <span className="rounded-full bg-primary-600 px-1.5 text-[11px] font-bold text-white">{unread}</span>
+                  )}
+                </button>
+              )}
+              {adminCanAny(admin, ["office:cases:write"]) && (
+                <Link
+                  href="/office/cases/new"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white"
+                >
+                  <Plus className="w-4 h-4" /> New case
+                </Link>
+              )}
+            </div>
           </div>
 
           {DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission)) && (
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => selectDept("")}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                  !dept ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600"
-                }`}
-              >
+              <button onClick={() => selectDept("")} className={chipClass(!dept && !status)}>
                 All cases
+                <CountPill count={counts?.total} active={!dept && !status} />
               </button>
               {DEPT_TABS.filter((tab) => canSeeDeptTab(admin, tab.permission)).map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => selectDept(tab.key)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                    dept === tab.key ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600"
-                  }`}
-                >
+                <button key={tab.key} onClick={() => selectDept(tab.key)} className={chipClass(dept === tab.key)}>
                   {tab.label}
+                  <CountPill count={counts?.depts[tab.key]} active={dept === tab.key} />
                 </button>
               ))}
               {dept === "filing" && (
@@ -405,15 +526,6 @@ function CasesList() {
                 <Search className="w-4 h-4" />
               </button>
             </form>
-            <select className={input} value={status} onChange={(e) => setParam("status", e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="open">Open only</option>
-              {CASE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
             {admin.role !== "booking_office" && (
               <select className={input} value={officeId} onChange={(e) => setParam("officeId", e.target.value)}>
                 <option value="">All offices</option>
@@ -426,11 +538,51 @@ function CasesList() {
             )}
           </div>
 
+          {/* §W35: status queues — har queue ek chip, upar us ke TAMAM cases ki
+              tadad (unread nahi). Mobile par side scroll, desktop par wrap. */}
+          {!deptTab && (
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 md:flex-wrap md:overflow-visible">
+              <button
+                onClick={() => selectStatus("open")}
+                title="Delivery / musadiqa / cancelled ke ilawa"
+                className={chipClass(status === "open")}
+              >
+                Open
+                <CountPill
+                  count={
+                    counts
+                      ? counts.total - CLOSED_CASE_STATUSES.reduce((sum, key) => sum + (counts.statuses[key] || 0), 0)
+                      : undefined
+                  }
+                  active={status === "open"}
+                />
+              </button>
+              {CASE_STATUSES.map((key) => (
+                <button
+                  key={key}
+                  onClick={() => selectStatus(key)}
+                  title={STATUS_LABELS[key]}
+                  className={chipClass(status === key)}
+                >
+                  {STATUS_QUEUE_LABELS[key] || STATUS_LABELS[key]}
+                  <CountPill count={counts ? counts.statuses[key] || 0 : undefined} active={status === key} />
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* §W18: dept mode apna work-appropriate column set use karta hai
               (office chip hamesha, koi money/expense/status controls nahi);
               normal list bilkul pehle jaisi rehti hai. */}
           {deptTab ? (
-            <DeptQueue dept={deptTab.key} items={items} loading={loading} history={history} from={fromHere} />
+            <DeptQueue
+              dept={deptTab.key}
+              items={items}
+              loading={loading}
+              history={history}
+              from={fromHere}
+              readControl={unread !== null ? readControl : undefined}
+            />
           ) : (
           <>
           {/* §W11.2 MOBILE: md se neeche compact cards (table ki jagah). */}
@@ -454,10 +606,15 @@ function CasesList() {
                     if (e.key === "Enter") openCase(item);
                   }}
                   onMouseEnter={() => router.prefetch(detailHref(item.id))}
-                  className="cursor-pointer space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm active:bg-slate-50"
+                  className={`cursor-pointer space-y-2 rounded-2xl border p-3 shadow-sm active:bg-slate-50 ${
+                    item.unread ? "border-primary-200 bg-primary-50/40" : "border-slate-200 bg-white"
+                  }`}
                 >
                   {identityBlock(item, admin)}
-                  <div>{statusCell(item, admin)}</div>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>{statusCell(item, admin)}</div>
+                    {readControl(item)}
+                  </div>
                   <div className="text-xs">{moneyLine(item)}</div>
                   {attestationChips(item)}
                 </div>
@@ -481,12 +638,13 @@ function CasesList() {
                     <th className="px-3 py-2">Money</th>
                     <th className="px-3 py-2">Print</th>
                     <th className="px-3 py-2">Attestations</th>
+                    {unread !== null && <th className="px-3 py-2">Read</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                      <td colSpan={unread !== null ? 7 : 6} className="px-3 py-8 text-center text-slate-400">
                         Koi case nahi mila
                       </td>
                     </tr>
@@ -513,6 +671,7 @@ function CasesList() {
                         )}
                       </td>
                       <td className="px-3 py-3 align-top">{attestationChips(item)}</td>
+                      {unread !== null && <td className="px-3 py-3 align-top">{readControl(item)}</td>}
                     </tr>
                   ))}
                 </tbody>

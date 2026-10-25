@@ -152,6 +152,17 @@ export const CASE_STATUSES = [
 ] as const;
 export type CaseStatus = (typeof CASE_STATUSES)[number];
 
+// "Open" filter se bahar: delivery ho chuki (musadiqa post-delivery stages
+// samait) ya cancelled. Cases list ka ?status=open aur §W35 queue chips.
+export const CLOSED_CASE_STATUSES: readonly CaseStatus[] = [
+  "DELIVERED",
+  "MUSADIQA_APPLIED",
+  "MUSADIQA_FEES_PAID",
+  "MUSADIQA_SENT_BY_BOARD",
+  "MUSADIQA_VERIFIED",
+  "CANCELLED",
+];
+
 // Pre-W11 keys — migrated in DB (NEW/PAYMENT_PENDING→FIRST_PAYMENT_PENDING,
 // IN_PROCESS→WAITING_FOR_FILE, COMPLETED→ATTESTATION_COMPLETE). Kept only so
 // old rows / filters still resolve to a label fallback.

@@ -29,6 +29,7 @@ model Admin {
   departmentCommissionRules DepartmentCommissionRule[]
   departmentCommissionSetting DepartmentCommissionSetting?
   remarkDones               CaseRemarkDone[]
+  caseReads                 CaseRead[]
 
   @@index([bookingOfficeId])
 }
@@ -380,6 +381,7 @@ model Case {
   ledger           LedgerEntry[]
   files            CaseFile[]
   remarks          CaseRemark[]
+  reads            CaseRead[]
   discountRequests DiscountRequest[]
   bonusRequests    BonusRequest[]
 
@@ -670,6 +672,24 @@ model CaseRemark {
 }
 
 // §W32 — user ka apna "Done" (Remarks tab se hatana). Per user, per remark.
+// §W35 — super admin ka per-case "Read" (navbar Cases tab ka unread count).
+// `status` = read karte waqt case ka status. Case doosri queue (status) mein
+// chala jaye to snapshot match nahi karta → case phir unread. Naye cases ki
+// koi row nahi → unread.
+model CaseRead {
+  id      String   @id @default(cuid())
+  caseId  String
+  adminId String
+  status  String
+  readAt  DateTime @default(now())
+
+  case  Case  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, adminId])
+  @@index([adminId])
+}
+
 model CaseRemarkDone {
   id       String   @id @default(cuid())
   remarkId String

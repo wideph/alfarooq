@@ -1454,3 +1454,38 @@ Investigation-first (live DB audit):
   navigation nahi, back → printing queue; remarks → nav "Remarks", back
   /office/remarks; admin → AdminNav "Cases", back printing queue; bina from →
   /office/cases; page errors 0.
+
+## WAVE 35 (2026-10-28) — Cases queues + counts, super admin read/unread (migration live applied)
+
+- **Owner request**: super admin ko pata nahi chalta kis queue mein kitne cases
+  hain; har queue ke upar count ho. Final payment pending, waiting for address,
+  waiting for delivery, delivered aur us ke baad ke statuses ki queues bhi hon.
+  Navbar Cases tab par unread cases ka count; har case par Read, upar Read all;
+  case doosri queue mein jaye to phir unread. Queue count = queue ke TAMAM cases.
+- **DB**: migration `20261028120000_office_wave35` — `CaseRead` (caseId ×
+  adminId unique, `status` snapshot, readAt). **Live applied** (`prisma migrate
+  deploy`, code push se pehle).
+- **Lib**: `lib/office/case-read.ts` (tracksCaseReads = role admin;
+  unreadCaseCount raw SQL NOT EXISTS status match; unreadCaseIds; markCasesRead
+  unnest upsert + JOIN Case; markAllCasesRead). `lib/office/case-queues.ts`
+  (DEPT_QUEUE_PERMISSIONS yahan move; caseQueueCounts = status groupBy +
+  dept counts parallel). `permissions.ts` CLOSED_CASE_STATUSES (route ka "open"
+  bhi isi se).
+- **API**: GET `/api/office/cases` ab `counts` + `unread` + har row `unread`
+  (super admin) — alag request nahi. POST `/api/office/case-reads`
+  ({items:[{id,status}]} ≤200 ya {all:true}; sirf super admin; audit
+  `case.read`). nav-counts: admin ka `cases` = unread (pehle unseen ADMIN
+  remarks + set-missing; remarks ab Remarks tab par).
+- **UI** (cases page): "All cases" + dept chips par count; status queue chips
+  (Open + 14 statuses, workflow order, count pill; mobile side scroll, desktop
+  wrap) — status <select> hata diya (chips wahi kaam). Dept chip status filter
+  saaf karta hai aur status chip dept. Super admin: "Read all (N)", table mein
+  Read column, mobile card par Read, unread row tint + dot; DeptQueue ko
+  `readControl` prop.
+- **Verify**: tsc 0, lint 0, build exit 0. Live-DB rollback-only test 27/27
+  (migration tx ke andar + idempotent, unread/read/queue change/stale status/
+  read all/per-user, queue counts admin/office filter/dept/booking scope;
+  rollback ke baad table nahi). Phir migration live. Browser (read-only, POST
+  fake) 33/33: chips + counts (jor = total 26), navbar bubble = unread 26,
+  Read payload + row update, Read all, queue filter totals, dept chip, mobile,
+  dept user ko Read controls nahi.
