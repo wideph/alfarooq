@@ -153,9 +153,12 @@ after). Case detail page shows the last 20 audit rows to super admin.
 
 ## BR10. Department commissions (printing / attestation / courier) — §W30
 
-- Rules per dept user × category × Set of Attestations (`DepartmentCommissionRule`,
-  set row overrides the category-level row). Amounts: `printAmount`,
-  `attestationAmount`, `courierAmount`. No rule or 0 → commission 0.
+- §W31 simple form per dept user: PRINTING = one amount per case category
+  (`DepartmentCommissionRule` category row `printAmount`); ATTESTATION = one
+  amount per Set of Attestations (set row `attestationAmount`; a case without a
+  set uses the category row `attestationAmount`); COURIER = one amount for every
+  delivered case (`DepartmentCommissionSetting.courierAmount`). Empty or 0 →
+  commission 0.
 - Credit (one `DEPT_COMMISSION` ledger CREDIT per case + kind + user, idempotent)
   happens at the event, with the rule amount **at that moment**:
   - PRINTING — the user's first printing proof moves the case to PRINTED.

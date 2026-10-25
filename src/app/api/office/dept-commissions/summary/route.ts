@@ -27,7 +27,7 @@ export async function GET() {
   if (!fullAccess && !selfOnly) return forbidden();
 
   try {
-    const [ledgerRows, ruleRows, deptAdmins] = await Promise.all([
+    const [ledgerRows, ruleRows, courierRows, deptAdmins] = await Promise.all([
       prisma.ledgerEntry.findMany({
         where: {
           adminId: { not: null },
@@ -36,6 +36,8 @@ export async function GET() {
         select: { adminId: true, type: true, direction: true, amount: true },
       }),
       prisma.departmentCommissionRule.findMany({ select: { adminId: true } }),
+      // §W31: courier setting wale users bhi "rule defined" mein shamil.
+      prisma.departmentCommissionSetting.findMany({ where: { courierAmount: { gt: 0 } }, select: { adminId: true } }),
       // §W30: har department user (printing / attestation-dept / courier) list
       // mein rahe — commission abhi 0 ho tab bhi (admin dekh sake ke kaun kaun
       // dept ka kaam karta hai; dept user ko apna 0 wala account dikhe).
@@ -47,7 +49,7 @@ export async function GET() {
 
     const earnedBy = new Map<string, ReturnType<typeof dec>>();
     const paidBy = new Map<string, ReturnType<typeof dec>>();
-    const ruleAdminIds = new Set<string>(ruleRows.map((row) => row.adminId));
+    const ruleAdminIds = new Set<string>([...ruleRows, ...courierRows].map((row) => row.adminId));
     const deptUserIds = new Set(
       deptAdmins
         .filter((admin) => deptCommissionKindsOf(admin.role, parsePermissions(admin.permissions)).length > 0)

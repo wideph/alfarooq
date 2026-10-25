@@ -27,6 +27,7 @@ model Admin {
   notifications   Notification[]
   ledgerEntries   LedgerEntry[]
   departmentCommissionRules DepartmentCommissionRule[]
+  departmentCommissionSetting DepartmentCommissionSetting?
 
   @@index([bookingOfficeId])
 }
@@ -286,6 +287,18 @@ model DepartmentCommissionRule {
   category CaseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([adminId, categoryId, setId])
+}
+
+// §W31 — dept user ki per-user (category se azad) commission settings:
+// courierAmount = har delivered case (courier slip) par ek hi raqam.
+model DepartmentCommissionSetting {
+  id            String   @id @default(cuid())
+  adminId       String   @unique
+  courierAmount Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
 model AttestationType {

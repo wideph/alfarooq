@@ -80,22 +80,41 @@ function ruleAmountFor(
   return rule.courierAmount;
 }
 
-// Exact (adminId, categoryId, setId||"") rule first; fallback to the
-// category-level row (adminId, categoryId, ""). Null when nothing matches.
-export async function findRule(
+// §W31 — har kind ki raqam ALAG jagah se (owner: "printing har category,
+// attestation har Set of Attestations, courier alag"):
+//   PRINTING    → category-level row (setId "") ka printAmount.
+//   ATTESTATION → case ke set ka row (attestationAmount); case ka set na ho
+//                 (ya us set ka row na ho) → category-level row ka
+//                 attestationAmount (bina set wali categories ke liye).
+//   COURIER     → user ki DepartmentCommissionSetting.courierAmount (ek hi
+//                 raqam har delivered case par); purane W30 category row ka
+//                 courierAmount sirf fallback.
+// Kuch set na ho → 0 (null).
+export async function deptCommissionAmount(
+  kind: DeptCommissionKind,
   adminId: string,
   categoryId: string,
   setId: string | null | undefined,
   db: Db = prisma
-) {
-  const key = setId || "";
-  const exact = await db.departmentCommissionRule.findUnique({
-    where: { adminId_categoryId_setId: { adminId, categoryId, setId: key } },
-  });
-  if (exact || key === "") return exact;
-  return db.departmentCommissionRule.findUnique({
+): Promise<Prisma.Decimal | null> {
+  const categoryRow = await db.departmentCommissionRule.findUnique({
     where: { adminId_categoryId_setId: { adminId, categoryId, setId: "" } },
   });
+  if (kind === "PRINTING") return categoryRow ? ruleAmountFor("PRINTING", categoryRow) : null;
+
+  if (kind === "ATTESTATION") {
+    if (setId) {
+      const setRow = await db.departmentCommissionRule.findUnique({
+        where: { adminId_categoryId_setId: { adminId, categoryId, setId } },
+      });
+      if (setRow) return setRow.attestationAmount;
+    }
+    return categoryRow ? categoryRow.attestationAmount : null;
+  }
+
+  const setting = await db.departmentCommissionSetting.findUnique({ where: { adminId } });
+  if (setting && setting.courierAmount.greaterThan(0)) return setting.courierAmount;
+  return categoryRow ? categoryRow.courierAmount : null;
 }
 
 // Remarks marker — also the idempotency key prefix. `parseDeptCommissionKind`
@@ -128,9 +147,9 @@ export async function creditDeptCommission(
     });
     if (!item || !item.categoryId) return null;
 
-    const rule = await findRule(input.adminId, item.categoryId, item.setId, db);
-    const amount = rule ? round2(ruleAmountFor(input.kind, rule)) : null;
-    if (!rule || !amount || amount.lessThanOrEqualTo(0)) return null;
+    const raw = await deptCommissionAmount(input.kind, input.adminId, item.categoryId, item.setId, db);
+    const amount = raw ? round2(raw) : null;
+    if (!amount || amount.lessThanOrEqualTo(0)) return null;
 
     const prefix = deptCommissionRemarksPrefix(input.kind, item.id);
     const existing = await db.ledgerEntry.findFirst({

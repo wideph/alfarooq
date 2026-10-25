@@ -1,47 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Save, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Printer, Save, Stamp, Truck } from "lucide-react";
 import { officeFetch } from "@/lib/office/client";
 import type { ToastKind } from "@/components/Toast";
 
-// §W21 Task 3 — Dept commission rule grid (Printing / Attestation dept users).
-// Rows: [Category ▾] [Set of Attestations ▾ (+ "Poore category (default)")]
-// [Printing commission Rs] [Attestation commission Rs] [Courier Rs] [✕].
-// Save: PUT /api/office/dept-commissions/rules { adminId, rules }.
-// §W30: courier column; `kinds` di jaye to sirf user ke kaam wale columns
-// dikhte hain (baqi values save mein waise hi rehti hain). Rate badalna sirf
-// AAGE ke cases par lagta hai; khali / 0 = commission 0.
+// §W31 — department commission ka SEEDHA form (owner: purana row / dropdown
+// grid confusing aur mehnat talab tha). Teen alag hisse:
+//   Printing    — har case category ke saamne ek raqam
+//   Attestation — har Set of Attestations ke saamne ek raqam (category ke
+//                 neeche group); jis category ka koi set nahi us ki ek raqam
+//   Courier     — har delivered case ki ek raqam
+// Sirf user ke kaam wale hisse dikhte hain. Khali = 0. Save sirf aage ke
+// cases par lagta hai. API: GET/PUT /api/office/dept-commissions/rules.
 
 export type DeptKind = "PRINTING" | "ATTESTATION" | "COURIER";
 
 export const ALL_DEPT_KINDS: DeptKind[] = ["PRINTING", "ATTESTATION", "COURIER"];
 
-export type CommissionRuleDraft = {
-  key: string;
-  categoryId: string;
-  /** null = "Poore category (default)" — saare sets par apply hota hai. */
-  setId: string | null;
-  printAmount: string;
-  attestationAmount: string;
-  courierAmount: string;
-};
-
-let rowSeq = 0;
-export function emptyRuleRow(): CommissionRuleDraft {
-  rowSeq += 1;
-  return {
-    key: `row-${Date.now()}-${rowSeq}`,
-    categoryId: "",
-    setId: null,
-    printAmount: "",
-    attestationAmount: "",
-    courierAmount: "",
-  };
-}
-
-// Dept role (ya us permission wala user) ke liye hi grid dikhti hai.
-// §W30: courier role / permission bhi.
+// Dept role ya permission → user kin kaamon ka commission le sakta hai.
 export function deptKindsOf(role: string | null | undefined, permissions?: string[] | null): DeptKind[] {
   const perms = permissions ?? [];
   const kinds: DeptKind[] = [];
@@ -56,214 +33,124 @@ export function isDeptCommissionRole(role: string | null | undefined, permission
 }
 
 export const DEPT_COMMISSION_HINT =
-  "Printing complete hone par printing, attestation complete hone par attestation (har Set of Attestations ka alag rate), aur courier slip se delivered hone par courier commission case-by-case credit hoti hai. Rate set na ho to 0. Rate badalne se sirf aage ke cases par asar hota hai.";
+  "Raqam khali chhorein to commission 0. Badli hui raqam sirf aage ke cases par lagti hai — pehle se ho chuke cases par nahi.";
 
-const KIND_FIELDS: Record<DeptKind, { field: "printAmount" | "attestationAmount" | "courierAmount"; label: string }> = {
-  PRINTING: { field: "printAmount", label: "Printing Rs" },
-  ATTESTATION: { field: "attestationAmount", label: "Attestation Rs" },
-  COURIER: { field: "courierAmount", label: "Courier Rs" },
+type CommissionForm = {
+  printing: Array<{ categoryId: string; categoryName: string; isActive: boolean; amount: number }>;
+  attestation: Array<{
+    categoryId: string;
+    categoryName: string;
+    isActive: boolean;
+    categoryAmount: number;
+    sets: Array<{ setId: string; setName: string; isActive: boolean; amount: number }>;
+  }>;
+  courierAmount: number;
 };
 
-type CategoryOption = { id: string; name: string };
-type SetOption = { id: string; name: string };
+const toText = (value: number) => (value > 0 ? String(value) : "");
+// Sirf raqam (digits + ek decimal point).
+const cleanMoney = (value: string) => value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
 
-// Draft rows → PUT body. Sirf woh rows jin mein category chuni gayi hai.
-export function serializeRuleRows(rows: CommissionRuleDraft[]) {
-  return rows
-    .filter((row) => row.categoryId)
-    .map((row) => ({
-      categoryId: row.categoryId,
-      setId: row.setId,
-      printAmount: Number(row.printAmount) || 0,
-      attestationAmount: Number(row.attestationAmount) || 0,
-      courierAmount: Number(row.courierAmount) || 0,
-    }));
+// Set ke naam lambe hote hain ("Set of Attestations (i): Board + UV ibcc …") —
+// dohraya hua prefix hata kar poora naam (wrap) dikhate hain.
+function shortSetName(name: string) {
+  return name.replace(/^Set of Attestations\s*/i, "").trim() || name;
 }
 
-export async function saveCommissionRules(
-  adminId: string,
-  rows: CommissionRuleDraft[]
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const res = await officeFetch("/api/office/dept-commissions/rules", {
-    method: "PUT",
-    json: { adminId, rules: serializeRuleRows(rows) },
-  });
-  return res.ok ? { ok: true } : { ok: false, error: res.error };
-}
-
-const input =
-  "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100";
-
-// lg grid template: Category, Set, har kind ka amount, delete.
-function gridTemplate(kindCount: number) {
-  return `minmax(0,1fr) minmax(0,1fr) ${"7rem ".repeat(kindCount)}2.5rem`;
-}
-
-/* ------------------------------------------------------------------ */
-/* Rows editor (controlled) — create form aur existing-user edit dono  */
-/* ------------------------------------------------------------------ */
-
-export function DeptCommissionRowsEditor({
-  rows,
+function MoneyRow({
+  label,
+  muted,
+  wrap,
+  value,
   onChange,
-  kinds = ALL_DEPT_KINDS,
 }: {
-  rows: CommissionRuleDraft[];
-  onChange: (rows: CommissionRuleDraft[]) => void;
-  kinds?: DeptKind[];
+  label: string;
+  muted?: boolean;
+  wrap?: boolean;
+  value: string;
+  onChange: (value: string) => void;
 }) {
-  const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [setsByCategory, setSetsByCategory] = useState<Record<string, SetOption[]>>({});
-  const loadingSetsRef = useRef<Set<string>>(new Set());
-  const visibleKinds = kinds.length > 0 ? kinds : ALL_DEPT_KINDS;
-  const template = gridTemplate(visibleKinds.length);
-
-  useEffect(() => {
-    officeFetch<Array<{ id: string; name: string; isActive?: boolean }>>("/api/office/setup/categories").then(
-      (res) => {
-        if (res.ok) {
-          setCategories(
-            res.data.filter((c) => c.isActive !== false).map((c) => ({ id: String(c.id), name: String(c.name) }))
-          );
-        }
-      }
-    );
-  }, []);
-
-  // Category select hote hi us ke sets lazily fetch ho jate hain (cached).
-  const ensureSets = useCallback((categoryId: string) => {
-    if (!categoryId || loadingSetsRef.current.has(categoryId)) return;
-    loadingSetsRef.current.add(categoryId);
-    officeFetch<Array<{ id: string; name: string }>>(
-      `/api/office/setup/sets?categoryId=${encodeURIComponent(categoryId)}`
-    ).then((res) => {
-      loadingSetsRef.current.delete(categoryId);
-      if (res.ok) {
-        setSetsByCategory((prev) => ({
-          ...prev,
-          [categoryId]: res.data.map((s) => ({ id: String(s.id), name: String(s.name) })),
-        }));
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    for (const row of rows) if (row.categoryId) ensureSets(row.categoryId);
-  }, [rows, ensureSets]);
-
-  const updateRow = (key: string, patch: Partial<CommissionRuleDraft>) =>
-    onChange(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
-
   return (
-    <div className="space-y-2">
-      {rows.length === 0 ? (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400">
-          Koi rule row nahi — &quot;Add row&quot; se category / Set of Attestations ke hisaab se commission set
-          karein. Rule na ho to commission 0.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          <div
-            className="hidden gap-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 lg:grid"
-            style={{ gridTemplateColumns: template }}
-          >
-            <span>Category</span>
-            <span>Set of Attestations</span>
-            {visibleKinds.map((kind) => (
-              <span key={kind}>{KIND_FIELDS[kind].label}</span>
-            ))}
-            <span />
-          </div>
-          {rows.map((row) => (
-            <div
-              key={row.key}
-              className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-white p-2 lg:grid-cols-[var(--dept-grid)] lg:border-0 lg:bg-transparent lg:p-0"
-              style={{ ["--dept-grid" as string]: template }}
-            >
-              <select
-                className={input}
-                value={row.categoryId}
-                onChange={(e) => {
-                  const categoryId = e.target.value;
-                  ensureSets(categoryId);
-                  updateRow(row.key, { categoryId, setId: null });
-                }}
-              >
-                <option value="">Category chunein…</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className={input}
-                value={row.setId ?? ""}
-                disabled={!row.categoryId}
-                onChange={(e) => updateRow(row.key, { setId: e.target.value || null })}
-              >
-                <option value="">Poore category (default)</option>
-                {(setsByCategory[row.categoryId] ?? []).map((set) => (
-                  <option key={set.id} value={set.id}>
-                    {set.name}
-                  </option>
-                ))}
-              </select>
-              {visibleKinds.map((kind) => {
-                const { field, label } = KIND_FIELDS[kind];
-                return (
-                  <input
-                    key={kind}
-                    className={input}
-                    inputMode="decimal"
-                    placeholder={label}
-                    aria-label={label}
-                    value={row[field]}
-                    onChange={(e) => updateRow(row.key, { [field]: e.target.value })}
-                  />
-                );
-              })}
-              <button
-                type="button"
-                className="grid h-9 w-9 place-items-center justify-self-start rounded-xl bg-red-50 text-red-600 hover:bg-red-100"
-                onClick={() => onChange(rows.filter((item) => item.key !== row.key))}
-                aria-label="Row hata dein"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+    <label className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <span
+        className={`min-w-0 ${wrap ? "break-words text-xs leading-snug" : "truncate text-sm"} ${muted ? "text-slate-400" : "text-slate-700"}`}
+        title={label}
+      >
+        {label}
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-slate-400">Rs</span>
+        <input
+          inputMode="decimal"
+          placeholder="0"
+          value={value}
+          onChange={(e) => onChange(cleanMoney(e.target.value))}
+          className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+          aria-label={`${label} commission`}
+        />
+      </span>
+    </label>
+  );
+}
+
+// "Sab par ek hi raqam" — poore hisse ko ek click mein bharne ke liye.
+function FillAll({ onApply }: { onApply: (value: string) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-slate-500">
+      <span>Sab par:</span>
+      <input
+        inputMode="decimal"
+        placeholder="Rs"
+        value={value}
+        onChange={(e) => setValue(cleanMoney(e.target.value))}
+        className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right text-xs outline-none focus:border-primary-400"
+        aria-label="Sab par ek hi raqam"
+      />
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100"
-        onClick={() => onChange([...rows, emptyRuleRow()])}
+        onClick={() => onApply(value)}
+        className="rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 font-semibold text-primary-700 hover:bg-primary-100"
       >
-        <Plus className="h-4 w-4" /> Add row
+        Lagayein
       </button>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Existing user ka grid editor — GET rules on mount, PUT on save      */
-/* ------------------------------------------------------------------ */
-
-type RuleRow = {
-  categoryId: string;
-  categoryName?: string;
-  setId: string | null;
-  setName?: string | null;
-  printAmount: number;
-  attestationAmount: number;
-  courierAmount?: number;
-};
+function Section({
+  icon: Icon,
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  icon: typeof Printer;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+            <Icon className="h-4 w-4 text-primary-600" /> {title}
+          </p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
+        </div>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export function DeptCommissionGridEditor({
   adminId,
   userName,
-  kinds,
+  kinds = ALL_DEPT_KINDS,
   onMessage,
   onSaved,
 }: {
@@ -273,71 +160,192 @@ export function DeptCommissionGridEditor({
   onMessage: (message: string, kind?: ToastKind) => void;
   onSaved?: () => void | Promise<void>;
 }) {
-  const [rows, setRows] = useState<CommissionRuleDraft[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState<CommissionForm | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [printing, setPrinting] = useState<Record<string, string>>({});
+  const [setAmounts, setSetAmounts] = useState<Record<string, string>>({});
+  const [categoryAttestation, setCategoryAttestation] = useState<Record<string, string>>({});
+  const [courier, setCourier] = useState("");
   const [saving, setSaving] = useState(false);
+  const visible = kinds.length > 0 ? kinds : ALL_DEPT_KINDS;
+
+  function apply(next: CommissionForm) {
+    setForm(next);
+    setPrinting(Object.fromEntries(next.printing.map((row) => [row.categoryId, toText(row.amount)])));
+    setSetAmounts(
+      Object.fromEntries(next.attestation.flatMap((category) => category.sets.map((set) => [set.setId, toText(set.amount)])))
+    );
+    setCategoryAttestation(
+      Object.fromEntries(next.attestation.map((category) => [category.categoryId, toText(category.categoryAmount)]))
+    );
+    setCourier(toText(next.courierAmount));
+  }
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    officeFetch<{ ok: boolean; rules: RuleRow[] }>(
+    setForm(null);
+    setLoadError("");
+    officeFetch<{ ok: boolean; form: CommissionForm }>(
       `/api/office/dept-commissions/rules?adminId=${encodeURIComponent(adminId)}`
     ).then((res) => {
       if (cancelled) return;
-      if (res.ok) {
-        setRows(
-          (res.data.rules ?? []).map((rule) => ({
-            key: `rule-${rule.categoryId}-${rule.setId ?? "all"}`,
-            categoryId: String(rule.categoryId ?? ""),
-            setId: rule.setId ? String(rule.setId) : null,
-            printAmount: rule.printAmount ? String(rule.printAmount) : "",
-            attestationAmount: rule.attestationAmount ? String(rule.attestationAmount) : "",
-            courierAmount: rule.courierAmount ? String(rule.courierAmount) : "",
-          }))
-        );
-      }
-      setLoading(false);
+      if (res.ok && res.data.form) apply(res.data.form);
+      else setLoadError(res.ok ? "Commission load nahi ho saka" : res.error);
     });
     return () => {
       cancelled = true;
     };
   }, [adminId]);
 
+  const setCount = useMemo(
+    () => (form ? form.attestation.reduce((total, category) => total + category.sets.length, 0) : 0),
+    [form]
+  );
+
   async function save() {
+    if (!form) return;
     setSaving(true);
-    const result = await saveCommissionRules(adminId, rows);
-    onMessage(
-      result.ok ? "Commission rules save ho gaye — naye cases par lagenge" : result.error,
-      result.ok ? "success" : "error"
+    try {
+      const res = await officeFetch<{ ok: boolean; form: CommissionForm }>("/api/office/dept-commissions/rules", {
+        method: "PUT",
+        json: {
+          adminId,
+          printing: form.printing.map((row) => ({ categoryId: row.categoryId, amount: Number(printing[row.categoryId]) || 0 })),
+          attestation: form.attestation.flatMap((category): Array<{ setId?: string; categoryId?: string; amount: number }> =>
+            category.sets.length > 0
+              ? category.sets.map((set) => ({ setId: set.setId, amount: Number(setAmounts[set.setId]) || 0 }))
+              : [{ categoryId: category.categoryId, amount: Number(categoryAttestation[category.categoryId]) || 0 }]
+          ),
+          courierAmount: Number(courier) || 0,
+        },
+      });
+      if (res.ok) {
+        apply(res.data.form);
+        onMessage(`${userName} ka commission save ho gaya — aage ke cases par lagega`);
+        if (onSaved) await onSaved();
+      } else {
+        onMessage(res.error, "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loadError) {
+    return <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">Commission load nahi ho saka: {loadError}</p>;
+  }
+  if (!form) {
+    return (
+      <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Commission load ho raha hai
+      </div>
     );
-    if (result.ok && onSaved) await onSaved();
-    setSaving(false);
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-primary-100 bg-primary-50/40 p-3">
+    <div className="space-y-3 rounded-xl border border-primary-100 bg-white p-3">
       <div>
-        <p className="text-sm font-semibold text-slate-800">Commission grid — {userName}</p>
+        <p className="text-sm font-semibold text-slate-800">Commission — {userName}</p>
         <p className="text-xs text-slate-500">{DEPT_COMMISSION_HINT}</p>
       </div>
-      {loading ? (
-        <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rules load ho rahe hain
-        </div>
-      ) : (
-        <DeptCommissionRowsEditor rows={rows} onChange={setRows} kinds={kinds} />
-      )}
-      <div>
-        <button
-          type="button"
-          disabled={saving || loading}
-          onClick={() => void save()}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+
+      {visible.includes("PRINTING") && (
+        <Section
+          icon={Printer}
+          title="Printing commission"
+          subtitle="Har case category ki raqam — printed proof upload hote hi credit"
+          actions={
+            <FillAll
+              onApply={(value) => setPrinting(Object.fromEntries(form.printing.map((row) => [row.categoryId, value])))}
+            />
+          }
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Commission save karein
-        </button>
-      </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {form.printing.map((row) => (
+              <MoneyRow
+                key={row.categoryId}
+                label={row.categoryName}
+                muted={!row.isActive}
+                value={printing[row.categoryId] ?? ""}
+                onChange={(value) => setPrinting((prev) => ({ ...prev, [row.categoryId]: value }))}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {visible.includes("ATTESTATION") && (
+        <Section
+          icon={Stamp}
+          title="Attestation commission"
+          subtitle={`Har Set of Attestations ki raqam (${setCount} sets) — attestation complete hote hi credit`}
+          actions={
+            <FillAll
+              onApply={(value) => {
+                setSetAmounts(
+                  Object.fromEntries(form.attestation.flatMap((category) => category.sets.map((set) => [set.setId, value])))
+                );
+                setCategoryAttestation(
+                  Object.fromEntries(
+                    form.attestation.filter((category) => category.sets.length === 0).map((category) => [category.categoryId, value])
+                  )
+                );
+              }}
+            />
+          }
+        >
+          <div className="space-y-3">
+            {form.attestation.map((category) => (
+              <div key={category.categoryId} className="space-y-1.5">
+                <p className={`text-xs font-bold uppercase tracking-wide ${category.isActive ? "text-slate-500" : "text-slate-300"}`}>
+                  {category.categoryName}
+                </p>
+                {category.sets.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {category.sets.map((set) => (
+                      <MoneyRow
+                        key={set.setId}
+                        wrap
+                        label={shortSetName(set.setName)}
+                        muted={!set.isActive}
+                        value={setAmounts[set.setId] ?? ""}
+                        onChange={(value) => setSetAmounts((prev) => ({ ...prev, [set.setId]: value }))}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <MoneyRow
+                      wrap
+                      label="Har case (is category ka koi set nahi)"
+                      value={categoryAttestation[category.categoryId] ?? ""}
+                      onChange={(value) => setCategoryAttestation((prev) => ({ ...prev, [category.categoryId]: value }))}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {visible.includes("COURIER") && (
+        <Section icon={Truck} title="Courier commission" subtitle="Har delivered case (courier slip upload) par ek hi raqam">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <MoneyRow label="Har delivered case" value={courier} onChange={setCourier} />
+          </div>
+        </Section>
+      )}
+
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void save()}
+        className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Commission save karein
+      </button>
     </div>
   );
 }

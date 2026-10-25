@@ -1327,3 +1327,34 @@ Investigation-first (live DB audit):
   COURIER — naya panel isay dikhata hai. Push ab ho gaya.
 - **Fix**: panel load fail ho to "koi user nahi" ke bajaye asal error +
   "Dobara koshish karein" (gumrah-kun empty state khatam).
+
+## WAVE 31 (2026-10-26) — dept commission ka seedha form (printing / attestation / courier alag) (migration live applied)
+
+- **Owner report**: row + dropdown wala grid confusing aur mehnat talab — har
+  case category ki printing commission alag, attestation commission alag (har
+  Set of Attestations ki), courier ka alag commission.
+- **DB**: migration `20261026120000_office_wave31` — `DepartmentCommissionSetting`
+  (adminId unique, courierAmount). **Live applied**. Printing / attestation
+  pehle ki tarah `DepartmentCommissionRule` mein (category row = printing + bina
+  set wali attestation; set row = attestation).
+- **Engine** (`deptCommissionAmount`): kind-wise lookup — PRINTING sirf category
+  row (set row ab printing ko chhupa nahi sakta), ATTESTATION set row → warna
+  category row, COURIER user setting → warna purana W30 category row
+  courierAmount. Kuch nahi → 0.
+- **Lib** `dept-commission-settings.ts`: `loadDeptCommissionForm` (tamam
+  categories + 30 sets + courier, inactive sirf jab raqam ho) /
+  `saveDeptCommissionForm` (replace; sirf non-zero rows store; validation).
+- **API** `/dept-commissions/rules`: GET `{ form }`, PUT `{ printing,
+  attestation, courierAmount }` (super admin). users API `configured` flag.
+- **UI** `DeptCommissionGridEditor`: teen sections (Printing — har category ek
+  input; Attestation — category ke neeche har set ek input, bina-set category
+  ki ek input; Courier — ek input), "Sab par ___ Lagayein" helper, koi dropdown
+  / Add row nahi, set ke poore naam (prefix hata kar, wrap). Setup + Admins page
+  dono yahi form; naya dept user banate hi form khul jata hai (draft grid hataya).
+- **Verify**: tsc 0, lint 0, build exit 0. Live DB rollback-only 17/17 (form
+  load 9 categories / 30 sets, save + load, printing 150 set row ke bawajood,
+  set 400, bina-set 120, courier 60, set bina raqam 0, rate clear → 0 aage,
+  purana credit same, negative reject, rollback ke baad kuch nahi) + W30
+  regression 23/23. UI (read-only, save intercept) 10/10: 3 sections, 9
+  printing inputs, 30 sets, "Sab par" fill, payload sahi, error toast, no
+  errors.

@@ -19,7 +19,7 @@ export async function GET() {
   if (!hasPermission(session, "office:ledger:read")) return forbidden();
 
   try {
-    const [admins, ruleCounts] = await Promise.all([
+    const [admins, ruleCounts, settings] = await Promise.all([
       prisma.admin.findMany({
         where: { role: { not: "admin" } },
         select: {
@@ -34,8 +34,11 @@ export async function GET() {
         orderBy: [{ isActive: "desc" }, { name: "asc" }],
       }),
       prisma.departmentCommissionRule.groupBy({ by: ["adminId"], _count: { _all: true } }),
+      // §W31: courier ki ek raqam alag table mein.
+      prisma.departmentCommissionSetting.findMany({ select: { adminId: true, courierAmount: true } }),
     ]);
     const rulesBy = new Map(ruleCounts.map((row) => [row.adminId, row._count._all]));
+    const courierBy = new Map(settings.map((row) => [row.adminId, Number(row.courierAmount)]));
 
     const users = admins
       .map((admin) => ({
@@ -47,6 +50,9 @@ export async function GET() {
         officeName: admin.bookingOffice?.name ?? null,
         kinds: deptCommissionKindsOf(admin.role, parsePermissions(admin.permissions)),
         ruleCount: rulesBy.get(admin.id) ?? 0,
+        courierAmount: courierBy.get(admin.id) ?? 0,
+        // Koi bhi commission set hai? (printing / attestation rule ya courier)
+        configured: (rulesBy.get(admin.id) ?? 0) > 0 || (courierBy.get(admin.id) ?? 0) > 0,
       }))
       .filter((user) => user.kinds.length > 0);
 

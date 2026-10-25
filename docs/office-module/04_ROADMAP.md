@@ -75,3 +75,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W28 Speed: functions sin1 (vercel.json), Prisma pg adapter + relationJoins, fazool/duplicate API calls khatam, course page ISR.
 - [x] W29 Payments list: student naam, Roll/Reg, agreed amount, is payment se pehle/baad baqi.
 - [x] W30 Dept commissions: courier kind, per-user rates har jagah (setup + Admins), set-wise attestation, 0 default; auto courier stage (address → slip → delivered); dual-dept skip-FINAL.
+- [x] W31 Dept commission simple form: printing per category, attestation per set, courier one amount.

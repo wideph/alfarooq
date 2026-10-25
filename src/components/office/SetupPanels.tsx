@@ -30,14 +30,9 @@ import {
 import type { ToastKind } from "@/components/Toast";
 import { DEPT_COMMISSION_KIND_LABELS, DEPT_COMMISSION_KIND_STYLES } from "@/lib/office/labels";
 import {
-  DEPT_COMMISSION_HINT,
   DeptCommissionGridEditor,
-  DeptCommissionRowsEditor,
   deptKindsOf,
   isDeptCommissionRole,
-  saveCommissionRules,
-  serializeRuleRows,
-  type CommissionRuleDraft,
   type DeptKind,
 } from "./setup/DeptCommissionGrid";
 
@@ -592,8 +587,8 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
                     />
                     {isDeptCommissionRole(draft.role) && (
                       <p className="rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
-                        {DEPT_COMMISSION_HINT} Commission grid office banne ke baad &quot;Login users&quot;
-                        section mein is user ke neeche set karein.
+                        Commission office banne ke baad &quot;Login users&quot; mein is user ke &quot;Commission&quot;
+                        button se set karein (printing har category, attestation har set, courier ek raqam).
                       </p>
                     )}
                   </div>
@@ -711,14 +706,12 @@ function OfficeUsersEditor({
   onMessage: (message: string, kind?: ToastKind) => void;
 }) {
   const [draft, setDraft] = useState<UserDraft>(emptyUserDraft());
-  const [ruleRows, setRuleRows] = useState<CommissionRuleDraft[]>([]);
   const [adding, setAdding] = useState(false);
   // Existing user ka khula hua commission grid editor (adminId).
   const [gridFor, setGridFor] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(emptyUserDraft());
-    setRuleRows([]);
     setGridFor(null);
   }, [office.id]);
 
@@ -735,22 +728,15 @@ function OfficeUsersEditor({
         role: draft.role,
       },
     });
-    // §W21: dept role + grid rows → user banne ke baad rules bhi save.
-    let rulesNote = "";
-    if (res.ok && draftIsDept && serializeRuleRows(ruleRows).length > 0) {
-      const rulesRes = await saveCommissionRules(res.data.id, ruleRows);
-      rulesNote = rulesRes.ok
-        ? " — commission grid bhi save"
-        : ` — lekin commission grid save nahi hui (${rulesRes.error})`;
-    }
+    // §W31: dept user bante hi us ka commission form neeche khul jata hai.
     onMessage(
-      res.ok ? `User add ho gaya${rulesNote}` : res.error,
-      res.ok ? (rulesNote.includes("nahi hui") ? "info" : "success") : "error"
+      res.ok ? (draftIsDept ? "User add ho gaya — neeche is ka commission set karein" : "User add ho gaya") : res.error,
+      res.ok ? "success" : "error"
     );
     if (res.ok) {
       setDraft(emptyUserDraft());
-      setRuleRows([]);
       await onChanged();
+      if (draftIsDept) setGridFor(res.data.id);
     }
     setAdding(false);
   }
@@ -810,13 +796,10 @@ function OfficeUsersEditor({
 
       <UserDraftFields draft={draft} onChange={setDraft} />
       {draftIsDept && (
-        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Commission grid (optional)</p>
-            <p className="text-xs text-slate-500">{DEPT_COMMISSION_HINT}</p>
-          </div>
-          <DeptCommissionRowsEditor rows={ruleRows} onChange={setRuleRows} />
-        </div>
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          User add hote hi neeche us ka commission form khul jayega — printing har category, attestation har Set of
+          Attestations, courier ek raqam.
+        </p>
       )}
       <div>
         <button
@@ -847,6 +830,8 @@ type DeptCommissionUser = {
   officeName: string | null;
   kinds: DeptKind[];
   ruleCount: number;
+  // §W31: printing/attestation rule ya courier raqam — koi bhi set hai?
+  configured?: boolean;
 };
 
 function DeptCommissionRatesPanel({
@@ -940,9 +925,9 @@ function DeptCommissionRatesPanel({
                       <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">inactive</span>
                     )}
                     <span
-                      className={`text-xs font-semibold ${user.ruleCount > 0 ? "text-emerald-700" : "text-amber-700"}`}
+                      className={`text-xs font-semibold ${user.configured ? "text-emerald-700" : "text-amber-700"}`}
                     >
-                      {user.ruleCount > 0 ? `${user.ruleCount} rule set` : "Commission set nahi (0)"}
+                      {user.configured ? "Commission set hai" : "Commission set nahi (0)"}
                     </span>
                     <button
                       type="button"
