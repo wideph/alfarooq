@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Banknote,
   Bot,
@@ -18,8 +19,13 @@ import {
   Signal,
 } from "lucide-react";
 import type { AdminPermission } from "@/lib/auth";
-import NotificationBell, { NavCountBubble, useOfficeNavCounts } from "@/components/office/NotificationBell";
+import NotificationBell, {
+  NavCountBubble,
+  useOfficeNavCounts,
+  type OfficeNavCounts,
+} from "@/components/office/NotificationBell";
 import ScrollableNavStrip from "@/components/ui/ScrollableNavStrip";
+import { officeNavLocation } from "@/lib/office/case-nav";
 
 export type { AdminPermission };
 
@@ -134,6 +140,56 @@ const navItems: Array<{
   },
 ];
 
+type NavItem = (typeof navItems)[number];
+
+function NavLinkList({
+  items,
+  navPath,
+  officeUser,
+  counts,
+}: {
+  items: NavItem[];
+  navPath: string;
+  officeUser: boolean;
+  counts: OfficeNavCounts | null;
+}) {
+  return (
+    <>
+      {items.map((item) => {
+        const Icon = item.icon;
+        // §W34: case detail page par Cases (ya wo tab jahan se case khula) active.
+        const active = navPath === item.href || (item.href === "/office/cases" && navPath.startsWith("/office/cases/"));
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            prefetch
+            title={item.label}
+            aria-current={active ? "page" : undefined}
+            className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
+              active
+                ? "bg-primary-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            <span className="hidden md:inline">{item.label}</span>
+            {officeUser && <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
+// §W34: "from" query padhne ke liye useSearchParams — Suspense ke andar
+// (fallback wahi links sirf pathname se).
+function NavLinksWithOrigin(props: Omit<Parameters<typeof NavLinkList>[0], "navPath">) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  return <NavLinkList {...props} navPath={officeNavLocation(pathname, searchParams).path} />;
+}
+
 export default function AdminNav({
   admin,
   onLogout,
@@ -164,28 +220,11 @@ export default function AdminNav({
               (pehle centered patti ke shuru/aakhir ke options chhup jate the),
               ‹ › buttons, mouse wheel, khula page nazar mein. */}
           <ScrollableNavStrip label="Admin navigation">
-              {visibleItems.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch
-                    title={item.label}
-                    aria-current={active ? "page" : undefined}
-                    className={`relative inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-2.5 md:px-3 text-xs md:text-sm font-semibold transition-colors ${
-                      active
-                        ? "bg-primary-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="hidden md:inline">{item.label}</span>
-                    {officeUser && <NavCountBubble count={item.countKey ? counts?.[item.countKey] : null} />}
-                  </Link>
-                );
-              })}
+            <Suspense
+              fallback={<NavLinkList items={visibleItems} navPath={pathname} officeUser={officeUser} counts={counts} />}
+            >
+              <NavLinksWithOrigin items={visibleItems} officeUser={officeUser} counts={counts} />
+            </Suspense>
           </ScrollableNavStrip>
 
           {/* RIGHT — actions cluster */}

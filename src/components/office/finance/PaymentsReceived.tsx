@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { caseDetailHref } from "@/lib/office/case-nav";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { EmptyState, SectionHeader, TableSkeleton } from "./ui";
 import type { PaymentsResponse } from "./types";
@@ -12,6 +14,8 @@ import type { PaymentsResponse } from "./types";
 // Payments received — current functionality as-is (paginated RECEIVED list
 // with case / client / method / office / submitted-by). Self-refreshing.
 export default function PaymentsReceived() {
+  // §W34: case link par yehi page "from" — detail se wapsi + navbar tab yahin.
+  const pathname = usePathname();
   const [payments, setPayments] = useState<PaymentsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -85,7 +89,7 @@ export default function PaymentsReceived() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
-                    <Link href={`/office/cases/${p.case.id}`} className="font-semibold text-primary-700 hover:underline">
+                    <Link href={caseDetailHref(p.case.id, pathname)} className="font-semibold text-primary-700 hover:underline">
                       {p.case.caseNumber}
                     </Link>
                     <span>· {p.case.clientName}</span>
@@ -119,7 +123,7 @@ export default function PaymentsReceived() {
                     </td>
                     <td className="px-3 py-2">{PAYMENT_METHOD_LABELS[p.method] || p.method}</td>
                     <td className="px-3 py-2">
-                      <Link href={`/office/cases/${p.case.id}`} className="font-semibold text-primary-700 hover:underline">
+                      <Link href={caseDetailHref(p.case.id, pathname)} className="font-semibold text-primary-700 hover:underline">
                         {p.case.caseNumber}
                       </Link>
                     </td>

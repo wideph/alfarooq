@@ -14,6 +14,7 @@ import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LAB
 import { CASE_STATUSES } from "@/lib/office/permissions";
 import { useToast } from "@/hooks/useToast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { CASES_HREF, caseDetailHref, locationOf } from "@/lib/office/case-nav";
 import type { AdminPermission } from "@/components/admin/AdminNav";
 
 // §W18: atta → attestation rename (permission office:attestation-dept:write);
@@ -71,6 +72,10 @@ function CasesList() {
   const deptTab = DEPT_TABS.find((tab) => tab.key === dept) || null;
   const history = searchParams.get("history") === "1";
   const page = Number(searchParams.get("page")) || 1;
+  // §W34: detail link ke saath ye list (tab + filters + page) — detail page se
+  // wapsi isi par, aur navbar mein yehi tab active rehta hai.
+  const fromHere = locationOf(CASES_HREF, searchParams);
+  const detailHref = (id: string) => caseDetailHref(id, fromHere);
 
   // F5: cases list se hi expense entry (admin / office:expenses:write) —
   // detail page kholne ki zaroorat nahi. Toast popup se success/error.
@@ -170,14 +175,14 @@ function CasesList() {
   // §W11.2: poori row clickable → detail page (hover par prefetch).
   function rowProps(item: CaseRow) {
     return {
-      onClick: () => router.push(`/office/cases/${item.id}`),
-      onMouseEnter: () => router.prefetch(`/office/cases/${item.id}`),
+      onClick: () => router.push(detailHref(item.id)),
+      onMouseEnter: () => router.prefetch(detailHref(item.id)),
       className: "cursor-pointer hover:bg-slate-50",
     };
   }
 
   function openCase(item: CaseRow) {
-    router.push(`/office/cases/${item.id}`);
+    router.push(detailHref(item.id));
   }
 
   // Status cell content — admin ko inline CaseStatusSelect, baqi ko plain chip.
@@ -425,7 +430,7 @@ function CasesList() {
               (office chip hamesha, koi money/expense/status controls nahi);
               normal list bilkul pehle jaisi rehti hai. */}
           {deptTab ? (
-            <DeptQueue dept={deptTab.key} items={items} loading={loading} history={history} />
+            <DeptQueue dept={deptTab.key} items={items} loading={loading} history={history} from={fromHere} />
           ) : (
           <>
           {/* §W11.2 MOBILE: md se neeche compact cards (table ki jagah). */}
@@ -448,7 +453,7 @@ function CasesList() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") openCase(item);
                   }}
-                  onMouseEnter={() => router.prefetch(`/office/cases/${item.id}`)}
+                  onMouseEnter={() => router.prefetch(detailHref(item.id))}
                   className="cursor-pointer space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm active:bg-slate-50"
                 >
                   {identityBlock(item, admin)}

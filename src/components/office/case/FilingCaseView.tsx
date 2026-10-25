@@ -13,12 +13,22 @@ import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import { officeFetch } from "@/lib/office/client";
 import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import type { FilingCaseDetail } from "@/lib/office/types";
+import { originLabel } from "@/lib/office/case-nav";
 
 // docs 06 §N7 — filing department ka limited view: SIRF category, Roll Number,
 // Registration Number, remarks, client picture, status, filing files aur department
 // remarks. Payments / agreed amount / commission / ledger kabhi nahi (API
 // payload bhi stripped hai — serializeFilingCase).
-export default function FilingCaseView({ id, admin }: { id: string; admin: AdminNavUser }) {
+// §W34: backHref — jis tab se case khula (default Filing queue).
+export default function FilingCaseView({
+  id,
+  admin,
+  backHref = "/office/cases?dept=filing",
+}: {
+  id: string;
+  admin: AdminNavUser;
+  backHref?: string;
+}) {
   const [detail, setDetail] = useState<FilingCaseDetail | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<ToastData | null>(null);
@@ -44,8 +54,8 @@ export default function FilingCaseView({ id, admin }: { id: string; admin: Admin
         <div className="sticky top-16 z-30 -mx-4 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Link
-              href="/office/cases?dept=filing"
-              aria-label="Filing queue"
+              href={backHref}
+              aria-label={`Wapas ${originLabel(backHref)}`}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-700"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -66,7 +76,7 @@ export default function FilingCaseView({ id, admin }: { id: string; admin: Admin
         </div>
       )}
 
-      {!detail && <Link href="/office/cases?dept=filing" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" /> Filing queue</Link>}
+      {!detail && <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" /> {originLabel(backHref)}</Link>}
 
       {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
 

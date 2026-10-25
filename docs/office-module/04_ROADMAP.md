@@ -78,3 +78,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W31 Dept commission simple form: printing per category, attestation per set, courier one amount.
 - [x] W32 Remarks tab (per-user Done), wajah ke saath attestation complete (printing/attestation/courier), bina-set auto complete + courier stage, bina-set attestation dates (AI working day).
 - [x] W33 Navbar side scroll: admin/office nav ke saare options scroll se pohnch mein (safe centering, ‹ › buttons, mouse wheel, active tab nazar mein).
+- [x] W34 Case detail origin tab: navbar mein wahi tab, back/delete wapsi wahin, dept ka kaam mukammal hone par khud wapsi (banner, "Yahin rahein").

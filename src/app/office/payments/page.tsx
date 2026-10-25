@@ -10,6 +10,7 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { caseDetailHref } from "@/lib/office/case-nav";
 
 type PaymentRow = {
   id: string;
@@ -161,7 +162,7 @@ export default function OfficePaymentsPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1.5">
                           <div>
-                            <Link href={`/office/cases/${p.case.id}`} className="font-semibold text-primary-700 hover:underline">
+                            <Link href={caseDetailHref(p.case.id, "/office/payments")} className="font-semibold text-primary-700 hover:underline">
                               {p.case.caseNumber}
                             </Link>
                             <span className="ml-2 text-xs text-slate-500">{p.case.bookingOffice.name}</span>

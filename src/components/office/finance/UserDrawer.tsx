@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { caseDetailHref } from "@/lib/office/case-nav";
 import AccountEquation from "./AccountEquation";
 import { OfficeTypeChip } from "./ui";
 import {
@@ -17,6 +19,8 @@ import {
 // Slide-over: selected member ka poora hisaab — summary equation, earning
 // breakdown, office expense deductions, payout history (contract 2).
 export default function UserDrawer({ member, onClose }: { member: FinanceUserRow; onClose: () => void }) {
+  // §W34: case link par yehi page "from" — detail se wapsi + navbar tab yahin.
+  const pathname = usePathname();
   const [detail, setDetail] = useState<MemberFinanceDetail | null>(null);
   const [error, setError] = useState("");
 
@@ -94,7 +98,7 @@ export default function UserDrawer({ member, onClose }: { member: FinanceUserRow
                             {e.caseNumber && e.caseId && (
                               <>
                                 {" · "}
-                                <Link href={`/office/cases/${e.caseId}`} className="text-primary-700 hover:underline">
+                                <Link href={caseDetailHref(e.caseId, pathname)} className="text-primary-700 hover:underline">
                                   {e.caseNumber}
                                 </Link>
                               </>

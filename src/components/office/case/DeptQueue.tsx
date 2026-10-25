@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
+import { caseDetailHref } from "@/lib/office/case-nav";
 
 // §W18 — department queues (?dept=filing|printing|attestation|courier). Cross-office
 // "slim" rows (limited: true) mein money fields nahi hote — dept mode apna column
@@ -155,11 +156,14 @@ export default function DeptQueue({
   items,
   loading,
   history = false,
+  from,
 }: {
   dept: DeptQueueKey;
   items: DeptQueueRow[];
   loading: boolean;
   history?: boolean;
+  // §W34: ye queue (path + query) — detail page se wapsi isi tab par.
+  from?: string;
 }) {
   const router = useRouter();
   const config = DEPT_CONFIG[dept];
@@ -180,8 +184,10 @@ export default function DeptQueue({
   // refresh ke baad row queue se hat jati hai kyun ke case PRINTED ho gaya).
   const [localPrinted, setLocalPrinted] = useState<Record<string, boolean>>({});
 
+  const detailHref = (id: string) => caseDetailHref(id, from);
+
   function openCase(item: DeptQueueRow) {
-    router.push(`/office/cases/${item.id}`);
+    router.push(detailHref(item.id));
   }
 
   function filingState(item: DeptQueueRow): { done: boolean; count: number } {
@@ -347,9 +353,9 @@ export default function DeptQueue({
   function actionButton(item: DeptQueueRow, fullWidth = false) {
     return (
       <Link
-        href={`/office/cases/${item.id}`}
+        href={detailHref(item.id)}
         onClick={stopRowClick}
-        onMouseEnter={() => router.prefetch(`/office/cases/${item.id}`)}
+        onMouseEnter={() => router.prefetch(detailHref(item.id))}
         className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-700 ${
           fullWidth ? "w-full" : ""
         }`}
@@ -468,7 +474,7 @@ export default function DeptQueue({
             onKeyDown={(e) => {
               if (e.key === "Enter") openCase(item);
             }}
-            onMouseEnter={() => router.prefetch(`/office/cases/${item.id}`)}
+            onMouseEnter={() => router.prefetch(detailHref(item.id))}
             className={`cursor-pointer space-y-2 rounded-2xl border border-slate-200 p-3 shadow-sm ${rowTint(item)}`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -499,7 +505,7 @@ export default function DeptQueue({
               <tr
                 key={item.id}
                 onClick={() => openCase(item)}
-                onMouseEnter={() => router.prefetch(`/office/cases/${item.id}`)}
+                onMouseEnter={() => router.prefetch(detailHref(item.id))}
                 className={`cursor-pointer ${rowTint(item)}`}
               >
                 <td className="px-3 py-3 align-top">{identityBlock(item)}</td>

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { LEDGER_TYPE_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { caseDetailHref } from "@/lib/office/case-nav";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { EmptyState, OfficeTypeChip, StatCard, TableSkeleton, dueToneClass, inputCls } from "./ui";
 import {
@@ -17,6 +19,8 @@ import {
 // strip (wahi 4 numbers: Earning / Expense share / Wasool / Due), neeche
 // office ka ledger entries table (member + date filters, pagination).
 export default function OfficeLedgerDetail({ officeId }: { officeId: string }) {
+  // §W34: case link par yehi page "from" — detail se wapsi + navbar tab yahin.
+  const pathname = usePathname();
   const [members, setMembers] = useState<FinanceUserRow[] | null>(null);
   const [ledger, setLedger] = useState<LedgerResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -246,7 +250,7 @@ export default function OfficeLedgerDetail({ officeId }: { officeId: string }) {
                   </td>
                   <td className="px-3 py-2">
                     {e.case ? (
-                      <Link href={`/office/cases/${e.case.id}`} className="text-primary-700 hover:underline">
+                      <Link href={caseDetailHref(e.case.id, pathname)} className="text-primary-700 hover:underline">
                         {e.case.caseNumber}
                       </Link>
                     ) : (

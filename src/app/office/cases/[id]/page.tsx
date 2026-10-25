@@ -16,8 +16,11 @@ import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import CaseHistoryTab from "@/components/office/case/CaseHistoryTab";
 import FilingCaseView from "@/components/office/case/FilingCaseView";
 import DeptCaseView, { type DeptLimitedResponse } from "@/components/office/case/DeptCaseView";
+import ReturnToOriginBanner from "@/components/office/case/ReturnToOriginBanner";
 import { officeFetch } from "@/lib/office/client";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { CASES_HREF, deptWorkFinished, originDept, originLabel, safeOfficeFrom } from "@/lib/office/case-nav";
+import { OFFICE_CHANGED_EVENT } from "@/lib/office/live";
 import type { CaseDetail } from "@/lib/office/types";
 
 const TABS = [
@@ -31,8 +34,21 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function CaseDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
+}) {
   const { id } = use(params);
+  // §W34: case kis tab / list se khula — wapsi (back, delete, kaam mukammal)
+  // wahin; navbar bhi wahi tab active rakhta hai (OfficeNav/AdminNav).
+  const fromParam = use(searchParams).from;
+  const from = safeOfficeFrom(typeof fromParam === "string" ? fromParam : null);
+  const backHref = from || CASES_HREF;
+  const backLabel = originLabel(from);
+  const fromDept = originDept(from);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   // §W18: cross-office dept worker ko limited payload milta hai
   // ({ limited: true, depts: [...] }) — DeptCaseView render hota hai.
@@ -42,6 +58,32 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [visited, setVisited] = useState<Set<TabKey>>(() => new Set(["overview"]));
   const [pendingReasons, setPendingReasons] = useState<string[]>([]);
+  // §W34: department tab se khula + user ke apne action se us department ka
+  // kaam mukammal (case us queue se nikal gaya) → khud wapsi ka banner.
+  const [returning, setReturning] = useState(false);
+  const statusRef = useRef<string | null>(null);
+  const lastActionAtRef = useRef(0);
+  useEffect(() => {
+    const markAction = () => {
+      lastActionAtRef.current = Date.now();
+    };
+    window.addEventListener(OFFICE_CHANGED_EVENT, markAction);
+    return () => window.removeEventListener(OFFICE_CHANGED_EVENT, markAction);
+  }, []);
+  const trackStatus = useCallback(
+    (nextStatus: string) => {
+      const previous = statusRef.current;
+      statusRef.current = nextStatus;
+      if (
+        fromDept &&
+        previous &&
+        deptWorkFinished(fromDept, previous, nextStatus) &&
+        Date.now() - lastActionAtRef.current < 60_000
+      )
+        setReturning(true);
+    },
+    [fromDept]
+  );
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
 
@@ -59,9 +101,11 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         if (data && data.limited === true && Array.isArray(data.depts) && data.detail) {
           setLimited(data);
           setDetail(null);
+          trackStatus(data.detail.status);
         } else {
           setDetail(res.data as CaseDetail);
           setLimited(null);
+          trackStatus((res.data as CaseDetail).status);
         }
       } else setError(res.error);
     })().finally(() => {
@@ -69,7 +113,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     });
     reloadInFlightRef.current = pending;
     return pending;
-  }, [id]);
+  }, [id, trackStatus]);
 
   useEffect(() => {
     void reload();
@@ -87,16 +131,17 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
+    <>
     <OfficePageFrame>
       {(admin) =>
         // §N7: filing department ko sirf limited view milta hai (API ka
         // payload bhi stripped hai) — koi payment/money section nahi.
         admin.role === "filing" ? (
-          <FilingCaseView id={id} admin={admin} />
+          <FilingCaseView id={id} admin={admin} backHref={from || undefined} />
         ) : limited ? (
           // §W18: cross-office dept worker (filing/printing/attestation/courier
           // permission) — limited view, sirf apne departments ki files + upload.
-          <DeptCaseView id={id} data={limited} onReload={reload} />
+          <DeptCaseView id={id} data={limited} onReload={reload} backHref={from || undefined} />
         ) : (
           <div className="space-y-4">
             <Toast toast={toast} onClose={() => setToast(null)} />
@@ -115,7 +160,14 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                     naam, category, status, Board #) command bar + status header
                     mein pehle se thi, teen jagah repeat ho rahi thi. Roll/Reg/
                     Online-Verification # ab command bar ke chips mein hain. */}
-                <CaseCommandBar detail={detail} admin={admin} onUpdated={setDetail} onMessage={setMessage} />
+                <CaseCommandBar
+                  detail={detail}
+                  admin={admin}
+                  onUpdated={setDetail}
+                  onMessage={setMessage}
+                  backHref={backHref}
+                  backLabel={backLabel}
+                />
                 <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} onMessage={setMessage} />
                 <CaseWarningStrip detail={detail} pendingReasons={pendingReasons} onOpenTab={openTab} />
 
@@ -209,5 +261,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         )
       }
     </OfficePageFrame>
+    {returning && <ReturnToOriginBanner href={backHref} label={backLabel} onStay={() => setReturning(false)} />}
+    </>
   );
 }

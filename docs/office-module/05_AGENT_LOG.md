@@ -1421,3 +1421,36 @@ Investigation-first (live DB audit):
   1366 / 1024 / 390 px: 11 ke 11 options scroll se poore nazar, › / ‹ buttons,
   wheel scroll; dept user 1366 / 1920 px: sab fit, koi arrow nahi; page
   errors 0.
+
+## WAVE 34 (2026-10-27) — case detail par origin tab (wapsi + navbar)
+
+- **Owner request**: Printing / Attestation tab se case detail khol kar action
+  karne ke baad user Cases par pohanch jata tha; jis tab se case khola wahi
+  wapas aaye, aur detail page khulte waqt bhi navbar mein wahi tab rahe.
+- **Wajah**: detail page `/office/cases/[id]` ko pata hi nahi tha ke kahan se
+  khula — back arrow hamesha `/office/cases` ("All cases"), delete redirect
+  bhi wahi, aur OfficeNav ka dept tab sirf `/office/cases?dept=` par active
+  hota tha (detail par "Cases" highlight).
+- **Fix**: `src/lib/office/case-nav.ts` — `from` query (sirf `/office...`
+  relative path, detail loop / external reject): `caseDetailHref(id, from)`,
+  `officeNavLocation()` (navbar ke liye origin path), `originDept()`,
+  `deptWorkFinished()` (deptQueueWhere ke pending statuses se bahar),
+  `originLabel()`. Links: cases list (tab + filters + page), DeptQueue,
+  Remarks, Payments, Finance (UserDrawer / PaymentsReceived /
+  OfficeLedgerDetail / DeptDetailsDrawer). Detail page `searchParams.from` →
+  CaseCommandBar / DeptCaseView / FilingCaseView back arrow + delete
+  redirect. OfficeNav + AdminNav (Suspense ke andar useSearchParams) origin
+  tab active; AdminNav detail par "Cases" active.
+- **Khud wapsi**: department queue se khula case + user ka apna action
+  (office:changed, 60s ke andar) + status us queue ke pending statuses se bahar
+  (printing: WAITING_FOR_PRINTING; attestation: PRINTED/ATTESTATION; courier:
+  WAITING_FOR_COURIER; filing: WAITING_FOR_FILE) → `ReturnToOriginBanner`
+  ("Kaam mukammal — 4 second mein wapas … par", "Yahin rahein" / "Abhi
+  jayen"). Live refresh se doosre ka badla status khud wapas nahi bhejta.
+- **Verify**: tsc 0, lint 0, build exit 0. case-nav unit 34/34. Browser
+  (read-only, POST intercept + fake status) 21/21: attestation queue → detail
+  (from, nav "Attestation", back), fake complete → banner → khud attestation
+  queue; "Yahin rahein" ruk jata; printing → nav "Printing", bina action koi
+  navigation nahi, back → printing queue; remarks → nav "Remarks", back
+  /office/remarks; admin → AdminNav "Cases", back printing queue; bina from →
+  /office/cases; page errors 0.

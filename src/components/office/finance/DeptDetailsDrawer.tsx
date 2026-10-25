@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { caseDetailHref } from "@/lib/office/case-nav";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 import { dueToneClass } from "./ui";
 import {
@@ -35,6 +37,8 @@ export default function DeptDetailsDrawer({
   user: DeptCommissionSummaryUser;
   onClose: () => void;
 }) {
+  // §W34: case link par yehi page "from" — detail se wapsi + navbar tab yahin.
+  const pathname = usePathname();
   const [data, setData] = useState<{ entries: DeptCommissionEntry[]; payouts: DeptCommissionPayout[] } | null>(null);
   const [error, setError] = useState("");
 
@@ -132,7 +136,7 @@ export default function DeptDetailsDrawer({
                             </span>
                             {entry.caseId ? (
                               <Link
-                                href={`/office/cases/${entry.caseId}`}
+                                href={caseDetailHref(entry.caseId, pathname)}
                                 className="text-primary-700 hover:underline"
                               >
                                 {entry.caseNumber}

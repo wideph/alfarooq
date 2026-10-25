@@ -29,6 +29,7 @@ import NotificationBell, {
 } from "@/components/office/NotificationBell";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 import ScrollableNavStrip from "@/components/ui/ScrollableNavStrip";
+import { officeNavLocation } from "@/lib/office/case-nav";
 
 // §W18: atta department ka rename — permission ab office:attestation-dept:write
 // hai (auth.ts mid-flight update; cast dono states mein compile hota hai).
@@ -74,7 +75,11 @@ const navItems: Array<{
 function NavLinks({ admin, counts }: { admin: AdminNavUser | null; counts: OfficeNavCounts | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const deptParam = pathname === "/office/cases" ? searchParams.get("dept") || "" : "";
+  // §W34: case detail page par wo tab active jahan se case khula ("from") —
+  // Printing queue se khula case Printing hi dikhaye, Cases nahi.
+  const nav = officeNavLocation(pathname, searchParams);
+  const navPath = nav.path;
+  const deptParam = navPath === "/office/cases" ? nav.params.get("dept") || "" : "";
 
   const visibleItems = navItems.filter((item) => {
     // §W18: dept tabs — cases page ke canSeeDeptTab rule ke mutabiq: us dept ki
@@ -100,10 +105,10 @@ function NavLinks({ admin, counts }: { admin: AdminNavUser | null; counts: Offic
         const active = item.dept
           ? deptParam === item.dept
           : item.href === "/office"
-            ? pathname === item.href
+            ? navPath === item.href
             : item.href === "/office/cases"
-              ? pathname.startsWith(item.href) && !deptParam
-              : pathname.startsWith(item.href);
+              ? navPath.startsWith(item.href) && !deptParam
+              : navPath.startsWith(item.href);
         return (
           <Link
             key={item.href}

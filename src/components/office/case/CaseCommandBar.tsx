@@ -21,11 +21,16 @@ export default function CaseCommandBar({
   admin,
   onUpdated,
   onMessage,
+  backHref = "/office/cases",
+  backLabel = "Cases",
 }: {
   detail: CaseDetail;
   admin: AdminNavUser;
   onUpdated: (next: CaseDetail) => void;
   onMessage: (message: string, kind?: ToastKind) => void;
+  // §W34: jis tab / list se case khula (Printing queue waghera) — wapsi wahin.
+  backHref?: string;
+  backLabel?: string;
 }) {
   const canEdit = adminCanAny(admin, ["office:cases:write"]);
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
@@ -62,8 +67,9 @@ export default function CaseCommandBar({
     <div className="sticky top-16 z-30 -mx-4 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Link
-          href="/office/cases"
-          aria-label="All cases"
+          href={backHref}
+          aria-label={`Wapas ${backLabel}`}
+          title={`Wapas ${backLabel}`}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-700"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -159,7 +165,7 @@ export default function CaseCommandBar({
                 caseId={detail.id}
                 caseNumber={detail.caseNumber}
                 size="md"
-                redirectTo="/office/cases"
+                redirectTo={backHref}
                 onMessage={onMessage}
               />
             </>

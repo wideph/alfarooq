@@ -21,6 +21,7 @@ import CompleteAttestationButton from "@/components/office/case/CompleteAttestat
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
+import { originLabel } from "@/lib/office/case-nav";
 import {
   ATTESTATION_STATUS_LABELS,
   ATTESTATION_STATUS_STYLES,
@@ -143,10 +144,13 @@ export default function DeptCaseView({
   id,
   data,
   onReload,
+  backHref,
 }: {
   id: string;
   data: DeptLimitedResponse;
   onReload: () => Promise<void>;
+  // §W34: jis tab se case khula — wapsi wahin (na ho to pehle dept ki queue).
+  backHref?: string;
 }) {
   const { detail, depts } = data;
   const [files, setFiles] = useState<DeptFileItem[]>([]);
@@ -236,8 +240,8 @@ export default function DeptCaseView({
       <div className="sticky top-16 z-30 -mx-4 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Link
-            href={`/office/cases?dept=${backDept}`}
-            aria-label={`${DEPT_LABELS[depts[0]]} queue`}
+            href={backHref || `/office/cases?dept=${backDept}`}
+            aria-label={backHref ? `Wapas ${originLabel(backHref)}` : `${DEPT_LABELS[depts[0]]} queue`}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:border-primary-300 hover:text-primary-700"
           >
             <ArrowLeft className="h-4 w-4" />

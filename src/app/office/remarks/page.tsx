@@ -9,6 +9,7 @@ import { formatDateTime, officeFetch } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import { ROLE_LABELS } from "@/lib/office/permissions";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
+import { caseDetailHref } from "@/lib/office/case-nav";
 
 // §W32 — user ka Remarks tab: kisi bhi case mein jo remarks is user ke liye
 // bheje gaye (role / department), har case ki pehchan ke saath. Dekh lene se
@@ -129,7 +130,7 @@ export default function OfficeRemarksPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/office/cases/${item.case.id}`} className="font-semibold text-primary-700 hover:underline">
+                      <Link href={caseDetailHref(item.case.id, "/office/remarks")} className="font-semibold text-primary-700 hover:underline">
                         {item.case.caseNumber}
                       </Link>
                       <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${caseStatusStyle(item.case.status)}`}>
