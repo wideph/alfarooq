@@ -10,8 +10,6 @@ import {
   FileText,
   FolderOpen,
   Info,
-  CheckCheck,
-  Loader2,
   Stamp,
 } from "lucide-react";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
@@ -19,6 +17,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import CaseFileViewer, { type ViewableFile } from "@/components/office/case/CaseFileViewer";
+import CompleteAttestationButton from "@/components/office/case/CompleteAttestationButton";
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
@@ -179,33 +178,6 @@ export default function DeptCaseView({
     void loadFiles();
   }, [loadFiles]);
 
-  // §W30: attestation stage complete (complete-all) — dual-dept worker ke
-  // liye printed proof ke baad final file zaroori nahi.
-  const [completing, setCompleting] = useState(false);
-  async function completeAttestation() {
-    if (!confirm("Attestation complete karein? Tamam steps DONE ho jayen gi.")) return;
-    setCompleting(true);
-    try {
-      const res = await officeFetch<{ status: string; completed?: boolean }>(
-        `/api/office/cases/${id}/attestations/complete-all`,
-        { method: "POST" }
-      );
-      if (res.ok) {
-        setMessage(
-          res.data.completed
-            ? `Attestation complete — ${STATUS_LABELS[res.data.status] || res.data.status}`
-            : "Steps DONE ho gaye, magar case status nahi badla (set ke steps check karein)",
-          res.data.completed ? "success" : "info"
-        );
-        await onReload();
-      } else {
-        setMessage(res.error, "error");
-      }
-    } finally {
-      setCompleting(false);
-    }
-  }
-
   // §W26: upload FileUploadBox karta hai (kai files, direct R2). Baad mein
   // list + case reload (status workflow se aage barh sakta hai).
   async function afterUpload() {
@@ -348,6 +320,22 @@ export default function DeptCaseView({
             </div>
           )}
         </dl>
+        {/* §W32: printing / attestation / courier department — printed proof ke
+            baad attestation complete (wajah lazmi; server check karta hai). */}
+        {(detail.status === "PRINTED" || detail.status === "ATTESTATION") && (
+          <div className="mt-3 space-y-1">
+            <CompleteAttestationButton
+              caseId={id}
+              reasonRequired
+              fullWidth
+              onDone={onReload}
+              onMessage={setMessage}
+            />
+            <p className="text-[11px] text-slate-400">
+              Printed proof upload ho chuka ho to final file ke baghair complete ho jayegi — wajah likhna lazmi hai.
+            </p>
+          </div>
+        )}
       </SectionCard>
 
       {depts.includes("ATTESTATION") && (
@@ -386,27 +374,6 @@ export default function DeptCaseView({
                 );
               })}
             </ul>
-          )}
-          {/* §W30: attestation-dept worker — saare steps complete. Printing +
-              attestation dono ka kaam karne wale ke liye printed proof ke baad
-              final file zaroori nahi (server check karta hai). */}
-          {(detail.status === "PRINTED" || detail.status === "ATTESTATION") && (
-            <div className="mt-3 space-y-1">
-              <button
-                type="button"
-                disabled={completing}
-                onClick={completeAttestation}
-                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-              >
-                {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-                Attestation complete karein
-              </button>
-              <p className="text-[11px] text-slate-400">
-                {depts.includes("PRINTING")
-                  ? "Printed proof upload ho chuka ho to final file ke baghair bhi complete ho jayegi."
-                  : "Final file (neeche Attestation section mein) pehle upload karein."}
-              </p>
-            </div>
           )}
         </SectionCard>
       )}

@@ -28,6 +28,7 @@ model Admin {
   ledgerEntries   LedgerEntry[]
   departmentCommissionRules DepartmentCommissionRule[]
   departmentCommissionSetting DepartmentCommissionSetting?
+  remarkDones               CaseRemarkDone[]
 
   @@index([bookingOfficeId])
 }
@@ -662,8 +663,24 @@ model CaseRemark {
 
   case       Case                 @relation(fields: [caseId], references: [id], onDelete: Cascade)
   recipients CaseRemarkRecipient[]
+  // §W32: "Remarks" tab — har user ne kaun se remarks Done kiye.
+  dones      CaseRemarkDone[]
 
   @@index([caseId])
+}
+
+// §W32 — user ka apna "Done" (Remarks tab se hatana). Per user, per remark.
+model CaseRemarkDone {
+  id       String   @id @default(cuid())
+  remarkId String
+  adminId  String
+  doneAt   DateTime @default(now())
+
+  remark CaseRemark @relation(fields: [remarkId], references: [id], onDelete: Cascade)
+  admin  Admin      @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([remarkId, adminId])
+  @@index([adminId])
 }
 
 model CaseRemarkRecipient {

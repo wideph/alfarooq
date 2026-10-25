@@ -4,6 +4,7 @@ import { hasPermission, type AdminPermission } from "@/lib/auth";
 import { guardOffice, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
 import { SET_WARNING_STATUSES } from "@/lib/office/workflow";
+import { remarkInboxCount } from "@/lib/office/remark-inbox";
 
 export const preferredRegion = ["sin1"];
 
@@ -133,12 +134,14 @@ export async function GET() {
           })
         : Promise.resolve([]);
 
-    const [cases, payments, requests, unreadNotifications, deptStatusRows] = await Promise.all([
+    const [cases, payments, requests, unreadNotifications, deptStatusRows, remarks] = await Promise.all([
       casesQuery,
       paymentsQuery,
       requestsQuery,
       unreadQuery,
       deptCountsQuery,
+      // §W32: Remarks tab badge — is user ke liye bheje gaye, abhi Done nahi.
+      remarkInboxCount(session),
     ]);
 
     const deptCounts: Record<DeptCountKey, number> = { filing: 0, printing: 0, attestation: 0, courier: 0 };
@@ -147,7 +150,7 @@ export async function GET() {
       if (dept && permittedDepts.includes(dept)) deptCounts[dept] += row._count._all;
     }
 
-    return NextResponse.json({ cases, payments, requests, unreadNotifications, deptCounts });
+    return NextResponse.json({ cases, payments, requests, unreadNotifications, deptCounts, remarks });
   } catch (error) {
     return serverError(error);
   }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminPermission } from "@/lib/auth";
@@ -7,7 +7,8 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, canSeeOffice } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount } from "@/lib/office/money";
-import { cleanText, toJson } from "@/lib/office/serializers";
+import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
+import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
 import { notifyAdmins } from "@/lib/office/notifications";
 import { caseListInclude, serializeCaseRow } from "@/lib/office/case-detail";
@@ -362,6 +363,16 @@ export async function POST(request: NextRequest) {
         include: caseListInclude,
       });
     }, { maxWait: 10000, timeout: 30000 });
+
+    // §W32: set ke baghair chuni gayi attestations ki date = aaj ke baad ka
+    // pehla working day (AI) — after() mein (AI slow ho sakta hai).
+    if (!setId && created.attestations.length > 0) {
+      const selectedOn = todayPakistan();
+      const attestationIds = created.attestations.map((attestation) => attestation.id);
+      after(async () => {
+        await scheduleNoSetAttestationDates(created.id, attestationIds, selectedOn);
+      });
+    }
 
     await logOfficeAction(session, {
       action: "case.create",

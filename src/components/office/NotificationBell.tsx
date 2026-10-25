@@ -37,6 +37,8 @@ export type OfficeNavCounts = {
   // §W19: department tabs (Filing/Printing/Attestation/Courier) ke pending
   // counts — sirf visible/permitted depts non-zero hote hain.
   deptCounts: { filing: number; printing: number; attestation: number; courier: number };
+  // §W32: Remarks tab — user ke liye bheje gaye, abhi Done nahi.
+  remarks?: number;
 };
 
 export function useOfficeNavCounts(enabled = true): OfficeNavCounts | null {

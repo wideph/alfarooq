@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  CheckCheck,
   ChevronDown,
   Download,
   Eye,
@@ -19,9 +18,9 @@ import EmptyState from "@/components/ui/EmptyState";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import CaseFileViewer, { type ViewableFile } from "@/components/office/case/CaseFileViewer";
 import FileUploadBox from "@/components/office/case/FileUploadBox";
+import CompleteAttestationButton from "@/components/office/case/CompleteAttestationButton";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDateTime, officeFetch } from "@/lib/office/client";
-import { caseStatusLabel } from "@/lib/office/labels";
 import type { CaseFileItem, CategorySetWithSteps } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 
@@ -85,7 +84,6 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
   const [loading, setLoading] = useState(true);
   const [viewer, setViewer] = useState<ViewableFile | null>(null);
   const [setSteps, setSetSteps] = useState<Array<{ stepKey: string; label: string }>>([]);
-  const [completing, setCompleting] = useState(false);
   const [open, setOpen] = useState<Record<Department, boolean>>(() => {
     const initial = {} as Record<Department, boolean>;
     for (const d of departments) initial[d] = true;
@@ -93,12 +91,16 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
   });
 
   const canCompleteAll = adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION, "office:attestation:write"]);
-  // §W30: printing + attestation-dept dono ka kaam karne wala user (super
-  // admin nahi) printed proof ke baad FINAL file ke baghair complete kar sakta hai.
-  const dualDept =
+  // §W32: printing / attestation / courier department ka user (super admin
+  // nahi) printed proof ke baad FINAL file ke baghair, WAJAH ke saath complete
+  // kar sakta hai.
+  const deptUser =
     admin.role !== "admin" &&
-    adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.PRINTING]) &&
-    adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION]);
+    adminCanAny(admin, [
+      DEPARTMENT_PERMISSIONS_CLIENT.PRINTING,
+      DEPARTMENT_PERMISSIONS_CLIENT.ATTESTATION,
+      DEPARTMENT_PERMISSIONS_CLIENT.COURIER,
+    ]);
 
   const load = useCallback(async () => {
     try {
@@ -144,32 +146,6 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     if (res.ok) await load();
   }
 
-  // Ek click mein tamam attestation steps DONE + case COMPLETED (API contract:
-  // FINAL atta file lazmi — missing ho to API ka error toast dikhta hai).
-  async function completeAll() {
-    if (!confirm("Saari attestations complete karein? Tamam steps DONE mark ho jayen gi.")) return;
-    setCompleting(true);
-    try {
-      const res = await officeFetch<{ status: string; completed?: boolean }>(
-        `/api/office/cases/${detail.id}/attestations/complete-all`,
-        { method: "POST" }
-      );
-      if (res.ok) {
-        // §W30: status ab courier stage (address / slip) tak bhi ja sakta hai.
-        onMessage(
-          res.data.completed
-            ? `Attestation complete — ${caseStatusLabel(res.data.status)}`
-            : "Saare steps DONE ho gaye, magar case status nahi badla (set ke steps check karein)",
-          res.data.completed ? "success" : "info"
-        );
-        await onReload();
-      } else onMessage(res.error, "error");
-    } catch {
-      onMessage("Internet / server se rabta nahi ho saka", "error");
-    } finally {
-      setCompleting(false);
-    }
-  }
 
   function canWrite(department: Department) {
     return adminCanAny(admin, [DEPARTMENT_PERMISSIONS_CLIENT[department]]);
@@ -369,8 +345,8 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                       fixedStepKey="FINAL"
                       tone="final"
                       finalHeading={
-                        dualDept
-                          ? "Final file (optional) — aap printing + attestation dono karte hain, printed proof ke baad iske baghair bhi complete ho sakta hai"
+                        deptUser
+                          ? "Final file (optional) — printed proof ke baad iske baghair bhi wajah likh kar complete ho sakta hai"
                           : undefined
                       }
                       buttonLabel="Final upload"
@@ -380,16 +356,19 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                     />
                   )}
 
-                  {/* ATTA: ek click mein tamam steps complete (FINAL lazmi) */}
-                  {department === "ATTESTATION" && canCompleteAll && (
-                    <button
-                      disabled={completing}
-                      onClick={completeAll}
-                      className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-                    >
-                      {completing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-                      Saari attestations complete karein
-                    </button>
+                  {/* ATTA: ek click mein tamam steps complete. FINAL file ho to
+                      wajah optional; na ho to (§W32) printed proof ke baad wajah lazmi. */}
+                  {department === "ATTESTATION" && (canCompleteAll || deptUser) && (
+                    <CompleteAttestationButton
+                      caseId={detail.id}
+                      label="Saari attestations complete karein"
+                      fullWidth
+                      reasonRequired={
+                        !files.some((file) => file.department === "ATTESTATION" && file.stepKey === "FINAL")
+                      }
+                      onDone={onReload}
+                      onMessage={onMessage}
+                    />
                   )}
                 </div>
               </section>

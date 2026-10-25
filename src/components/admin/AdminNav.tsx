@@ -9,6 +9,7 @@ import {
   Briefcase,
   Home,
   LayoutDashboard,
+  MessageSquare,
   LogOut,
   PieChart,
   Settings,
@@ -41,7 +42,7 @@ const navItems: Array<{
   icon: typeof Home;
   permissions: AdminPermission[];
   // §W11.7: office nav-counts se amber bubble (sirf office destinations).
-  countKey?: "cases" | "payments";
+  countKey?: "cases" | "payments" | "remarks";
 }> = [
   {
     href: "/admin",
@@ -108,6 +109,14 @@ const navItems: Array<{
     icon: Banknote,
     permissions: ["office:payments:verify", "office:payments:submit"],
     countKey: "payments",
+  },
+  // §W32: admin ke liye bheje gaye remarks (Done tak).
+  {
+    href: "/office/remarks",
+    label: "Remarks",
+    icon: MessageSquare,
+    permissions: ["office:cases:read"],
+    countKey: "remarks",
   },
   // §W12.3: Ledger merge ho gaya Finance mein — /office/ledger redirect karta hai.
   {

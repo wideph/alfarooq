@@ -7,12 +7,12 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
-import { cleanText, parseDateOnly } from "@/lib/office/serializers";
+import { cleanText, parseDateOnly, todayPakistan } from "@/lib/office/serializers";
+import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   advanceCourierStage,
   autoBridgePrintingForDualDept,
-  canCompleteAttestationWithoutFinal,
   evaluateCaseCompletion,
 } from "@/lib/office/workflow";
 
@@ -39,8 +39,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const row = await prisma.caseAttestation.create({
       data: { caseId: id, attestationTypeId, order, scheduledDate: parseDateOnly(body.scheduledDate) },
     });
+    // §W32: set na ho to date = aaj ke baad ka pehla working day (AI) —
+    // after() mein (AI slow ho sakta hai); live refresh date dikha deta hai.
+    const selectedOn = todayPakistan();
     // W13.2: audit log response ke baad.
     after(async () => {
+      if (!item.setId) await scheduleNoSetAttestationDates(id, [row.id], selectedOn);
       await logOfficeAction(session, { action: "case.attestation.add", entity: "Case", entityId: id, after: row });
     });
     return NextResponse.json(await loadCaseDetail(session, id), { status: 201 });
@@ -154,12 +158,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // agar case abhi WAITING_FOR_PRINTING par hai to pehle auto PRINTED
     // (bridge) phir completion check; dono ek hi tx mein (atomic).
     // Single-perm actor ke liye bridge kabhi fire nahi hota (purana behavior).
-    // §W30: dual-dept user (printed proof ke baad) ke liye FINAL file zaroori
-    // nahi; completion ke baad payment poori ho to courier stage.
+    // §W30/§W32: completion (FINAL file + tamam steps DONE) ke baad payment
+    // poori ho to courier stage. FINAL ke baghair sirf wajah wala complete-all.
     const { bridged, completed, courierStage } = await prisma.$transaction(async (tx) => {
       const bridgedNow = await autoBridgePrintingForDualDept(id, session, tx);
-      const allowWithoutFinal = await canCompleteAttestationWithoutFinal(session, id, tx);
-      const completedNow = await evaluateCaseCompletion(id, tx, { allowWithoutFinal });
+      const completedNow = await evaluateCaseCompletion(id, tx);
       const stage = completedNow ? await advanceCourierStage(id, tx) : null;
       return { bridged: bridgedNow, completed: completedNow, courierStage: stage };
     });

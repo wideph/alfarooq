@@ -1358,3 +1358,45 @@ Investigation-first (live DB audit):
   regression 23/23. UI (read-only, save intercept) 10/10: 3 sections, 9
   printing inputs, 30 sets, "Sab par" fill, payload sahi, error toast, no
   errors.
+
+## WAVE 32 (2026-10-27) — Remarks tab, wajah ke saath attestation complete, bina-set auto flow + dates (migration live applied)
+
+- **Owner request**: (1) har user ke navbar mein Remarks tab — us ke liye
+  bheje gaye remarks, "Done" tak rahen; har item mein student naam, Roll, Reg,
+  Online Verification #. (2) printing / attestation / courier dept printed
+  proof ke baad attestation complete kar sake — wajah lazmi. (3) Set na ho to
+  printed proof ke saath khud attestation complete → baqi 0 → address / slip
+  stage. (4) Set na ho aur attestation chuni jaye to date = chunne ki tareekh
+  ke baad ka working day (AI).
+- **DB**: migration `20261027120000_office_wave32` — `CaseRemarkDone`
+  (remarkId × adminId unique). **Live applied**.
+- **Remarks**: `lib/office/remark-inbox.ts` (targets = role + har dept write
+  permission; BOOKING caseScope; apne remarks nahi; Done wale nahi). GET
+  `/api/office/remarks`, POST `/api/office/remarks/done` ({remarkIds} ya
+  {all}; seenAt bhi; audit). nav-counts `remarks`. Page `/office/remarks`;
+  OfficeNav + AdminNav "Remarks" tab + bubble. Pehle combined user (role
+  attestation) ko PRINTING/COURIER remarks dikhte hi nahi the — ab dikhte hain.
+- **Wajah wala complete**: `canCompleteAttestationWithReason` (printing /
+  attestation-dept / courier, super admin nahi, ≥1 PRINTING file) — W30 ka
+  dual-only skip-FINAL hata diya; files upload / step PATCH ab hamesha FINAL
+  maangte hain. complete-all: normal (attestation writer + FINAL) ya reason
+  path (reason ≥5 huroof, `allowWithoutFinal` + `allowNoAttestations`), dept
+  cross-office access, wajah → audit + ADMIN remark + notification.
+  `CompleteAttestationButton` (wajah modal) — status header (har dept user),
+  DeptCaseView (case details mein, har dept), Files tab (FINAL na ho to wajah
+  lazmi).
+- **Bina set**: registerCaseFiles printing branch — `setId` null + koi pending
+  attestation nahi → ATTESTATION_COMPLETE (isPrinted) → advanceCourierStage;
+  `printedNow` flag se printing commission. Alag se chuni attestations wala
+  bina-set case normal flow.
+- **Dates**: `scheduleNoSetAttestationDates` (date-engine, AI-first
+  `firstWorkingDayAfterOffset(selectedOn, 1)`), attestation add + case create
+  ke after() mein; set cases untouched; DONE steps nahi badalte.
+- **Verify**: tsc 0, lint 0, build exit 0. Live-DB rollback-only W32 test sab
+  pass (targets, inbox +/−, seen ≠ done, per-user done, booking scope, reason
+  rules, no-steps completion, bina-set auto-complete → ATTESTATION_COMPLETE /
+  address stage, pending attestations → PRINTED, date 2026-10-28 > selection
+  aur weekday, set case untouched); W30 23/23 + W31 17/17 regression (owner ke
+  live 24 rules rollback ke baad same). UI (read-only, POST intercept) 12/12:
+  dept + admin Remarks tab, Done payload, wajah modal disabled/enabled +
+  reason payload, no page errors.

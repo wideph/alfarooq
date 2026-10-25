@@ -7,7 +7,6 @@ import {
   VERIFICATION_STICKER_STEP_KEY,
   advanceCourierStage,
   autoBridgePrintingForDualDept,
-  canCompleteAttestationWithoutFinal,
   evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
@@ -116,7 +115,16 @@ export async function registerCaseFiles(params: {
       const createdIds = created.map((row) => row.id);
 
       let nextStatus = item.status;
-      const caseData: { status?: string; isPrinted?: boolean; printedAt?: Date } = {};
+      const caseData: {
+        status?: string;
+        isPrinted?: boolean;
+        printedAt?: Date;
+        currentAttestationId?: string | null;
+      } = {};
+      // Is upload ne case ko "printed" kiya (printing commission isi par).
+      let printedNow = false;
+      // §W32: bina set wala case printing ke saath seedha attestation complete.
+      let noSetAutoComplete = false;
       // W21: verification stickers (FILING + stepKey VERIFICATION_STICKER) are
       // allowed ANYTIME — they never trigger the filing→printing transition
       // and never count as the "first filing file".
@@ -145,6 +153,21 @@ export async function registerCaseFiles(params: {
           caseData.isPrinted = true;
           caseData.printedAt = new Date();
           nextStatus = "PRINTED";
+          printedNow = true;
+          // §W32: Set of Attestations chuna hi nahi gaya aur koi baqi
+          // attestation step bhi nahi → attestation ka koi kaam nahi; printed
+          // proof ke saath hi "attestation complete — final payment pending".
+          // (Alag se chuni hui attestations hon to normal attestation flow.)
+          const info = await tx.case.findUnique({
+            where: { id: caseId },
+            select: { setId: true, _count: { select: { attestations: { where: { status: { not: "DONE" } } } } } },
+          });
+          if (info && !info.setId && info._count.attestations === 0) {
+            caseData.status = "ATTESTATION_COMPLETE";
+            caseData.currentAttestationId = null;
+            nextStatus = "ATTESTATION_COMPLETE";
+            noSetAutoComplete = true;
+          }
         }
       } else if (department === "COURIER") {
         // §W11.1: courier slip sirf tab DELIVERED karta hai jab case courier
@@ -169,16 +192,22 @@ export async function registerCaseFiles(params: {
       let bridged = false;
       if (department === "ATTESTATION") {
         bridged = await autoBridgePrintingForDualDept(caseId, session, tx);
-        const allowWithoutFinal = await canCompleteAttestationWithoutFinal(session, caseId, tx);
-        completed = await evaluateCaseCompletion(caseId, tx, { allowWithoutFinal });
+        // §W32: file upload se completion hamesha FINAL file ke saath; FINAL
+        // ke baghair sirf wajah wala manual complete (complete-all).
+        completed = await evaluateCaseCompletion(caseId, tx);
         if (completed) {
           // §W30: payment pehle se poori ho to seedha courier stage.
           nextStatus = (await advanceCourierStage(caseId, tx)) ?? "ATTESTATION_COMPLETE";
         } else if (bridged) nextStatus = "PRINTED";
       }
 
+      // §W32: bina set auto-complete ke baad payment poori ho to courier stage.
+      if (noSetAutoComplete) {
+        nextStatus = (await advanceCourierStage(caseId, tx)) ?? "ATTESTATION_COMPLETE";
+      }
+
       const delivered = department === "COURIER" && nextStatus === "DELIVERED" && item.status !== "DELIVERED";
-      return { created, nextStatus, completed, bridged, delivered };
+      return { created, nextStatus, completed, bridged, delivered, printedNow, noSetAutoComplete };
     },
     { maxWait: 10000, timeout: 30000 }
   );

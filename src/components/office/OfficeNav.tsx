@@ -10,6 +10,7 @@ import {
   FileUp,
   Home,
   LayoutDashboard,
+  MessageSquare,
   Link2,
   LogOut,
   PieChart,
@@ -38,7 +39,7 @@ const navItems: Array<{
   icon: typeof Home;
   permissions: AdminPermission[];
   // §W11.7: amber count bubble — nav-counts ke kis field se.
-  countKey?: "cases" | "payments";
+  countKey?: "cases" | "payments" | "remarks";
   // §W18: department queue tab — /office/cases?dept=<key> par active hota hai
   // aur sirf us department ki write permission (ya cashier) par dikhta hai.
   dept?: "filing" | "printing" | "attestation" | "courier";
@@ -47,6 +48,8 @@ const navItems: Array<{
   // maqsad wazeh ho (pehle "Dashboard" tha, jo confusing tha).
   { href: "/office", label: "Offices", icon: LayoutDashboard, permissions: ["office:cases:read"] },
   { href: "/office/cases", label: "Cases", icon: Briefcase, permissions: ["office:cases:read"], countKey: "cases" },
+  // §W32: har user ka Remarks tab — us ke liye bheje gaye remarks (Done tak).
+  { href: "/office/remarks", label: "Remarks", icon: MessageSquare, permissions: ["office:cases:read"], countKey: "remarks" },
   // §W18 department queues — cross-office pending kaam, per-department permission.
   { href: "/office/cases?dept=filing", label: "Filing", icon: FileUp, permissions: ["office:filing:write"], dept: "filing" },
   { href: "/office/cases?dept=printing", label: "Printing", icon: Printer, permissions: ["office:printing:write"], dept: "printing" },

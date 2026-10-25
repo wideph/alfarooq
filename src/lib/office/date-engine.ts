@@ -587,3 +587,33 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     boardAttestationNumber,
   };
 }
+
+// §W32 — Set of Attestations NA ho aur case par koi attestation (maslan
+// Special Mofa, QR code ibcc, Saudi Embassy, Mofa Saudi) chuni jaye: us ki
+// scheduled date HAMESHA chunne ki tareekh ke BAAD ka pehla Pakistan working
+// day hoti hai — AI working-day engine se (firstWorkingDayAfterOffset; AI na ho
+// to holiday table / weekend fallback). Set wale cases par set ka apna date
+// engine (generateSetDates) hi chalta hai — yahan kuch nahi hota. DONE steps
+// ki date nahi badalti. AI slow ho sakta hai, is liye callers ise after() mein
+// chalate hain. Kabhi throw nahi karta; lagayi gayi date return karta hai.
+export async function scheduleNoSetAttestationDates(
+  caseId: string,
+  attestationIds: string[],
+  selectedOn: Date,
+  db: Db = prisma
+): Promise<Date | null> {
+  try {
+    if (attestationIds.length === 0) return null;
+    const item = await db.case.findUnique({ where: { id: caseId }, select: { setId: true } });
+    if (!item || item.setId) return null;
+    const date = await firstWorkingDayAfterOffset(selectedOn, 1, { country: "PK" }, db);
+    await db.caseAttestation.updateMany({
+      where: { id: { in: attestationIds }, caseId, status: { not: "DONE" } },
+      data: { scheduledDate: date },
+    });
+    return date;
+  } catch (error) {
+    console.error("[office] no-set attestation date fail", error);
+    return null;
+  }
+}

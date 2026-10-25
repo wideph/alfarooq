@@ -177,6 +177,23 @@ after). Case detail page shows the last 20 audit rows to super admin.
   (remaining accept, discount, case edit), address add, attestation completion
   and admin setting ATTESTATION_COMPLETE.
 - A courier slip upload (courier permission) in either courier stage → DELIVERED.
-- A user with BOTH printing and attestation-department permissions (not super
-  admin) may complete the attestation stage without the FINAL attestation file once
-  the case has a printing proof.
+- §W32: a user with ANY of printing / attestation-department / courier permission
+  (not super admin) may complete the attestation stage without the FINAL attestation
+  file once the case has a printing proof — a written reason is mandatory (audit log
+  + a remark to ADMIN). File uploads and step changes still need the FINAL file.
+- §W32: a case with NO Set of Attestations and no pending attestation steps goes
+  straight to ATTESTATION_COMPLETE with its first printing proof (then the courier
+  rule above). A no-set case whose attestations were chosen individually follows the
+  normal attestation flow.
+- §W32: for a case with NO Set of Attestations, every attestation chosen (at case
+  creation or added later) gets scheduledDate = first Pakistan working day AFTER the
+  selection date (AI working-day engine, holiday/weekend fallback). Set cases keep the
+  set date engine.
+
+## BR12. Remarks tab — §W32
+
+Every user sees, in the "Remarks" nav tab, all case remarks addressed to their
+targets (role target + every department write permission: FILING / PRINTING /
+ATTESTATION / COURIER; booking office = BOOKING on own-office cases; super admin =
+ADMIN), except their own, until THEY press "Done" (per user, `CaseRemarkDone`).
+Seeing a remark does not remove it.

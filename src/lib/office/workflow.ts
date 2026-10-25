@@ -250,13 +250,13 @@ const COMPLETION_GUARD_STATUSES = [
 // (b) the attestation department uploaded the mandatory final file (department=ATTESTATION,
 // stepKey=FINAL). Forward-only: never touches ATTESTATION_COMPLETE-or-later /
 // CANCELLED cases.
-// §W30: `allowWithoutFinal` — printing + attestation dono ka kaam karne wala
-// user (canCompleteAttestationWithoutFinal) printed proof ke baad FINAL
-// attestation file ke baghair bhi stage complete kar sakta hai.
+// §W32: `allowWithoutFinal` + `allowNoAttestations` sirf wajah ke saath
+// manual completion (canCompleteAttestationWithReason) ke liye — FINAL file
+// zaroori nahi, aur jis case par koi attestation step hi nahi wo bhi complete.
 export async function evaluateCaseCompletion(
   caseId: string,
   db: Prisma.TransactionClient | typeof prisma = prisma,
-  options: { allowWithoutFinal?: boolean } = {}
+  options: { allowWithoutFinal?: boolean; allowNoAttestations?: boolean } = {}
 ): Promise<boolean> {
   const item = await db.case.findUnique({
     where: { id: caseId },
@@ -273,7 +273,8 @@ export async function evaluateCaseCompletion(
         item.set!.steps.some((step) => step.label === a.attestationType.name)
       )
     : item.attestations;
-  if (relevant.length === 0 || !relevant.every((a) => a.status === "DONE")) return false;
+  if (relevant.length === 0 && !options.allowNoAttestations) return false;
+  if (!relevant.every((a) => a.status === "DONE")) return false;
 
   if (!options.allowWithoutFinal) {
     const finalFile = await db.caseFile.findFirst({
@@ -290,20 +291,23 @@ export async function evaluateCaseCompletion(
   return true;
 }
 
-// §W30 — jo user printing AUR attestation-department dono ka kaam karta hai
-// (dono write permissions), us ne printed proof upload kar diya ho (case par
-// kam az kam ek PRINTING file) to attestation stage FINAL attestation file ke
-// baghair complete kar sakta hai — printed proof hi us ka saboot hai. Super
-// admin is mein shamil NAHI (us ke paas status dropdown hai; us ka FINAL wala
-// purana rule nahi badla).
-export async function canCompleteAttestationWithoutFinal(
+// §W32 — printing, attestation-department YA courier department ka user
+// (koi bhi ek write permission) case ka printed proof upload ho jane ke baad
+// (kam az kam ek PRINTING file) attestation stage "complete — final payment
+// pending" kar sakta hai, FINAL attestation file ke baghair — magar WAJAH
+// likhna lazmi hai (complete-all route check karta hai). Super admin is mein
+// shamil NAHI (us ke paas status dropdown hai).
+export async function canCompleteAttestationWithReason(
   session: AdminSession,
   caseId: string,
   db: Prisma.TransactionClient | typeof prisma = prisma
 ): Promise<boolean> {
   if (session.role === "admin") return false;
-  if (!hasPermission(session, "office:printing:write")) return false;
-  if (!hasPermission(session, "office:attestation-dept:write")) return false;
+  const deptUser =
+    hasPermission(session, "office:printing:write") ||
+    hasPermission(session, "office:attestation-dept:write") ||
+    hasPermission(session, "office:courier:write");
+  if (!deptUser) return false;
   const printedProof = await db.caseFile.findFirst({
     where: { caseId, department: "PRINTING" },
     select: { id: true },

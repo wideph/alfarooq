@@ -240,7 +240,9 @@ async function afterUpload(
   // PRINTING → the acting printing user earned when this first printing
   // upload moved the case to PRINTED; ATTESTATION → the acting attestation
   // user earned when the case just flipped to ATTESTATION_COMPLETE.
-  const printedNow = result.nextStatus === "PRINTED" && item.status === "WAITING_FOR_PRINTING";
+  // §W32: bina set wala case printing ke saath aage (ATTESTATION_COMPLETE /
+  // courier stage) chala jata hai — commission phir bhi printing user ko.
+  const printedNow = result.printedNow;
   if (printedNow) {
     await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
   }
