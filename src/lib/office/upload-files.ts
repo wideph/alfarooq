@@ -111,7 +111,10 @@ function errorFromText(text: string, status: number) {
   return `Request fail (${status})`;
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+async function postJson<T>(
+  url: string,
+  body: unknown
+): Promise<{ ok: true; data: T } | { ok: false; error: string; status: number | null }> {
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -119,14 +122,14 @@ async function postJson<T>(url: string, body: unknown): Promise<{ ok: true; data
       body: JSON.stringify(body),
     });
     const text = await res.text().catch(() => "");
-    if (!res.ok) return { ok: false, error: errorFromText(text, res.status) };
+    if (!res.ok) return { ok: false, error: errorFromText(text, res.status), status: res.status };
     try {
       return { ok: true, data: JSON.parse(text) as T };
     } catch {
-      return { ok: false, error: "Server ka jawab samajh nahi aaya" };
+      return { ok: false, error: "Server ka jawab samajh nahi aaya", status: res.status };
     }
   } catch {
-    return { ok: false, error: "Internet / server se rabta nahi ho saka — dobara koshish karein" };
+    return { ok: false, error: "Internet / server se rabta nahi ho saka — dobara koshish karein", status: null };
   }
 }
 
@@ -139,6 +142,80 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
     }
   });
   await Promise.all(runners);
+}
+
+// §W37 — R2 bucket par CORS na ho to browser ka direct PUT nahi chalta aur
+// sirf 4 MB tak ki files server raaste se jati hain. Phone ki photos aksar is
+// se bari hoti hain: unhein browser mein hi JPEG (lambi side max 3000 px) bana
+// kar server limit ke andar laate hain. Direct upload chale to asal file hi
+// jati hai (ye sirf fallback raaste par). HEIC waghera jo browser decode na kar
+// sake → null (phir saaf error).
+const SHRINKABLE_IMAGE = /^image\/(jpeg|jpg|png|webp)$/i;
+
+async function shrinkImageForServer(file: File, maxBytes: number): Promise<File | null> {
+  if (!SHRINKABLE_IMAGE.test(file.type) || typeof createImageBitmap !== "function") return null;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    return null;
+  }
+  try {
+    for (const maxSide of [3000, 2400, 1800, 1400]) {
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) return null;
+      // PNG ki transparency JPEG mein kaali na ho.
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      for (const quality of [0.86, 0.72]) {
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+        if (blob && blob.size <= maxBytes) {
+          const base = file.name.replace(/\.[^./\\]+$/, "") || "image";
+          return new File([blob], `${base}.jpg`, { type: "image/jpeg", lastModified: file.lastModified });
+        }
+      }
+    }
+    return null;
+  } finally {
+    bitmap.close();
+  }
+}
+
+// §W37 — upload kis stage par atki (server par audit log mein jati hai).
+type UploadStage = "presign" | "put" | "register" | "server" | "too-big" | "network";
+type UploadReportItem = {
+  name: string;
+  size: number;
+  type: string;
+  stage: UploadStage;
+  status: number | null;
+  error: string;
+  recovered: boolean;
+};
+
+// Fire-and-forget: report fail ho to bhi upload ka nateeja wahi rehta hai.
+function reportUploadProblems(payload: {
+  caseId: string;
+  department: string;
+  corsReady: boolean | null;
+  items: UploadReportItem[];
+}) {
+  if (payload.items.length === 0) return;
+  try {
+    void fetch("/api/office/upload-reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    // report sirf tashkhees ke liye hai
+  }
 }
 
 type Presigned = { index: number; key: string; contentType: string; uploadUrl: string };
@@ -161,10 +238,16 @@ export async function uploadCaseFiles(options: {
     loaded: 0,
     status: "waiting",
   }));
+  const report: UploadReportItem[] = [];
+  const note = (index: number, stage: UploadStage, error: string, status: number | null, recovered = false) => {
+    const file = files[index];
+    report.push({ name: file.name, size: file.size, type: file.type, stage, status, error, recovered });
+  };
   const emit = () => onProgress?.(items.map((item) => ({ ...item })));
-  const fail = (index: number, error: string) => {
+  const fail = (index: number, error: string, stage: UploadStage, status: number | null = null) => {
     items[index].status = "error";
     items[index].error = error;
+    note(index, stage, error, status);
     emit();
   };
   const fileTitle = (index: number) => (title ? (total > 1 ? `${title} (${index + 1}/${total})` : title) : null);
@@ -179,18 +262,25 @@ export async function uploadCaseFiles(options: {
   let saved = 0;
 
   // 1) signed PUT URLs
-  const presign = await postJson<{ uploads: Presigned[] }>(`/api/office/cases/${caseId}/files/upload-url`, {
-    department,
-    files: files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
-  });
+  const presign = await postJson<{ uploads: Presigned[]; corsReady?: boolean }>(
+    `/api/office/cases/${caseId}/files/upload-url`,
+    {
+      department,
+      files: files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+    }
+  );
   if (!presign.ok) {
-    files.forEach((_, i) => fail(i, presign.error));
+    files.forEach((_, i) => fail(i, presign.error, "presign", presign.status));
+    reportUploadProblems({ caseId, department, corsReady: null, items: report });
     return { saved: 0, failed: total, status: null, failedIndexes: files.map((_, i) => i), error: presign.error };
   }
+  const corsReady = typeof presign.data.corsReady === "boolean" ? presign.data.corsReady : null;
 
   // 2) browser → R2 (parallel 3)
   const direct: Array<{ index: number; key: string }> = [];
-  const viaServer: number[] = [];
+  // Direct PUT fail (CORS / network / R2 ka inkaar) → server raasta; wajah
+  // report ke liye yaad (server raaste se bach jaye to "recovered").
+  const viaServer: Array<{ index: number; stage: UploadStage; status: number | null; error: string }> = [];
   await runPool(presign.data.uploads, PARALLEL_UPLOADS, async (upload) => {
     const index = upload.index;
     const file = files[index];
@@ -205,16 +295,19 @@ export async function uploadCaseFiles(options: {
       items[index].loaded = file.size;
       items[index].status = "saving";
       direct.push({ index, key: upload.key });
-      emit();
-    } else if (result.network) {
-      // CORS set nahi (ya rabta toota) — server raasta try hoga.
+    } else {
+      // §W37: pehle sirf network (CORS) par server raasta tha aur R2 ka 4xx/5xx
+      // seedha error tha. Ab dono par server raasta (choti ya chhoti ho sakne
+      // wali file ke liye).
       items[index].loaded = 0;
       items[index].status = "waiting";
-      viaServer.push(index);
-      emit();
-    } else {
-      fail(index, `Storage ne file qubool nahi ki (${result.status})`);
+      viaServer.push(
+        result.network
+          ? { index, stage: "network", status: null, error: "Direct R2 upload nahi chala (CORS / network)" }
+          : { index, stage: "put", status: result.status, error: `Storage ne file qubool nahi ki (${result.status})` }
+      );
     }
+    emit();
   });
 
   // 3) direct uploads ek call mein register (ek transaction, ek transition)
@@ -232,18 +325,28 @@ export async function uploadCaseFiles(options: {
       for (const { index } of direct) items[index].status = "done";
       emit();
     } else {
-      for (const { index } of direct) fail(index, register.error);
+      for (const { index } of direct) fail(index, register.error, "register", register.status);
     }
   }
 
   // 4) fallback: server raasta, ek file per request (Vercel 4.5 MB limit)
-  viaServer.sort((a, b) => a - b);
-  for (const index of viaServer) {
-    const file = files[index];
+  viaServer.sort((a, b) => a.index - b.index);
+  for (const attempt of viaServer) {
+    const { index } = attempt;
+    let file = files[index];
+    if (file.size > PROXY_MAX_BYTES) {
+      items[index].status = "uploading";
+      emit();
+      file = (await shrinkImageForServer(file, PROXY_MAX_BYTES - 64 * 1024)) ?? file;
+    }
     if (file.size > PROXY_MAX_BYTES) {
       fail(
         index,
-        `${formatFileSize(file.size)} ki file direct upload nahi ho saki — R2 bucket ki CORS setting zaroori hai (admin se rabta karein). 4 MB tak ki files chal jati hain.`
+        attempt.stage === "network"
+          ? `${formatFileSize(file.size)} ki file seedha storage par nahi ja saki — R2 bucket par CORS rule nahi laga. 4 MB tak ki files aur photos chal jati hain; bari PDF / video ke liye admin Cloudflare R2 mein CORS rule add kare.`
+          : `${formatFileSize(file.size)} ki file storage ne qubool nahi ki (${attempt.status ?? "?"}) — dobara koshish karein`,
+        "too-big",
+        attempt.status
       );
       continue;
     }
@@ -260,11 +363,12 @@ export async function uploadCaseFiles(options: {
       emit();
     });
     if (result.network) {
-      fail(index, "Internet / server se rabta nahi ho saka — dobara koshish karein");
+      fail(index, "Internet / server se rabta nahi ho saka — dobara koshish karein", "server");
     } else if (result.status >= 200 && result.status < 300) {
       saved += 1;
-      items[index].loaded = file.size;
+      items[index].loaded = items[index].size;
       items[index].status = "done";
+      note(index, attempt.stage, attempt.error, attempt.status, true);
       try {
         caseStatus = (JSON.parse(result.text) as { status?: string }).status || caseStatus;
       } catch {
@@ -272,11 +376,12 @@ export async function uploadCaseFiles(options: {
       }
       emit();
     } else {
-      fail(index, errorFromText(result.text, result.status));
+      fail(index, errorFromText(result.text, result.status), "server", result.status);
     }
   }
 
   if (saved > 0) announceOfficeChange();
+  reportUploadProblems({ caseId, department, corsReady, items: report });
 
   const failedIndexes = items.flatMap((item, i) => (item.status === "done" ? [] : [i]));
   const firstError = items.find((item) => item.status === "error")?.error || null;

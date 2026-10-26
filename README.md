@@ -111,7 +111,8 @@ design, business rules, roadmap and agent log live in `docs/office-module/`.
   ]
   ```
 
-  Without this rule, files up to 4 MB still upload through the server; bigger
+  Without this rule, files up to 4 MB (and photos, which the browser shrinks to
+  fit) still upload through the server; bigger
   files show a clear "CORS setting zaroori hai" error.
 - Expected printing date uses the bot AI configured in Admin → Settings (falls back
   to weekend-only skipping when no AI key is set); override from `/office/setup`.

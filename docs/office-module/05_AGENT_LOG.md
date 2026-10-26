@@ -1519,3 +1519,37 @@ Investigation-first (live DB audit):
   dept API list/detail 0, payments + discount 403, list mein Money / Rs
   nahi, detail tablist nahi, sections ek page par, Payments/History nahi,
   admin ke tabs + Money summary pehle jaise.
+
+## WAVE 37 (2026-10-26) — dept account par file upload error (R2 CORS fallback + tashkhees)
+
+- **Owner report**: printing / attestation / courier account par file upload
+  karne par error phir aa raha hai (pehle bhi tha).
+- **Tehqeeq (read-only)**: W36 deploy (2026-10-25 11:00Z) ke baad bhi is user
+  ki PRINTING PDF aaj 08:44Z save hui — W36 ne upload nahi toda. W26 ke baad
+  live par is user ki SIRF choti PDFs save hui hain; ek bhi image / video /
+  attestation file nahi (25 Oct ko 3 cases wajah ke saath complete). Code path
+  (presign / register / afterUpload) mein dept user ke liye koi rukawat nahi.
+  README ke mutabiq R2 token "object read/write" hai → app bucket CORS khud
+  nahi laga sakta; CORS rule na ho to browser ka direct PUT nahi chalta aur
+  sirf ≤4 MB files server raaste se jati hain — bari PDF / phone photo / video
+  fail ("CORS setting zaroori hai") = W26 se pehle wala masla. Browser ka asal
+  error kahin record nahi hota tha (sirf toast). Local `.env` mein R2 keys khali
+  — live bucket CORS seedha check nahi ho saka.
+- **Fix** (`lib/office/upload-files.ts`): (1) direct PUT ka R2 4xx/5xx bhi ab
+  server raasta try karta hai (pehle seedha error); (2) server raaste par 4 MB
+  se bari photo (jpeg/png/webp) browser mein JPEG (max 3000 px, q 0.86/0.72)
+  ban kar limit ke andar; (3) bari PDF / video par saaf paigham (CORS rule
+  admin lagaye); (4) har masle ki report `POST /api/office/upload-reports` →
+  OfficeAuditLog `case.file.upload.failed` / `case.file.upload.fallback`
+  (stage presign / put / register / server / too-big / network, HTTP status,
+  size/type, corsReady, origin, user agent). README note.
+- **Owner action (asal hal)**: Cloudflare → R2 → office bucket → Settings →
+  CORS policy mein site origin (README JSON) — phir bari PDF / video bhi
+  seedha jati hain.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser (local, R2 block / 403
+  simulate; register + report intercept, koi DB write nahi) 20/20: choti PDF
+  CORS ke baghair server raaste (report network+recovered), 6.4 MB photo →
+  3.84 MB JPEG server raaste, 6 MB PDF → CORS paigham + report too-big, R2 403
+  → server raaste bach gayi, upload-reports 200 / 400 / 401.
+- **Next step**: deploy ke baad agla fail upload audit log mein dekh kar asal
+  stage tay karein (`case.file.upload.failed`).
