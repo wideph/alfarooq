@@ -1553,3 +1553,36 @@ Investigation-first (live DB audit):
   → server raaste bach gayi, upload-reports 200 / 400 / 401.
 - **Next step**: deploy ke baad agla fail upload audit log mein dekh kar asal
   stage tay karein (`case.file.upload.failed`).
+
+## WAVE 38 (2026-10-26) — "Application error" crash: Chrome auto-translate band (admin + office)
+
+- **Owner report**: screenshot — `/office/cases?dept=printing` par "Application
+  error: a client-side exception has occurred" (upload ke dauraan; W26 ka
+  "page corrupt" bhi yahi lagta hai).
+- **Root cause (reproduced)**: root layout `<html lang="ur">` jab ke admin ka
+  text Roman Urdu / English (Latin) hai → Chrome page ko Urdu samajh kar
+  tarjuma karta hai (owner ke address bar mein translate icon). Google
+  Translate har text node ko `<font><font>…</font></font>` se badal deta hai;
+  React jab wahi text badalta hai (upload modal mein file chunna, progress,
+  live refresh) → `NotFoundError: Failed to execute 'insertBefore' on 'Node'`
+  → poora page "Application error". Headless Chrome mein GT jaisa DOM badlaav
+  kar ke printing modal mein file chunte hi bilkul yahi crash aaya. Bina
+  tarjuma ke saari queues / modal upload / live refresh theek (koi crash nahi).
+- **Fix**: `src/app/admin/layout.tsx` + `src/app/office/layout.tsx` (naye
+  segment layouts) — metadata `<meta name="google" content="notranslate">`
+  (SSR) + `components/NoTranslate` (wrapper `translate="no"` + `notranslate`,
+  aur jab tak admin / office page khula ho `<html translate="no">`; public
+  page par jaate hi wapas — website par koi asar nahi). `admin/error.tsx` +
+  `office/error.tsx` → `components/SegmentError`: khali "Application error"
+  ki bajaye "Page mein masla aa gaya" + "Dobara load karein"; naye deploy ka
+  ChunkLoadError ho to ek dafa khud reload (30s guard); crash ki tafseel
+  `POST /api/office/client-errors` → audit `client.error` (name, message,
+  path, translated, user agent).
+- **Verify**: tsc 0, lint 0, build exit 0. Browser 11/11: office + admin
+  login SSR par notranslate meta + wrapper, public home par nahi, html
+  translate=no office par / public par hata; zabardasti tarjuma + modal file
+  select → SegmentError (Application error nahi) + report translated=true
+  NotFoundError; client-errors 200 / 401. Regression W36 20/20, W33 ALL PASS.
+- **Next step**: owner ke Chrome mein is site ke liye "Always translate"
+  laga ho to ek dafa page reload (purana tarjuma hat jaye). Aage crash ho to
+  audit log `client.error` dekhein.

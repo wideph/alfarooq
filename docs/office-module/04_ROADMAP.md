@@ -82,3 +82,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W35 Cases queues: har status/dept queue par count (final payment pending, address, delivery, delivered, musadiqa…); super admin unread (navbar Cases count, Read / Read all, queue badle to phir unread).
 - [x] W36 Dept worker (printing/attestation/courier): koi raqam nahi (API + UI), Payments/History tabs nahi, case detail ek hi page par sections.
 - [x] W37 Dept upload error: R2 403/CORS par server raasta, bari photo browser mein chhoti, bari PDF/video par saaf CORS paigham, upload masle audit log mein (upload-reports).
+- [x] W38 "Application error" crash: admin/office par Chrome auto-translate band (notranslate meta + translate="no"), crash par "Dobara load karein" page + client.error audit, stale deploy chunk par ek dafa auto reload.
