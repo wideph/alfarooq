@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { round2 } from "@/lib/office/money";
 import { todayPakistan } from "@/lib/office/serializers";
 import { syncProfitShare } from "@/lib/office/profit-share";
+import { CASE_STATUS_ORDER } from "@/lib/office/workflow";
 
 // ---------------------------------------------------------------------------
 // F4 — Department commission engine.
@@ -143,6 +144,7 @@ export async function creditDeptCommission(
         bookingOfficeId: true,
         categoryId: true,
         setId: true,
+        deptCommissionRounds: true,
         category: { select: { name: true } },
       },
     });
@@ -152,17 +154,15 @@ export async function creditDeptCommission(
     const amount = raw ? round2(raw) : null;
     if (!amount || amount.lessThanOrEqualTo(0)) return null;
 
+    // §W44: ek case ke ek kaam ka commission ek hi dafa (koi bhi user ho) —
+    // sirf jab admin ne status peeche kar ke "dobara dein" kaha ho to us ki
+    // ijazat ki dafaat tak (deptCommissionRounds). Pehle check per-user tha:
+    // doosra user wahi kaam karta to bina poochhe doosra commission ban jata.
     const prefix = deptCommissionRemarksPrefix(input.kind, item.id);
-    const existing = await db.ledgerEntry.findFirst({
-      where: {
-        type: DEPT_COMMISSION_TYPE,
-        caseId: item.id,
-        adminId: input.adminId,
-        remarks: { startsWith: prefix },
-      },
-      select: { id: true },
+    const credited = await db.ledgerEntry.count({
+      where: { type: DEPT_COMMISSION_TYPE, caseId: item.id, remarks: { startsWith: prefix } },
     });
-    if (existing) return null;
+    if (credited >= allowedDeptCommissionRounds(item.deptCommissionRounds, input.kind)) return null;
 
     const created = await db.ledgerEntry.create({
       data: {
@@ -175,7 +175,7 @@ export async function creditDeptCommission(
         amount,
         entryDate: todayPakistan(),
         method: null,
-        remarks: `${prefix} ${item.caseNumber} — ${item.category?.name ?? ""}`.trim(),
+        remarks: `${prefix}${credited > 0 ? ` (dobara #${credited + 1})` : ""} ${item.caseNumber} — ${item.category?.name ?? ""}`.trim(),
         createdById: input.adminId,
       },
     });
@@ -209,4 +209,57 @@ export async function removeDeptCommission(
   await prisma.ledgerEntry.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
   await syncProfitShare(input.caseId, input.actorId);
   return rows.map((row) => ({ ...row, amount: Number(row.amount) }));
+}
+
+// §W44 — admin status peeche kare (printed / attested / delivered case ko
+// pehle ke stage par) aur kaam dobara ho: department ko commission DOBARA
+// dena hai ya nahi — har dafa admin se poochha jata hai. `deptCommissionRounds`
+// ({ PRINTING: 2 }) = kitni dafa commission ban sakta hai; null / kind na ho = 1.
+// Partner (PROFIT_SHARE) office mein har commission case pool se minus hota hai
+// (syncProfitShare) — doosra commission bhi shareholders ke hisse se katta hai.
+export const DEPT_KIND_DONE_STATUS: Record<DeptCommissionKind, string> = {
+  PRINTING: "PRINTED",
+  ATTESTATION: "ATTESTATION_COMPLETE",
+  COURIER: "DELIVERED",
+};
+
+export const DEPT_KIND_LABELS: Record<DeptCommissionKind, string> = {
+  PRINTING: "Printing",
+  ATTESTATION: "Attestation",
+  COURIER: "Courier",
+};
+
+export function allowedDeptCommissionRounds(rounds: unknown, kind: DeptCommissionKind): number {
+  const value = rounds && typeof rounds === "object" ? Number((rounds as Record<string, unknown>)[kind]) : NaN;
+  return Number.isInteger(value) && value >= 1 ? value : 1;
+}
+
+// Status `from` → `to` se kaun se kaam "wapas" ho rahe hain (to us kaam ke
+// mukammal status se pehle; CANCELLED kaam wapas nahi).
+export function undoneDeptKinds(from: string, to: string): DeptCommissionKind[] {
+  const fromOrder = CASE_STATUS_ORDER[from] ?? 0;
+  const toOrder = CASE_STATUS_ORDER[to] ?? 0;
+  if (toOrder === 0) return [];
+  return DEPT_COMMISSION_KINDS.filter((kind) => {
+    const done = CASE_STATUS_ORDER[DEPT_KIND_DONE_STATUS[kind]];
+    return fromOrder >= done && toOrder < done;
+  });
+}
+
+// Is case par kis kaam ka kitna commission (kitni dafa, kis ko) ban chuka.
+export async function caseDeptCommissionCredits(caseId: string, db: Db = prisma) {
+  const rows = await db.ledgerEntry.findMany({
+    where: { type: DEPT_COMMISSION_TYPE, caseId, direction: "CREDIT" },
+    select: { amount: true, remarks: true, admin: { select: { name: true } } },
+  });
+  const result: Partial<Record<DeptCommissionKind, { count: number; amount: number; names: string[] }>> = {};
+  for (const row of rows) {
+    const kind = parseDeptCommissionKind(row.remarks);
+    if (!kind) continue;
+    const entry = (result[kind] ??= { count: 0, amount: 0, names: [] });
+    entry.count += 1;
+    entry.amount += Number(row.amount);
+    if (row.admin?.name && !entry.names.includes(row.admin.name)) entry.names.push(row.admin.name);
+  }
+  return result;
 }

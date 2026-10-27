@@ -119,3 +119,14 @@ export const DEPT_COMMISSION_KIND_STYLES: Record<string, string> = {
   ATTESTATION: "bg-amber-100 text-amber-700",
   COURIER: "bg-teal-100 text-teal-700",
 };
+
+// §W44 — admin custom label ke rang (case page + list par saaf nazar aane wale).
+export const CUSTOM_LABEL_STYLES: Record<string, string> = {
+  red: "bg-red-600 text-white",
+  amber: "bg-amber-400 text-amber-950",
+  emerald: "bg-emerald-600 text-white",
+  sky: "bg-sky-600 text-white",
+  violet: "bg-violet-600 text-white",
+  slate: "bg-slate-700 text-white",
+};
+export const CUSTOM_LABEL_COLORS = Object.keys(CUSTOM_LABEL_STYLES);

@@ -4,7 +4,13 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { notifyCourierStage, notifyRole, notifyUsers } from "@/lib/office/notifications";
-import { CASE_STATUSES, type CaseStatus } from "@/lib/office/permissions";
+import { CASE_STATUSES, PRE_PRINTING_STATUSES, type CaseStatus } from "@/lib/office/permissions";
+import {
+  caseDeptCommissionCredits,
+  DEPT_KIND_LABELS,
+  undoneDeptKinds,
+  type DeptCommissionKind,
+} from "@/lib/office/dept-commission";
 import { STATUS_LABELS } from "@/lib/office/labels";
 import { cleanText } from "@/lib/office/serializers";
 import { advanceCourierStage, applyAttestationJump, applyStatusSideEffects } from "@/lib/office/workflow";
@@ -42,7 +48,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const item = await findAccessibleCase(session, id);
     if (!item) return notFound("Case nahi mila");
     const body = await request.json();
-    const data: { status?: string; isPrinted?: boolean; printedAt?: Date | null } = {};
+    const data: {
+      status?: string;
+      isPrinted?: boolean;
+      printedAt?: Date | null;
+      deptCommissionRounds?: Record<string, number>;
+    } = {};
+    let recreditDecisions: Partial<Record<DeptCommissionKind, boolean>> | null = null;
     let adminNote: string | null = null;
     let jumpAttestationId: string | null = null;
 
@@ -85,6 +97,56 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data.isPrinted = true;
         data.printedAt = new Date();
       }
+      // §W44: printing se pehle ke stage par wapas → case ab printed nahi.
+      if (PRE_PRINTING_STATUSES.includes(status) && item.isPrinted) {
+        data.isPrinted = false;
+        data.printedAt = null;
+      }
+
+      // §W44: status peeche (printed / attested / delivered kaam dobara) aur
+      // us kaam ka department commission pehle ban chuka → department ko
+      // commission DOBARA dena hai ya nahi, admin se HAR DAFA faisla. Faisla
+      // na ho to 409 + needsRecreditDecision (UI poochhti hai, phir dobara
+      // bhejti hai). "Haan" → agle asal kaam par ek aur commission (partner
+      // office mein shareholders ke hisse se bhi katta hai); "Nahi" → nahi.
+      if (status !== item.status) {
+        const undone = undoneDeptKinds(item.status, status);
+        if (undone.length > 0) {
+          const credits = await caseDeptCommissionCredits(id);
+          const pendingKinds = undone.filter((kind) => (credits[kind]?.count ?? 0) > 0);
+          if (pendingKinds.length > 0) {
+            const decision = (body.recredit ?? {}) as Record<string, unknown>;
+            const missing = pendingKinds.filter((kind) => typeof decision[kind] !== "boolean");
+            if (missing.length > 0) {
+              return NextResponse.json(
+                {
+                  error: "Department commission ka faisla zaroori hai",
+                  needsRecreditDecision: missing.map((kind) => ({
+                    kind,
+                    label: DEPT_KIND_LABELS[kind],
+                    count: credits[kind]?.count ?? 0,
+                    amount: credits[kind]?.amount ?? 0,
+                    names: credits[kind]?.names ?? [],
+                  })),
+                },
+                { status: 409 }
+              );
+            }
+            const rounds: Record<string, number> = {
+              ...((item.deptCommissionRounds && typeof item.deptCommissionRounds === "object"
+                ? item.deptCommissionRounds
+                : {}) as Record<string, number>),
+            };
+            recreditDecisions = {};
+            for (const kind of pendingKinds) {
+              const again = decision[kind] === true;
+              rounds[kind] = (credits[kind]?.count ?? 0) + (again ? 1 : 0);
+              recreditDecisions[kind] = again;
+            }
+            data.deptCommissionRounds = rounds;
+          }
+        }
+      }
     }
 
     if (Object.keys(data).length === 0) return badRequest("Kuch change nahi kiya");
@@ -93,10 +155,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       async (tx) => {
         // ATTESTATION jump: steps realign + currentAttestationId + status.
         if (jumpAttestationId) {
-          if (data.isPrinted !== undefined) {
+          if (data.isPrinted !== undefined || data.deptCommissionRounds) {
             await tx.case.update({
               where: { id },
-              data: { isPrinted: data.isPrinted, printedAt: data.printedAt },
+              data: {
+                ...(data.isPrinted !== undefined ? { isPrinted: data.isPrinted, printedAt: data.printedAt } : {}),
+                ...(data.deptCommissionRounds ? { deptCommissionRounds: data.deptCommissionRounds } : {}),
+              },
             });
           }
           return applyAttestationJump(tx, id, jumpAttestationId);
@@ -133,6 +198,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             ...data,
             ...(jumpResult ? { attestation: jumpResult.name } : {}),
             ...(adminNote ? { note: adminNote } : {}),
+            ...(recreditDecisions ? { commissionDobara: recreditDecisions } : {}),
           },
         }),
       ];

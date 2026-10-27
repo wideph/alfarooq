@@ -183,6 +183,8 @@ type FilingCaseRow = {
   clientPictureType: string | null;
   // W21: S's new Case scalar — optional here so older include shapes still compile.
   onlineVerificationNumber?: string | null;
+  customLabel?: string | null;
+  customLabelColor?: string | null;
   category?: { name: string } | null;
   set?: { name: string } | null;
   // W21: cases list rows carry a filtered FILING files count; when present the
@@ -202,6 +204,8 @@ export async function serializeFilingCase(item: FilingCaseRow) {
     status: item.status,
     setName: item.set?.name ?? null,
     onlineVerificationNumber: item.onlineVerificationNumber ?? null,
+    customLabel: item.customLabel ?? null,
+    customLabelColor: item.customLabelColor ?? null,
     ...(item._count
       ? { filingFilesCount: item._count.files, filingDone: item._count.files > 0 }
       : {}),

@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, ScanBarcode, Tag } from "lucide-react";
+import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, ScanBarcode, Tag, Tags } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
-import { caseStatusLabel, STATUS_STYLES } from "@/lib/office/labels";
+import { caseStatusLabel, CUSTOM_LABEL_COLORS, CUSTOM_LABEL_STYLES, STATUS_STYLES } from "@/lib/office/labels";
+import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import { BOOKING_OFFICE_TYPE_LABELS } from "@/lib/office/permissions";
 import type { CaseDetail } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -36,6 +37,31 @@ export default function CaseCommandBar({
   const canLedgerWrite = adminCanAny(admin, ["office:ledger:write"]);
   const [popup, setPopup] = useState(false);
   const [busy, setBusy] = useState(false);
+  // §W44: admin ka custom label editor.
+  const [labelOpen, setLabelOpen] = useState(false);
+  const [labelDraft, setLabelDraft] = useState({ text: "", color: "amber" });
+  const [labelBusy, setLabelBusy] = useState(false);
+
+  function openLabelEditor() {
+    setLabelDraft({ text: detail.customLabel || "", color: detail.customLabelColor || "amber" });
+    setLabelOpen(true);
+  }
+
+  async function saveLabel(remove = false) {
+    setLabelBusy(true);
+    const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}`, {
+      method: "PATCH",
+      json: remove
+        ? { customLabel: "", customLabelColor: "" }
+        : { customLabel: labelDraft.text.trim(), customLabelColor: labelDraft.color },
+    });
+    setLabelBusy(false);
+    if (res.ok) {
+      onUpdated(res.data);
+      onMessage(remove || !labelDraft.text.trim() ? "Label hata diya" : "Label lag gaya");
+      setLabelOpen(false);
+    } else onMessage(res.error, "error");
+  }
 
   // §N7: Urgent badge toggle (booking office / admin).
   async function toggleUrgent() {
@@ -78,6 +104,7 @@ export default function CaseCommandBar({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{detail.caseNumber}</span>
+            <CustomLabelChip label={detail.customLabel} color={detail.customLabelColor} size="md" />
             {detail.isUrgent && (
               <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
                 <Flame className="h-3 w-3" /> URGENT
@@ -159,6 +186,67 @@ export default function CaseCommandBar({
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flame className="h-4 w-4" />}
               {detail.isUrgent ? "Urgent hatayein" : "Urgent karein"}
             </button>
+          )}
+          {admin.role === "admin" && (
+            <span className="relative">
+              <button
+                type="button"
+                onClick={() => (labelOpen ? setLabelOpen(false) : openLabelEditor())}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-primary-300"
+              >
+                <Tags className="h-4 w-4" /> {detail.customLabel ? "Label badlein" : "Label lagayein"}
+              </button>
+              {labelOpen && (
+                <div className="absolute right-0 top-full z-40 mt-2 w-72 space-y-2.5 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <input
+                    autoFocus
+                    maxLength={40}
+                    value={labelDraft.text}
+                    onChange={(e) => setLabelDraft({ ...labelDraft, text: e.target.value })}
+                    placeholder="Label (maslan: VIP, Dobara check)"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {CUSTOM_LABEL_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        aria-label={`Rang ${color}`}
+                        onClick={() => setLabelDraft({ ...labelDraft, color })}
+                        className={`h-7 w-7 rounded-full ${CUSTOM_LABEL_STYLES[color]} ${
+                          labelDraft.color === color ? "ring-2 ring-offset-2 ring-slate-900" : ""
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  {labelDraft.text.trim() && (
+                    <CustomLabelChip label={labelDraft.text.trim()} color={labelDraft.color} size="md" />
+                  )}
+                  <div className="flex justify-between gap-2">
+                    {detail.customLabel ? (
+                      <button
+                        type="button"
+                        disabled={labelBusy}
+                        onClick={() => void saveLabel(true)}
+                        className="rounded-xl px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Label hatayein
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                    <button
+                      type="button"
+                      disabled={labelBusy || !labelDraft.text.trim()}
+                      onClick={() => void saveLabel()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {labelBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </span>
           )}
           {admin.role === "admin" && (
             <>

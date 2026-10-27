@@ -8,6 +8,7 @@ import OfficePageFrame from "@/components/office/OfficePageFrame";
 import CaseStatusSelect from "@/components/office/case/CaseStatusSelect";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import DeptQueue, { type DeptQueueKey, type DeptQueueRow } from "@/components/office/case/DeptQueue";
+import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
@@ -339,6 +340,7 @@ function CasesList() {
         <div className="flex flex-wrap items-center gap-1.5">
           {item.unread && <span title="Unread" className="inline-block h-2.5 w-2.5 rounded-full bg-primary-600" />}
           <span className="font-semibold text-primary-700">{item.caseNumber}</span>
+          <CustomLabelChip label={item.customLabel} color={item.customLabelColor} />
           {item.isUrgent && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
               <Flame className="w-3 h-3" /> URGENT

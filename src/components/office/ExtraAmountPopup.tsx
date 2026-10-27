@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { ExternalLink, Loader2, X } from "lucide-react";
 import { formatMoney } from "@/lib/office/client";
+import { caseDetailHref } from "@/lib/office/case-nav";
 
 // BR3.6 — shown when a fixed-commission case received more than agreed and the
 // booking office's share of the extra has not been decided yet.
@@ -11,11 +12,15 @@ export default function ExtraAmountPopup({
   extra,
   onSubmit,
   onClose,
+  caseId,
 }: {
   caseNumber: string;
   extra: number;
   onSubmit: (percent: number) => Promise<void>;
   onClose: () => void;
+  // §W44: diya ho to "Case detail" button — case page NAYE tab mein (popup
+  // aur payments list waisi hi rehti hai, faisla wahin wapas aa kar).
+  caseId?: string;
 }) {
   const [custom, setCustom] = useState("");
   const [saving, setSaving] = useState(false);
@@ -72,6 +77,16 @@ export default function ExtraAmountPopup({
             </button>
           </div>
           <p className="text-xs text-slate-400">Baad mein case page se % badla ja sakta hai; ledger khud adjust hoga.</p>
+          {caseId && (
+            <a
+              href={caseDetailHref(caseId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
+            >
+              <ExternalLink className="h-4 w-4" /> Case detail (naya tab)
+            </a>
+          )}
         </div>
       </div>
     </div>

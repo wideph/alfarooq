@@ -28,7 +28,7 @@ async function rawFetch(url: string, init: RequestInit): Promise<RawResult> {
 export async function officeFetch<T>(
   url: string,
   init?: RequestInit & { json?: unknown }
-): Promise<{ ok: true; data: T } | { ok: false; error: string; status: number }> {
+): Promise<{ ok: true; data: T } | { ok: false; error: string; status: number; data?: unknown }> {
   const { json, ...rest } = init || {};
   const method = (rest.method || (json !== undefined ? "POST" : "GET")).toUpperCase();
   const requestInit: RequestInit = {
@@ -59,7 +59,12 @@ export async function officeFetch<T>(
   }
   if (!raw.ok) {
     const error = (data as { error?: unknown } | null)?.error;
-    return { ok: false, error: typeof error === "string" && error ? error : `Request fail (${raw.status})`, status: raw.status };
+    return {
+      ok: false,
+      error: typeof error === "string" && error ? error : `Request fail (${raw.status})`,
+      status: raw.status,
+      data,
+    };
   }
   // §W11.5: successful non-GET mutation ke baad baqi live-refresh listeners
   // ko signal (300ms debounce ke saath refresh hota hai).

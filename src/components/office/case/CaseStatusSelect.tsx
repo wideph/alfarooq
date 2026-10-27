@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, Loader2, X } from "lucide-react";
-import { officeFetch } from "@/lib/office/client";
+import { formatMoney, officeFetch } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import { CASE_STATUSES } from "@/lib/office/permissions";
 import { useToast } from "@/hooks/useToast";
@@ -15,6 +15,10 @@ import { useToast } from "@/hooks/useToast";
 // Sirf admin ke liye render hota hai (caller decide karta hai).
 
 type AttestationOption = { id: string; attestationType: { name: string } };
+
+// §W44: status peeche karne par server poochhta hai — department commission
+// dobara dena hai ya nahi (har kaam ke liye alag).
+type RecreditQuestion = { kind: string; label: string; count: number; amount: number; names: string[] };
 
 // 12 fixed statuses (CANCELLED alag, aakhir mein).
 const FLOW_STATUSES = CASE_STATUSES.filter((s) => s !== "CANCELLED");
@@ -38,6 +42,8 @@ export default function CaseStatusSelect({
   const [pending, setPending] = useState<{ status: string; attestationId: string | null; label: string } | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [questions, setQuestions] = useState<RecreditQuestion[] | null>(null);
+  const [answers, setAnswers] = useState<Record<string, boolean>>({});
 
   // Current select value: ATTESTATION ho to specific attestation option.
   const value = useMemo(() => {
@@ -61,6 +67,14 @@ export default function CaseStatusSelect({
       setPending({ status: raw, attestationId: null, label: caseStatusLabel(raw) });
     }
     setNote("");
+    setQuestions(null);
+    setAnswers({});
+  }
+
+  function closeModal() {
+    setPending(null);
+    setQuestions(null);
+    setAnswers({});
   }
 
   async function confirmChange() {
@@ -73,18 +87,27 @@ export default function CaseStatusSelect({
         status: pending.status,
         note: note.trim(),
         ...(pending.attestationId ? { attestationId: pending.attestationId } : {}),
+        ...(questions ? { recredit: answers } : {}),
       },
     });
     setBusy(false);
     if (res.ok) {
       showToast(`Status update ho gaya: ${pending.label}`, "success");
-      setPending(null);
+      closeModal();
       setNote("");
       onChanged();
-    } else {
-      showToast(res.error, "error");
+      return;
     }
+    // §W44: commission ka faisla chahiye — isi modal mein sawal dikhao.
+    const asked = (res.data as { needsRecreditDecision?: RecreditQuestion[] } | undefined)?.needsRecreditDecision;
+    if (res.status === 409 && Array.isArray(asked) && asked.length > 0) {
+      setQuestions(asked);
+      return;
+    }
+    showToast(res.error, "error");
   }
+
+  const answeredAll = !questions || questions.every((question) => typeof answers[question.kind] === "boolean");
 
   const sizeClasses =
     size === "md"
@@ -127,7 +150,7 @@ export default function CaseStatusSelect({
       {pending && (
         <div
           className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/40 p-4"
-          onClick={() => !busy && setPending(null)}
+          onClick={() => !busy && closeModal()}
         >
           <div
             className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-4 shadow-xl"
@@ -142,7 +165,7 @@ export default function CaseStatusSelect({
               </div>
               <button
                 type="button"
-                onClick={() => setPending(null)}
+                onClick={closeModal}
                 aria-label="Band karein"
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
@@ -160,18 +183,63 @@ export default function CaseStatusSelect({
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
+            {questions && (
+              <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-bold text-amber-800">
+                  Ye kaam pehle ho chuka hai aur us ka commission department ko mil chuka hai. Kaam dobara hone par
+                  commission dobara dena hai?
+                </p>
+                {questions.map((question) => (
+                  <div key={question.kind} className="space-y-1.5 rounded-lg bg-white p-2.5 text-xs">
+                    <p className="text-slate-700">
+                      <span className="font-bold">{question.label}</span> commission —{" "}
+                      {formatMoney(question.amount)}
+                      {question.names.length ? ` (${question.names.join(", ")})` : ""}
+                      {question.count > 1 ? ` · ${question.count} dafa` : ""}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAnswers({ ...answers, [question.kind]: true })}
+                        className={`flex-1 rounded-lg px-3 py-1.5 font-semibold ${
+                          answers[question.kind] === true
+                            ? "bg-emerald-600 text-white"
+                            : "border border-slate-200 text-slate-600 hover:border-emerald-300"
+                        }`}
+                      >
+                        Haan, dobara dein
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAnswers({ ...answers, [question.kind]: false })}
+                        className={`flex-1 rounded-lg px-3 py-1.5 font-semibold ${
+                          answers[question.kind] === false
+                            ? "bg-slate-700 text-white"
+                            : "border border-slate-200 text-slate-600 hover:border-slate-400"
+                        }`}
+                      >
+                        Nahi
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[11px] text-amber-700">
+                  Partner office ka case ho to dobara commission shareholders ke hisse se bhi katta hai.
+                </p>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setPending(null)}
+                onClick={closeModal}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || !answeredAll}
                 onClick={confirmChange}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >

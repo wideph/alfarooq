@@ -144,29 +144,28 @@ export async function registerCaseFiles(params: {
           nextStatus = "WAITING_FOR_PRINTING";
         }
       } else if (department === "PRINTING" && item.status === "WAITING_FOR_PRINTING") {
-        const earlier = await tx.caseFile.count({
-          where: { caseId, department: "PRINTING", id: { notIn: createdIds } },
+        // §W44: case WAITING_FOR_PRINTING par hai to printing proof = printed,
+        // chahe purani printing files hon (admin ne status wapas kar ke dobara
+        // printing karwai). Commission dobara sirf admin ki ijazat par
+        // (creditDeptCommission → deptCommissionRounds).
+        caseData.status = "PRINTED";
+        caseData.isPrinted = true;
+        caseData.printedAt = new Date();
+        nextStatus = "PRINTED";
+        printedNow = true;
+        // §W32: Set of Attestations chuna hi nahi gaya aur koi baqi
+        // attestation step bhi nahi → attestation ka koi kaam nahi; printed
+        // proof ke saath hi "attestation complete — final payment pending".
+        // (Alag se chuni hui attestations hon to normal attestation flow.)
+        const info = await tx.case.findUnique({
+          where: { id: caseId },
+          select: { setId: true, _count: { select: { attestations: { where: { status: { not: "DONE" } } } } } },
         });
-        if (earlier === 0) {
-          caseData.status = "PRINTED";
-          caseData.isPrinted = true;
-          caseData.printedAt = new Date();
-          nextStatus = "PRINTED";
-          printedNow = true;
-          // §W32: Set of Attestations chuna hi nahi gaya aur koi baqi
-          // attestation step bhi nahi → attestation ka koi kaam nahi; printed
-          // proof ke saath hi "attestation complete — final payment pending".
-          // (Alag se chuni hui attestations hon to normal attestation flow.)
-          const info = await tx.case.findUnique({
-            where: { id: caseId },
-            select: { setId: true, _count: { select: { attestations: { where: { status: { not: "DONE" } } } } } },
-          });
-          if (info && !info.setId && info._count.attestations === 0) {
-            caseData.status = "ATTESTATION_COMPLETE";
-            caseData.currentAttestationId = null;
-            nextStatus = "ATTESTATION_COMPLETE";
-            noSetAutoComplete = true;
-          }
+        if (info && !info.setId && info._count.attestations === 0) {
+          caseData.status = "ATTESTATION_COMPLETE";
+          caseData.currentAttestationId = null;
+          nextStatus = "ATTESTATION_COMPLETE";
+          noSetAutoComplete = true;
         }
       } else if (department === "COURIER") {
         // §W11.1: courier slip sirf tab DELIVERED karta hai jab case courier

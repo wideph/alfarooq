@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, Loader2, Save } from "lucide-react";
+import { Check, ExternalLink, FileSearch, Loader2, Save } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
@@ -75,6 +75,21 @@ export default function OfficePaymentsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [popup, setPopup] = useState<{ caseId: string; caseNumber: string; extra: number } | null>(null);
 
+  // §W44: tab URL mein (?tab=all) — case detail se "back" par wapsi usi tab
+  // par (case link ka from yahi jagah). Static page hai, is liye
+  // useSearchParams ki bajaye window.location (Suspense ki zaroorat nahi).
+  const [tabReady, setTabReady] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "all") setTab("ALL");
+    setTabReady(true);
+  }, []);
+  useEffect(() => {
+    if (!tabReady) return;
+    const url = tab === "ALL" ? "/office/payments?tab=all" : "/office/payments";
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
+  }, [tab, tabReady]);
+  const fromHere = tab === "ALL" ? "/office/payments?tab=all" : "/office/payments";
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     const res = await officeFetch<{ items: PaymentRow[] }>(
@@ -85,8 +100,8 @@ export default function OfficePaymentsPage() {
   }, [tab]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (tabReady) void load();
+  }, [load, tabReady]);
 
   // §W11.5: payments list live (silent background refresh, spinner flash nahi).
   // §W20 (P2): promise return → hook in-flight dedup kar sakta hai.
@@ -162,7 +177,7 @@ export default function OfficePaymentsPage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1.5">
                           <div>
-                            <Link href={caseDetailHref(p.case.id, "/office/payments")} className="font-semibold text-primary-700 hover:underline">
+                            <Link href={caseDetailHref(p.case.id, fromHere)} className="font-semibold text-primary-700 hover:underline">
                               {p.case.caseNumber}
                             </Link>
                             <span className="ml-2 text-xs text-slate-500">{p.case.bookingOffice.name}</span>
@@ -219,6 +234,13 @@ export default function OfficePaymentsPage() {
                           ) : (
                             <span className="text-xs text-slate-400">No slip</span>
                           )}
+                          {/* §W44: case ka poora detail — wapsi isi list / tab par. */}
+                          <Link
+                            href={caseDetailHref(p.case.id, fromHere)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-100"
+                          >
+                            <FileSearch className="w-3.5 h-3.5" /> Case detail
+                          </Link>
                         </div>
                       </div>
 
@@ -283,7 +305,13 @@ export default function OfficePaymentsPage() {
             </div>
 
             {popup && (
-              <ExtraAmountPopup caseNumber={popup.caseNumber} extra={popup.extra} onSubmit={decideExtra} onClose={() => setPopup(null)} />
+              <ExtraAmountPopup
+                caseNumber={popup.caseNumber}
+                extra={popup.extra}
+                caseId={popup.caseId}
+                onSubmit={decideExtra}
+                onClose={() => setPopup(null)}
+              />
             )}
           </div>
         );

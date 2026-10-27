@@ -10,6 +10,7 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
 import { cleanText } from "@/lib/office/serializers";
+import { CUSTOM_LABEL_COLORS } from "@/lib/office/labels";
 import { getOfficeCategories } from "@/lib/office/setup-cache";
 import { advanceCourierStage, parseCaseInput } from "@/lib/office/workflow";
 import { notifyCourierStage } from "@/lib/office/notifications";
@@ -71,6 +72,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       data.onlineVerificationNumber = cleanText(body.onlineVerificationNumber, 120);
     }
     if (body.isUrgent !== undefined) data.isUrgent = Boolean(body.isUrgent);
+    // §W44: admin ka custom label (khali = hata dein).
+    if (body.customLabel !== undefined || body.customLabelColor !== undefined) {
+      if (session.role !== "admin") return forbidden("Label sirf super admin laga sakta hai");
+      if (body.customLabel !== undefined) data.customLabel = cleanText(body.customLabel, 40) || null;
+      if (body.customLabelColor !== undefined) {
+        const color = typeof body.customLabelColor === "string" ? body.customLabelColor : "";
+        data.customLabelColor = CUSTOM_LABEL_COLORS.includes(color) ? color : null;
+      }
+    }
 
     // §W11.6: filing-files visibility for booking office users — admin-only.
     if (body.filingFilesVisibleToBooking !== undefined) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSearch, Wallet } from "lucide-react";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { caseDetailHref } from "@/lib/office/case-nav";
@@ -98,6 +98,13 @@ export default function PaymentsReceived() {
                     {p.case.bookingOffice?.name || "—"}
                     {p.submittedByName ? ` · submit: ${p.submittedByName}` : ""}
                   </p>
+                  {/* §W44: case detail — wapsi isi Finance page par. */}
+                  <Link
+                    href={caseDetailHref(p.case.id, pathname)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700"
+                  >
+                    <FileSearch className="h-3.5 w-3.5" /> Case detail
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -112,6 +119,7 @@ export default function PaymentsReceived() {
                   <th className="px-3 py-2">Client</th>
                   <th className="px-3 py-2">Office</th>
                   <th className="px-3 py-2">Submitted by</th>
+                  <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -130,6 +138,14 @@ export default function PaymentsReceived() {
                     <td className="px-3 py-2">{p.case.clientName}</td>
                     <td className="px-3 py-2">{p.case.bookingOffice?.name || "—"}</td>
                     <td className="px-3 py-2 text-slate-500">{p.submittedByName || "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Link
+                        href={caseDetailHref(p.case.id, pathname)}
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-100"
+                      >
+                        <FileSearch className="h-3.5 w-3.5" /> Case detail
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

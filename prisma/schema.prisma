@@ -366,6 +366,13 @@ model Case {
   boardAttestationNumber   String?
   // Wave 21: board/case online verification tracking number (manual entry).
   onlineVerificationNumber String?
+  // §W44: admin ka custom label (case page + cases list par nazar aata hai).
+  customLabel              String?
+  customLabelColor         String?
+  // §W44: department commission kitni dafa dena hai per kind
+  // ({ PRINTING: 2, ... }); null / kind na ho = 1. Admin status peeche kare
+  // (kaam dobara) to har dafa poochta hai — "Haan" par +1.
+  deptCommissionRounds     Json?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt

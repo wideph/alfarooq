@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
+import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import { caseDetailHref } from "@/lib/office/case-nav";
 
 // §W18 — department queues (?dept=filing|printing|attestation|courier). Cross-office
@@ -50,6 +51,9 @@ export type DeptQueueRow = {
   onlineVerificationNumber?: string | null;
   // §W35: super admin ke liye — case unread (naya ya doosri queue mein gaya).
   unread?: boolean;
+  // §W44: admin ka custom label.
+  customLabel?: string | null;
+  customLabelColor?: string | null;
 };
 
 const DEPT_CONFIG: Record<
@@ -254,6 +258,7 @@ export default function DeptQueue({
       <>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-semibold text-primary-700">{item.caseNumber}</span>
+          <CustomLabelChip label={item.customLabel} color={item.customLabelColor} />
           {item.isUrgent && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
               <Flame className="w-3 h-3" /> URGENT

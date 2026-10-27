@@ -42,6 +42,9 @@ export type CaseDetail = {
   boardAttestationNumber: string | null;
   // Wave 21: board/case online verification tracking number (manual entry).
   onlineVerificationNumber: string | null;
+  // §W44: admin ka custom label.
+  customLabel?: string | null;
+  customLabelColor?: string | null;
   clientPictureUrl: string | null;
   clientPictureType: string | null;
   contacts: Array<{ id: string; phone: string; label: string | null }>;
@@ -118,6 +121,8 @@ export type FilingCaseDetail = {
   setName: string | null;
   clientPictureType: string | null;
   clientPictureUrl: string | null;
+  customLabel?: string | null;
+  customLabelColor?: string | null;
 };
 
 // GET /api/office/cases/[id]/files item.

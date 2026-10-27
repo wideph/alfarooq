@@ -10,6 +10,7 @@ import { SkeletonRows } from "@/components/ui/Skeleton";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
 import CaseFilesTab from "@/components/office/case/CaseFilesTab";
 import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
+import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import { officeFetch } from "@/lib/office/client";
 import { STATUS_LABELS, STATUS_STYLES } from "@/lib/office/labels";
 import type { FilingCaseDetail } from "@/lib/office/types";
@@ -63,6 +64,7 @@ export default function FilingCaseView({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{detail.caseNumber}</span>
+                <CustomLabelChip label={detail.customLabel} color={detail.customLabelColor} size="md" />
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[detail.status] || "bg-slate-100 text-slate-700"}`}>
                   {STATUS_LABELS[detail.status] || detail.status}
                 </span>

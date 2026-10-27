@@ -1732,3 +1732,67 @@ Investigation-first (live DB audit):
 - **Note**: 1Y BBTE ke dono sets par dept user ka attestation commission 500
   (per set) hai; 2Y BBTE ke naye sets par commission rate copy NAHI kiya (raqam
   ki setting — owner commission form se lagaye).
+
+## WAVE 44 (2026-10-27) — commission dobara (admin faisla), custom label, payments case detail + finance audit (report)
+
+- **Owner request**: (1) printed / attested case ka status admin wapas kare
+  to department ko commission dobara dena hai ya nahi — har dafa admin se
+  poochha jaye; partner office mein ye doosri raqam shareholders ke hisse se
+  bhi kate. (2) Admin custom label — case page + cases list par wazeh. (3)
+  Payments list mein har row par "Case detail", wapsi usi page par. (4) Extra
+  payment popup mein "Case detail" (naya tab). (5) Finance ka audit — sirf
+  report.
+- **DB**: migration `20261029120000_office_wave44` — Case.customLabel,
+  customLabelColor, deptCommissionRounds (JSONB). **Live applied** (code se
+  pehle).
+- **Commission dobara**: `dept-commission.ts` — creditDeptCommission ka check
+  ab per-CASE (koi bhi user) aur `deptCommissionRounds[kind]` (default 1) tak;
+  doosri raqam ki remarks "(dobara #2)". `undoneDeptKinds(from, to)` (PRINTING
+  → PRINTED, ATTESTATION → ATTESTATION_COMPLETE, COURIER → DELIVERED; CANCELLED
+  nahi), `caseDeptCommissionCredits`. Status route: kaam wapas + commission
+  ban chuka → faisla na ho to 409 `needsRecreditDecision`; "Haan" → rounds =
+  credited + 1, "Nahi" → credited; audit `commissionDobara`. Printing se pehle
+  ke status par wapas → isPrinted false / printedAt null. CaseStatusSelect:
+  409 par isi modal mein har kaam ka sawal (raqam + naam), Haan / Nahi ke
+  baghair Confirm band. case-files: WAITING_FOR_PRINTING par printing proof
+  hamesha PRINTED (purani printing files ke bawajood — redo). Partner office:
+  doosra commission syncProfitShare se pool se minus (W40).
+- **Custom label**: PATCH /cases/[id] { customLabel, customLabelColor } sirf
+  super admin; `CustomLabelChip` + `CUSTOM_LABEL_STYLES` (6 rang) — case
+  command bar (admin "Label lagayein / badlein" popover), cases list, dept
+  queues, DeptCaseView, FilingCaseView (slim / filing / limited payloads mein
+  fields).
+- **Payments**: /office/payments har row "Case detail" (from = current tab),
+  tab URL `?tab=all` (history.replaceState) → wapsi usi tab par.
+  ExtraAmountPopup `caseId` → "Case detail (naya tab)" (target _blank).
+  Finance "Payments received" (mobile + desktop) "Case detail".
+  `officeFetch` error ab server JSON `data` bhi deta hai.
+- **Verify**: tsc 0, lint 0, build exit 0. Rollback 14/14 (undone kinds,
+  rounds, "Nahi" → koi commission nahi, "Haan" → "(dobara #2)", teesri dafa
+  nahi, doosra user bina ijazat nahi, purani file ke bawajood redo PRINTED,
+  partner 000030 dobara 500 → members −250). Browser 15/15 (API 409 + sawal,
+  Confirm band, recredit payload, label detail / list / dept queue, payments
+  34/34 Case detail, ?tab=all wapsi, extra popup naya tab, finance case detail).
+- **Finance audit (sirf report — kuch theek NAHI kiya; live data saaf:
+  `scripts/office-finance-audit.cjs` 0 issues, office balance = members total)**:
+  1. Discount "COMMISSION" ki DISCOUNT DEBIT row bina memberId → kisi member
+     ke due / earning mein nahi katti; DISCOUNT type finance profit buckets
+     mein nahi → admin profit commission part jitna kam. (Live rows: 0.)
+  2. Bonus accept ki BONUS CREDIT row bina memberId → member ke account /
+     due mein nazar nahi; "commission se" option ka koi asar nahi (dono option
+     same). (Live: 0.)
+  3. Period (month waghera) profit: received paymentDate se, shares /
+     commissions / adjustments entryDate (banne ki tareekh) se → mahine ke
+     hisaab mein farq ho sakta hai; all-time sahi.
+  4. /api/office/finance `summary.profit` + `days` DEPT_COMMISSION, BONUS aur
+     partner office expense ka admin hissa nahi ghatate (UI abhi profit
+     bucket use karti hai — summary sirf API).
+  5. Dashboard "Pending" CANCELLED cases bhi ginta hai (Finance nahi).
+  6. Users table / dashboard dues sirf ACTIVE members — inactive member ka
+     balance totals se gayab (liabilities mein shamil).
+  7. Partner split (W40) current % se; ledger case snapshot % se — % badle
+     to "farq" dikhega.
+  8. FIXED_COMMISSION commission sirf case banane wale member ko; admin /
+     cashier ne case banaya to memberId null (live: 0).
+  9. Dept payout ki bookingOfficeId aakhri commission wale office se →
+     per-office balance mein dept ki raqam (live: 0 payouts).

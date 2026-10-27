@@ -20,6 +20,7 @@ import CaseFileViewer, { type ViewableFile } from "@/components/office/case/Case
 import CompleteAttestationButton from "@/components/office/case/CompleteAttestationButton";
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
+import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
 import { originLabel } from "@/lib/office/case-nav";
 import {
@@ -59,6 +60,9 @@ export type DeptLimitedDetail = {
   courierNumber: string | null;
   createdAt: string;
   attestations: DeptLimitedAttestation[];
+  // §W44: admin ka custom label.
+  customLabel?: string | null;
+  customLabelColor?: string | null;
 };
 
 export type DeptLimitedResponse = {
@@ -249,6 +253,7 @@ export default function DeptCaseView({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{detail.caseNumber}</span>
+              <CustomLabelChip label={detail.customLabel} color={detail.customLabelColor} size="md" />
               <span
                 className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[detail.status] || "bg-slate-100 text-slate-700"}`}
               >

@@ -61,6 +61,8 @@ async function serializeDeptQueueCase(item: DeptQueueRow) {
     currentAttestationId: item.currentAttestationId,
     // W21: verification number + filing done-state on slim rows too.
     onlineVerificationNumber: item.onlineVerificationNumber ?? null,
+    customLabel: item.customLabel ?? null,
+    customLabelColor: item.customLabelColor ?? null,
     filingFilesCount: item._count.files,
     filingDone: item._count.files > 0,
     limited: true,
