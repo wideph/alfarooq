@@ -1669,3 +1669,31 @@ Investigation-first (live DB audit):
 - **Data repair (live, deploy ke baad)**: 000031 → WAITING_FOR_PRINTING +
   500 PRINTING commission delete; phir office ke tamam cases syncProfitShare;
   audit `case.status.repair` / `ledger.repair`.
+
+## WAVE 41 (2026-10-27) — tamam offices ka finance audit + W40 live repair
+
+- **Owner request**: "payment hatne / raqam badalne / delete par purana hissa
+  reh jata tha" — ye fault tamam offices aur tamam users par check karo, jahan
+  ho theek karo aur purane data ka hisaab bhi; baqi bataye hue masle bhi.
+- **Code check**: FIXED_COMMISSION — `recomputeCaseFinancials` payment
+  create / PATCH / DELETE, agreed / commission / remaining / discount badlaav
+  sab par chalta hai (BR3.5 target vs ledger, COMMISSION_ADJUST / EXTRA_SHARE
+  adjust) → fault nahi tha. SALARY — koi ledger credit nahi. PROFIT_SHARE —
+  fault tha, W40 `syncProfitShare` se band. Case delete us case ki saari ledger
+  rows hata deta hai (theek). Office expense delete member debits hata deta hai.
+- **Audit (read-only, `scripts/office-finance-audit.cjs` — naya, repo mein)**:
+  pehle 9 issues — Haroon: 000011 stale share (payment fault), 000026 / 000030
+  / 000031 dept commission pool se nahi; 000031 PRINTING commission bina file.
+  AW-Knj (FIXED_COMMISSION, 13 cases): commission + extra share sab target par.
+  7363670 (SALARY): saaf. Office / case expense debits, orphan rows, null-member
+  shares: koi nahi.
+- **Live repair (W40 script, deploy ke baad; audit `case.status.repair` +
+  `ledger.repair`)**: 000031 PRINTED → WAITING_FOR_PRINTING + 500 PRINTING
+  commission delete (dept user 2,500 → 2,000, koi payout nahi hua tha);
+  Haroon ke 11 cases syncProfitShare → 6 ADJUSTMENT rows (000011 −8,862.75 har
+  member; 000026 / 000030 −125 har member).
+- **Natija**: office profit 1,190,331 (1,377,390 − office 159,809 − case
+  26,250 − dept 1,000); AW D 297,582.75, Fan 297,582.75 (account = formula,
+  OK), admin 595,165.5. Audit dobara: **TOTAL ISSUES: 0**.
+- **Baqi (owner action)**: R2 bucket CORS rule sirf 10 MB se bari video ke
+  liye zaroori (W40 se 10 MB tak sab bina CORS).
