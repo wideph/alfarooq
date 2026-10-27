@@ -93,11 +93,45 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string, ki
   const [items, setItems] = useState<Category[]>([]);
   const [form, setForm] = useState({ id: "", name: "", defaultAmount: "", order: "1", isActive: true });
   const [saving, setSaving] = useState(false);
+  // §W42: har category ke active Sets of Attestations ki tadad + doosri
+  // category se sets copy (Setup se bani nayi category par sets nahi hote the).
+  const [setCounts, setSetCounts] = useState<Record<string, number>>({});
+  const [copyForm, setCopyForm] = useState({ from: "", to: "" });
+  const [copying, setCopying] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await officeFetch<Category[]>("/api/office/setup/categories");
+    const [res, setsRes] = await Promise.all([
+      officeFetch<Category[]>("/api/office/setup/categories"),
+      officeFetch<Array<{ categoryId: string }>>("/api/office/setup/sets"),
+    ]);
     if (res.ok) setItems(res.data);
+    if (setsRes.ok) {
+      const counts: Record<string, number> = {};
+      for (const set of setsRes.data) counts[set.categoryId] = (counts[set.categoryId] ?? 0) + 1;
+      setSetCounts(counts);
+    }
   }, []);
+
+  async function copySets() {
+    setCopying(true);
+    const res = await officeFetch<{ created: string[]; skipped: string[] }>("/api/office/setup/sets", {
+      method: "POST",
+      json: { fromCategoryId: copyForm.from, toCategoryId: copyForm.to },
+    });
+    if (res.ok) {
+      onMessage(
+        res.data.created.length > 0
+          ? `${res.data.created.length} set copy ho gaye${res.data.skipped.length ? ` (${res.data.skipped.length} pehle se the)` : ""}`
+          : "Saare sets pehle se maujood hain",
+        "success"
+      );
+      setCopyForm({ from: "", to: "" });
+      await load();
+    } else {
+      onMessage(res.error, "error");
+    }
+    setCopying(false);
+  }
 
   useEffect(() => {
     void load();
@@ -173,6 +207,45 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string, ki
           Active
         </label>
       )}
+      <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 md:flex-row md:items-center">
+        <span className="text-sm font-semibold text-slate-700">Sets of Attestations copy karein:</span>
+        <select
+          className={input}
+          value={copyForm.from}
+          onChange={(e) => setCopyForm({ ...copyForm, from: e.target.value })}
+        >
+          <option value="">Is category se…</option>
+          {items
+            .filter((item) => (setCounts[item.id] ?? 0) > 0)
+            .map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} ({setCounts[item.id]} sets)
+              </option>
+            ))}
+        </select>
+        <select
+          className={input}
+          value={copyForm.to}
+          onChange={(e) => setCopyForm({ ...copyForm, to: e.target.value })}
+        >
+          <option value="">…is category mein</option>
+          {items
+            .filter((item) => item.id !== copyForm.from)
+            .map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} ({setCounts[item.id] ?? 0} sets)
+              </option>
+            ))}
+        </select>
+        <button
+          className={primaryBtn}
+          disabled={copying || !copyForm.from || !copyForm.to || copyForm.from === copyForm.to}
+          onClick={copySets}
+        >
+          {copying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Copy
+        </button>
+      </div>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {items.length === 0 && <p className="p-4 text-sm text-slate-400">Koi category nahi hai</p>}
         {items.map((item) => (
@@ -187,6 +260,14 @@ export function CategoriesPanel({ onMessage }: { onMessage: (message: string, ki
               {item.defaultAmount !== null && (
                 <span className="ml-2 text-xs text-slate-500">Rs {item.defaultAmount}</span>
               )}
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  (setCounts[item.id] ?? 0) > 0 ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"
+                }`}
+                title={(setCounts[item.id] ?? 0) > 0 ? undefined : "Is category par koi Set of Attestations nahi — upar se copy karein"}
+              >
+                {setCounts[item.id] ?? 0} sets
+              </span>
             </div>
             <div className="flex gap-2">
               <button

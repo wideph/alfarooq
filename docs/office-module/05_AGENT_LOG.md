@@ -1697,3 +1697,27 @@ Investigation-first (live DB audit):
   OK), admin 595,165.5. Audit dobara: **TOTAL ISSUES: 0**.
 - **Baqi (owner action)**: R2 bucket CORS rule sirf 10 MB se bari video ke
   liye zaroori (W40 se 10 MB tak sab bina CORS).
+
+## WAVE 42 (2026-10-27) — Medical Bmfq 2Y par Set of Attestations nahi + Setup "Sets copy"
+
+- **Owner report**: "Medical Bmfq 2Y" case ka Set of Attestations dikhta hi
+  nahi, 1Y ka dikhta hai; 2Y ke bhi wahi sets aur wahi dates ka formula.
+- **Wajah (read-only)**: "Medical Bmfq 2Y" category par 0 CategorySet
+  (1Y par 3). Sets sirf seed script (`seed-office-defaults.ts`) se bante the;
+  Setup se bani nayi category par koi set nahi aur Setup mein set banane ka
+  raasta hi nahi. Date engine category naam nahi, steps par chalta hai
+  (`BMFQ_VERIFICATION` → MEDICAL formula) — same steps = same dates. "2Y BBTE"
+  bhi 0 sets (1Y BBTE par 2) — owner ko bataya, chheda nahi.
+- **Fix**: `lib/office/category-sets.ts` copyCategorySets (active sets +
+  steps, same naam / order; target par usi naam ka set skip); `POST
+  /api/office/setup/sets` { fromCategoryId, toCategoryId } (office:setup:write,
+  revalidate setup cache, audit `category.sets.copy`); Setup → Case Categories:
+  har category ke saath "N sets" chip (0 par amber) + "Sets of Attestations
+  copy karein" form.
+- **Live**: Medical Bmfq 1Y ke 3 sets → Medical Bmfq 2Y (audit
+  `category.sets.copy`). Attestation commission ke per-set rates (1Y set (i)
+  par 100) copy NAHI kiye — owner commission form se set kare.
+- **Verify**: tsc 0, lint 0, build exit 0. Rollback test 6/6 (3 sets copy,
+  naam / order / steps bilkul 1Y jaise, dobara copy skip, same category error,
+  AF-2026-000012 par 1Y set (i) aur copy hue 2Y set (i) ki dates bilkul same:
+  BMFQ 22 Oct, MoH 26 Oct).
