@@ -1721,3 +1721,14 @@ Investigation-first (live DB audit):
   naam / order / steps bilkul 1Y jaise, dobara copy skip, same category error,
   AF-2026-000012 par 1Y set (i) aur copy hue 2Y set (i) ki dates bilkul same:
   BMFQ 22 Oct, MoH 26 Oct).
+
+## WAVE 43 (2026-10-27) — 2Y BBTE par 1Y BBTE ke sets
+
+- **Owner request**: 1Y BBTE ke sets maujood, 2Y BBTE ke nahi — dono same.
+- **Live (W42 `copyCategorySets`, audit `category.sets.copy`)**: "1Y BBTE" ke
+  2 sets → "2Y BBTE": (i) Board + Back Navttc + Special Mofa + Saudi Embassy +
+  Mofa Saudi, (ii) Board + Current Navttc + Special Mofa + Saudi Embassy + Mofa
+  Saudi — same stepKeys → same dates ka formula. 2Y BBTE ke abhi 0 cases.
+- **Note**: 1Y BBTE ke dono sets par dept user ka attestation commission 500
+  (per set) hai; 2Y BBTE ke naye sets par commission rate copy NAHI kiya (raqam
+  ki setting — owner commission form se lagaye).

@@ -87,3 +87,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W40 PROFIT_SHARE office profit = received − office − case − department − other expenses, admin + members % ke mutabiq (dept commission pool se minus, har paisay wale badlaav par syncProfitShare, purane records repair); office-scoped modal + member card mein formula; aakhri printing file delete → printing commission khatam (+ PRINTED → WAITING_FOR_PRINTING); AF-2026-000031 repair; CORS ke baghair 10 MB tak upload (tukdon mein).
 - [x] W41 Tamam offices ka finance audit (payment-change fault sirf PROFIT_SHARE mein tha — W40 se band), W40 live repair (000031 + Haroon shares), audit script `scripts/office-finance-audit.cjs`: 0 issues.
 - [x] W42 Medical Bmfq 2Y par 1Y ke 3 Sets of Attestations (same steps → same dates); Setup mein "Sets copy karein" + har category ke sets count.
+- [x] W43 2Y BBTE par 1Y BBTE ke 2 Sets of Attestations (same steps → same dates).
