@@ -218,6 +218,41 @@ function reportUploadProblems(payload: {
   }
 }
 
+// §W40 — R2 CORS ke baghair 10 MB tak ki file: 3 MB ke tukde server raaste
+// (har request Vercel ki 4.5 MB limit ke andar), phir server jod kar asal key
+// par ek object banata hai (POST /files/chunks). Register alag (JSON).
+const CHUNKED_MAX_BYTES = 10 * MB;
+const CHUNK_BYTES = 3 * MB;
+
+async function uploadInChunks(
+  caseId: string,
+  department: string,
+  key: string,
+  file: File,
+  onProgress: (loaded: number) => void
+): Promise<{ ok: true } | { ok: false; error: string; status: number | null }> {
+  const url = `/api/office/cases/${caseId}/files/chunks`;
+  const total = Math.ceil(file.size / CHUNK_BYTES);
+  for (let index = 0; index < total; index++) {
+    const start = index * CHUNK_BYTES;
+    const fd = new FormData();
+    fd.append("department", department);
+    fd.append("key", key);
+    fd.append("index", String(index));
+    fd.append("total", String(total));
+    fd.append("chunk", file.slice(start, Math.min(start + CHUNK_BYTES, file.size)), "chunk");
+    const result = await xhrSend("POST", url, fd, {}, (loaded) => onProgress(Math.min(start + loaded, file.size)));
+    if (result.network) return { ok: false, error: "Internet / server se rabta nahi ho saka — dobara koshish karein", status: null };
+    if (result.status < 200 || result.status >= 300) {
+      return { ok: false, error: errorFromText(result.text, result.status), status: result.status };
+    }
+  }
+  const done = await postJson<{ ok: boolean }>(url, { action: "complete", department, key, total });
+  if (!done.ok) return { ok: false, error: done.error, status: done.status };
+  onProgress(file.size);
+  return { ok: true };
+}
+
 type Presigned = { index: number; key: string; contentType: string; uploadUrl: string };
 
 export async function uploadCaseFiles(options: {
@@ -280,7 +315,7 @@ export async function uploadCaseFiles(options: {
   const direct: Array<{ index: number; key: string }> = [];
   // Direct PUT fail (CORS / network / R2 ka inkaar) → server raasta; wajah
   // report ke liye yaad (server raaste se bach jaye to "recovered").
-  const viaServer: Array<{ index: number; stage: UploadStage; status: number | null; error: string }> = [];
+  const viaServer: Array<{ index: number; key: string; stage: UploadStage; status: number | null; error: string }> = [];
   await runPool(presign.data.uploads, PARALLEL_UPLOADS, async (upload) => {
     const index = upload.index;
     const file = files[index];
@@ -303,8 +338,14 @@ export async function uploadCaseFiles(options: {
       items[index].status = "waiting";
       viaServer.push(
         result.network
-          ? { index, stage: "network", status: null, error: "Direct R2 upload nahi chala (CORS / network)" }
-          : { index, stage: "put", status: result.status, error: `Storage ne file qubool nahi ki (${result.status})` }
+          ? { index, key: upload.key, stage: "network", status: null, error: "Direct R2 upload nahi chala (CORS / network)" }
+          : {
+              index,
+              key: upload.key,
+              stage: "put",
+              status: result.status,
+              error: `Storage ne file qubool nahi ki (${result.status})`,
+            }
       );
     }
     emit();
@@ -337,13 +378,46 @@ export async function uploadCaseFiles(options: {
     if (file.size > PROXY_MAX_BYTES) {
       items[index].status = "uploading";
       emit();
-      file = (await shrinkImageForServer(file, PROXY_MAX_BYTES - 64 * 1024)) ?? file;
+      const shrunk = await shrinkImageForServer(file, PROXY_MAX_BYTES - 64 * 1024);
+      if (shrunk) {
+        file = shrunk;
+      } else if (file.size <= CHUNKED_MAX_BYTES) {
+        // §W40: 10 MB tak (PDF / video / Word / bari photo) — tukdon mein
+        // server raasta, CORS ke baghair. Asal bytes, presign wali key.
+        const chunked = await uploadInChunks(caseId, department, attempt.key, file, (loaded) => {
+          items[index].loaded = loaded;
+          emit();
+        });
+        if (!chunked.ok) {
+          fail(index, chunked.error, "server", chunked.status);
+          continue;
+        }
+        items[index].status = "saving";
+        emit();
+        const register = await postJson<{ status: string }>(`/api/office/cases/${caseId}/files`, {
+          department,
+          stepKey,
+          title,
+          uploads: [{ key: attempt.key, title: fileTitle(index) }],
+        });
+        if (register.ok) {
+          saved += 1;
+          caseStatus = register.data.status || caseStatus;
+          items[index].loaded = items[index].size;
+          items[index].status = "done";
+          note(index, attempt.stage, attempt.error, attempt.status, true);
+          emit();
+        } else {
+          fail(index, register.error, "register", register.status);
+        }
+        continue;
+      }
     }
     if (file.size > PROXY_MAX_BYTES) {
       fail(
         index,
         attempt.stage === "network"
-          ? `${formatFileSize(file.size)} ki file seedha storage par nahi ja saki — R2 bucket par CORS rule nahi laga. 4 MB tak ki files aur photos chal jati hain; bari PDF / video ke liye admin Cloudflare R2 mein CORS rule add kare.`
+          ? `${formatFileSize(file.size)} ki file seedha storage par nahi ja saki — R2 bucket par CORS rule nahi laga. 10 MB tak ki files chal jati hain; is se bari video ke liye admin Cloudflare R2 mein CORS rule add kare.`
           : `${formatFileSize(file.size)} ki file storage ne qubool nahi ki (${attempt.status ?? "?"}) — dobara koshish karein`,
         "too-big",
         attempt.status

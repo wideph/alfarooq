@@ -9,7 +9,7 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, sum, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod } from "@/lib/office/permissions";
 import { notifyCourierStage, notifyPermission } from "@/lib/office/notifications";
-import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
+import { syncProfitShare } from "@/lib/office/profit-share";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment, advanceCourierStage } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
       // §W20: auto-distribute (ledger) aur workflow activation (case status)
       // independent hain aur dono kabhi throw nahi karte — parallel.
       [, { datesNeeded }] = await Promise.all([
-        autoDistributeOnPaymentReceived(caseId, session),
+        syncProfitShare(caseId, session.adminId),
         activateWorkflowOnFirstPayment(caseId),
       ]);
     }

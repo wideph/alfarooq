@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { totalLiabilities } from "@/lib/office/ledger";
 import { getOfficeDirectory } from "@/lib/office/setup-cache";
-import { dec, toNumber } from "@/lib/office/money";
+import { dec, round2, toNumber } from "@/lib/office/money";
 import { addDays, formatDateOnly, parseDateOnly, todayPakistan } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -127,7 +127,43 @@ function addLedgerToBucket(bucket: ProfitBucket, type: string, signed: Prisma.De
   }
 }
 
-function profitJson(bucket: ProfitBucket) {
+// §W40 — PROFIT_SHARE office ka owner wala formula + admin / members split:
+//   Office profit = received − office expenses − case expenses − department
+//                   commissions − other (office salaries)
+//   member share  = office profit × member % ; admin = office profit − members
+// Saath mein har member ka LEDGER (PROFIT_SHARE/ADJUSTMENT − EXPENSE debits)
+// taake ledger aur formula ka farq foran nazar aaye (audit).
+type ProfitSplit = {
+  officeProfit: Prisma.Decimal;
+  officeExpenses: Prisma.Decimal;
+  caseExpenses: Prisma.Decimal;
+  deptCommissions: Prisma.Decimal;
+  otherExpenses: Prisma.Decimal;
+  adminPercent: Prisma.Decimal;
+  adminShare: Prisma.Decimal;
+  members: Array<{ memberId: string; name: string; percent: Prisma.Decimal; share: Prisma.Decimal; ledger: Prisma.Decimal }>;
+};
+
+function splitJson(split: ProfitSplit) {
+  return {
+    officeProfit: toNumber(split.officeProfit),
+    officeExpenses: toNumber(split.officeExpenses),
+    caseExpenses: toNumber(split.caseExpenses),
+    deptCommissions: toNumber(split.deptCommissions),
+    otherExpenses: toNumber(split.otherExpenses),
+    adminPercent: toNumber(split.adminPercent),
+    adminShare: toNumber(split.adminShare),
+    members: split.members.map((member) => ({
+      memberId: member.memberId,
+      name: member.name,
+      percent: toNumber(member.percent),
+      share: toNumber(member.share),
+      ledger: toNumber(member.ledger),
+    })),
+  };
+}
+
+function profitJson(bucket: ProfitBucket, split?: ProfitSplit | null) {
   const deductionsTotal = bucket.caseExpenses
     .plus(bucket.officeExpenses)
     .plus(bucket.companyExpenses)
@@ -154,6 +190,7 @@ function profitJson(bucket: ProfitBucket) {
     officeExpensesMemberShare: toNumber(bucket.officeExpensesMemberShare),
     deductionsTotal: toNumber(deductionsTotal),
     net: toNumber(bucket.received.minus(deductionsTotal)),
+    ...(split ? { split: splitJson(split) } : {}),
   };
 }
 
@@ -179,7 +216,7 @@ export async function GET(request: NextRequest) {
 
     // §W20: offices list cached directory se (pehle report queries ke BAAD ek
     // alag sequential round-trip thi) — ab sab ek hi parallel batch mein.
-    const [payments, shares, expenseDebits, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows] =
+    const [payments, shares, expenseDebits, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows, memberRows] =
       await Promise.all([
         prisma.payment.findMany({
           where: { status: "RECEIVED", ...(inRange ? { paymentDate: inRange } : {}) },
@@ -187,7 +224,7 @@ export async function GET(request: NextRequest) {
         }),
         prisma.ledgerEntry.findMany({
           where: { type: { in: PROFIT_LEDGER_TYPES }, ...(inRange ? { entryDate: inRange } : {}) },
-          select: { amount: true, direction: true, entryDate: true, bookingOfficeId: true, type: true },
+          select: { amount: true, direction: true, entryDate: true, bookingOfficeId: true, type: true, memberId: true },
         }),
         // §W21.2 — member-tagged EXPENSE DEBITS (admin in se recover karta hai):
         // remarks prefixes → `Office expense share [` (PROFIT_SHARE W15.1),
@@ -195,7 +232,7 @@ export async function GET(request: NextRequest) {
         // `Commission expense [` (FIXED_COMMISSION case flag=true W21).
         prisma.ledgerEntry.findMany({
           where: { type: "EXPENSE", direction: "DEBIT", ...(inRange ? { entryDate: inRange } : {}) },
-          select: { amount: true, bookingOfficeId: true, remarks: true },
+          select: { amount: true, bookingOfficeId: true, remarks: true, memberId: true },
         }),
         prisma.caseExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
@@ -233,6 +270,11 @@ export async function GET(request: NextRequest) {
             agreedAmount: true,
             payments: { where: { status: "RECEIVED" }, select: { amount: true } },
           },
+        }),
+        // §W40 — PROFIT_SHARE split ke liye members + percents.
+        prisma.bookingOfficeMember.findMany({
+          select: { id: true, name: true, bookingOfficeId: true, profitPercent: true, isActive: true },
+          orderBy: { createdAt: "asc" },
         }),
       ]);
 
@@ -398,6 +440,49 @@ export async function GET(request: NextRequest) {
       .minus(otherTotal)
       .minus(officeExpenseCompanyCost);
 
+    // §W40 — member ledger (range ke andar): profit share credits/adjustments −
+    // EXPENSE debits (office / commission expense share).
+    const memberLedger: Record<string, Prisma.Decimal> = {};
+    for (const s of shares) {
+      if (!s.memberId || (s.type !== "PROFIT_SHARE" && s.type !== "ADJUSTMENT")) continue;
+      addTo(memberLedger, s.memberId, s.direction === "CREDIT" ? s.amount : s.amount.neg());
+    }
+    for (const d of expenseDebits) {
+      if (d.memberId) addTo(memberLedger, d.memberId, d.amount.neg());
+    }
+    const profitSplit = (officeId: string): ProfitSplit | null => {
+      if (officeType[officeId] !== "PROFIT_SHARE") return null;
+      const bucket = profitOffice(officeId);
+      const officeExp = officeExpRawByOffice[officeId] || zero();
+      const caseExp = caseExpRawByOffice[officeId] || zero();
+      const officeProfit = bucket.received.minus(officeExp).minus(caseExp).minus(bucket.deptCommissions).minus(bucket.salaries);
+      const members = memberRows
+        .filter((member) => member.bookingOfficeId === officeId)
+        .map((member) => {
+          const percent = member.isActive ? dec(member.profitPercent) : zero();
+          return {
+            memberId: member.id,
+            name: member.name,
+            percent,
+            share: round2(officeProfit.mul(percent).div(100)),
+            ledger: memberLedger[member.id] || zero(),
+          };
+        })
+        .filter((member) => !member.percent.isZero() || !member.ledger.isZero());
+      const percentSum = members.reduce((acc, member) => acc.plus(member.percent), zero());
+      const memberTotal = members.reduce((acc, member) => acc.plus(member.share), zero());
+      return {
+        officeProfit,
+        officeExpenses: officeExp,
+        caseExpenses: caseExp,
+        deptCommissions: bucket.deptCommissions,
+        otherExpenses: bucket.salaries,
+        adminPercent: new Prisma.Decimal(100).minus(percentSum),
+        adminShare: officeProfit.minus(memberTotal),
+        members,
+      };
+    };
+
     // §W21: ?officeId= ho to top-level profit us office ka scoped bucket.
     const topProfit = scopeOfficeId ? profitOffice(scopeOfficeId) : totalProfit;
 
@@ -419,7 +504,7 @@ export async function GET(request: NextRequest) {
         paymentsCount: payments.length,
       },
       // §W21: admin profit breakdown (range ke mutabiq; range na ho to all-time).
-      profit: profitJson(topProfit),
+      profit: profitJson(topProfit, scopeOfficeId ? profitSplit(scopeOfficeId) : null),
       days: Object.entries(days)
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([date, row]) => ({
@@ -451,7 +536,7 @@ export async function GET(request: NextRequest) {
           // §W21: outstanding dues (non-CANCELLED cases, range-independent) +
           // usi office ka profit bucket.
           remaining: toNumber(remainingByOffice[o.id] || 0),
-          profit: profitJson(profitOffice(o.id)),
+          profit: profitJson(profitOffice(o.id), profitSplit(o.id)),
         }))
         .filter((o) => o.income || o.commissions || o.salaries || o.officeExpenses || o.remaining),
     });

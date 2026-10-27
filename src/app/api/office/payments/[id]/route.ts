@@ -7,7 +7,7 @@ import { caseScope } from "@/lib/office/case-access";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount } from "@/lib/office/money";
 import { notifyCourierStage, notifyUsers } from "@/lib/office/notifications";
-import { autoDistributeOnPaymentReceived } from "@/lib/office/profit-share";
+import { syncProfitShare } from "@/lib/office/profit-share";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
 import { PAYMENT_STATUS_LABELS } from "@/lib/office/labels";
 import { deleteOfficeFile } from "@/lib/office/r2";
@@ -62,6 +62,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const payment = await prisma.payment.update({ where: { id }, data });
 
     const result = await recomputeCaseFinancials(existing.caseId, session, { paymentId: id });
+    // §W40: PROFIT_SHARE case — status (RECEIVED se hatna / banna), amount ya
+    // date ka har badlaav profit share dobara (pehle sirf naye RECEIVED par).
+    await syncProfitShare(existing.caseId, session.adminId);
 
     // §W11.1/§W30: ATTESTATION_COMPLETE par poora payment (remaining=0,
     // agreed>0) → courier stage (address na ho to WAITING_FOR_COURIER_ADDRESS,
@@ -77,14 +80,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     let datesNeeded = false;
     if (newStatus === "RECEIVED" && existing.status !== "RECEIVED") {
       const caseId = existing.caseId;
-      // §W11.4: PROFIT_SHARE office — har RECEIVED payment par pool
-      // auto-distribute (idempotent). Kabhi throw nahi karta.
-      // §W20: auto-distribute (ledger) aur workflow activation (case status)
-      // independent hain — parallel (dono kabhi throw nahi karte).
-      [, { datesNeeded }] = await Promise.all([
-        autoDistributeOnPaymentReceived(caseId, session),
-        activateWorkflowOnFirstPayment(caseId),
-      ]);
+      // §W40: PROFIT_SHARE pool ab upar har badlaav par (syncProfitShare).
+      ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
     }
 
     // W13.2: audit log + notifications + AI date generation sab response ke
@@ -154,6 +151,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     await logOfficeAction(session, { action: "payment.delete", entity: "Payment", entityId: id, before: existing });
 
     const result = await recomputeCaseFinancials(existing.caseId, session);
+    // §W40: RECEIVED payment delete → partner case ka profit share wapas.
+    await syncProfitShare(existing.caseId, session.adminId);
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return serverError(error);

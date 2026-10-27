@@ -22,7 +22,7 @@ import {
   uploadDepartmentFile,
 } from "@/lib/office/r2";
 import { cleanText, toJson } from "@/lib/office/serializers";
-import { creditDeptCommission } from "@/lib/office/dept-commission";
+import { creditDeptCommission, removeDeptCommission } from "@/lib/office/dept-commission";
 import {
   CASE_DEPARTMENTS,
   DEPARTMENT_PERMISSIONS,
@@ -309,6 +309,28 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await deleteOfficeFile(file.fileKey).catch((error) =>
       console.error("[office] case file delete fail", error)
     );
+
+    // §W40: case ki AAKHRI printing file gayi → printing ka saboot nahi:
+    // printing commission khatam, aur case sirf PRINTED tha (aage nahi gaya)
+    // to wapas WAITING_FOR_PRINTING (printed sirf proof ya admin se — BR15).
+    let printingReverted: { status: string | null; commissions: number } | null = null;
+    if (file.department === "PRINTING") {
+      const remaining = await prisma.caseFile.count({ where: { caseId: id, department: "PRINTING" } });
+      if (remaining === 0) {
+        const fresh = await prisma.case.findUnique({ where: { id }, select: { status: true } });
+        let status: string | null = null;
+        if (fresh?.status === "PRINTED") {
+          await prisma.case.update({
+            where: { id },
+            data: { status: "WAITING_FOR_PRINTING", isPrinted: false, printedAt: null },
+          });
+          status = "WAITING_FOR_PRINTING";
+        }
+        const removed = await removeDeptCommission({ caseId: id, kind: "PRINTING", actorId: session.adminId });
+        printingReverted = { status, commissions: removed.length };
+      }
+    }
+
     // W13.2: audit log response ke baad.
     after(async () => {
       await logOfficeAction(session, {
@@ -316,9 +338,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         entity: "CaseFile",
         entityId: file.id,
         before: { caseId: id, department: file.department, stepKey: file.stepKey },
+        ...(printingReverted ? { after: { printingReverted } } : {}),
       });
     });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, printingReverted });
   } catch (error) {
     return serverError(error);
   }

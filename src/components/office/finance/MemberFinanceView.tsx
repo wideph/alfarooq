@@ -8,6 +8,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import AccountEquation from "./AccountEquation";
+import OfficeProfitShareCard from "./OfficeProfitShareCard";
 import { EmptyState, OfficeTypeChip, SectionHeader } from "./ui";
 import {
   normalizeMemberDetail,
@@ -118,6 +119,7 @@ export default function MemberFinanceView({ admin }: { admin: AdminNavUser }) {
               )}
             </div>
             <AccountEquation summary={detail.summary} />
+            {detail.officeProfit && <OfficeProfitShareCard data={detail.officeProfit} />}
           </section>
 
           {/* Office expense deductions */}

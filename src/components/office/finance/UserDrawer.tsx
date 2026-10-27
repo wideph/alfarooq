@@ -8,6 +8,7 @@ import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { caseDetailHref } from "@/lib/office/case-nav";
 import AccountEquation from "./AccountEquation";
+import OfficeProfitShareCard from "./OfficeProfitShareCard";
 import { OfficeTypeChip } from "./ui";
 import {
   EARNING_TYPE_LABELS,
@@ -79,6 +80,7 @@ export default function UserDrawer({ member, onClose }: { member: FinanceUserRow
           ) : detail ? (
             <>
               <AccountEquation summary={detail.summary} />
+              {detail.officeProfit && <OfficeProfitShareCard data={detail.officeProfit} />}
 
               {/* Earning breakdown */}
               <section>

@@ -67,7 +67,13 @@ All money is `Decimal(12,2)`. Use `src/lib/office/money.ts` helpers.
 ## BR4. Type 2 — PROFIT_SHARE office
 
 4.1 No commission entries during payments. `commissionAmount` stays 0.
-4.2 Profit of a case = `received − Σ CaseExpense.amount`.
+4.2 Profit of a case = `received − Σ CaseExpense.amount − Σ DEPT_COMMISSION (is case
+    par)` (§W40; 0 par clamp nahi). Office level (owner ka formula): **Profit =
+    received − office expenses − case expenses − department expenses − other
+    expenses**; member = profit × apni %, admin = baqi (100 − members %). Office
+    expenses har member ke account se EXPENSE debit (us ki %) ki shakal mein — natija
+    wahi. Har paisay wale badlaav (payment create / status / amount / delete, case
+    expense, department commission) ke baad `syncProfitShare` (ADJUSTMENT rows).
 4.3 **Finalize** (`POST /cases/[id]/profit`, `office:ledger:write`): allowed when
     `received > 0`. For each active member with `profitPercent > 0`: create
     `PROFIT_SHARE CREDIT amount = profit × profitPercent / 100` (memberId set). Set
@@ -237,3 +243,7 @@ PRINTED) hata diya. Printing se pehle ke statuses (FIRST_PAYMENT_PENDING /
 WAITING_FOR_FILE / WAITING_FOR_PRINTING) par department user ka attestation kaam
 (step IN_PROGRESS, attestation file, complete-all) case ko aage nahi le jata;
 complete-all 400. Admin ke ikhtiyar pehle jaise.
+
+§W40: admin ke status change par kisi department ko commission nahi. Case ki aakhri
+PRINTING file delete ho to us case ka PRINTING commission khatam aur case PRINTED ho
+to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).

@@ -12,6 +12,7 @@ import {
   type FinanceReport,
   type ProfitBreakdown,
   type ProfitPeriod,
+  type ProfitSplit,
 } from "./types";
 
 // §W21 — "Profit ka hisab" modal. Admin scope (no officeId) ya single-office
@@ -128,6 +129,8 @@ export default function ProfitBreakdownModal({
             </div>
           ) : error ? (
             <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>
+          ) : profit?.split ? (
+            <ProfitSplitView received={profit.received} split={profit.split} ledgerAdminNet={profit.net} />
           ) : profit ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
@@ -179,6 +182,95 @@ export default function ProfitBreakdownModal({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+// §W40 — PROFIT_SHARE office: owner ka formula seedha —
+//   Profit = received − office expenses − case expenses − department expenses
+//   − other; phir admin + har member ka hissa un ki % ke mutabiq. Har member ke
+// saath ledger (asal account) bhi; formula se farq ho to laal warning (audit).
+function ProfitSplitView({
+  received,
+  split,
+  ledgerAdminNet,
+}: {
+  received: number;
+  split: ProfitSplit;
+  ledgerAdminNet: number;
+}) {
+  const lines: Array<{ label: string; value: number }> = [
+    { label: "Office expenses", value: split.officeExpenses },
+    { label: "Case expenses", value: split.caseExpenses },
+    { label: "Department expenses (printing / attestation / courier)", value: split.deptCommissions },
+    { label: "Other expenses", value: split.otherExpenses },
+  ];
+  const mismatch = (a: number, b: number) => Math.abs(a - b) > 0.5;
+  const adminMismatch = mismatch(ledgerAdminNet, split.adminShare);
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-slate-700">Total payment received</span>
+          <span className="font-bold text-emerald-700">{formatMoney(received)}</span>
+        </div>
+        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+          {lines.map((line) => (
+            <div key={line.label} className="flex items-center justify-between px-3 py-2 text-sm">
+              <span className="text-slate-600">{line.label}</span>
+              <span
+                className={`shrink-0 whitespace-nowrap pl-2 font-semibold ${line.value === 0 ? "text-slate-400" : "text-red-600"}`}
+              >
+                − {formatMoney(line.value)}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between rounded-xl border-t-2 border-slate-200 pt-2.5">
+          <span className="text-base font-bold text-slate-900">= Office profit</span>
+          <span className={`text-xl font-bold ${split.officeProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+            {formatMoney(split.officeProfit)}
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+          Profit ka hissa (percentage ke mutabiq)
+        </div>
+        <div className="divide-y divide-slate-100">
+          <div className="flex items-center justify-between px-3 py-2 text-sm">
+            <span className="font-semibold text-slate-800">Admin ({split.adminPercent}%)</span>
+            <span className="text-right">
+              <span className="block font-bold text-slate-900">{formatMoney(split.adminShare)}</span>
+              {adminMismatch && (
+                <span className="block text-[11px] font-semibold text-red-600">
+                  Ledger ke mutabiq {formatMoney(ledgerAdminNet)} — farq
+                </span>
+              )}
+            </span>
+          </div>
+          {split.members.map((member) => (
+            <div key={member.memberId} className="flex items-center justify-between px-3 py-2 text-sm">
+              <span className="text-slate-700">
+                {member.name} ({member.percent}%)
+              </span>
+              <span className="text-right">
+                <span className="block font-bold text-slate-900">{formatMoney(member.share)}</span>
+                {mismatch(member.ledger, member.share) && (
+                  <span className="block text-[11px] font-semibold text-red-600">
+                    Account mein {formatMoney(member.ledger)} — farq
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
+        Profit = received − office − case − department − other expenses · har member ka hissa us ke account (earning
+        − office expense share) se match hota hai
+      </p>
     </div>
   );
 }

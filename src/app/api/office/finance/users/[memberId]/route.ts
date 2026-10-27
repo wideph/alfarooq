@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/auth";
 import { forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
-import { sum, toNumber } from "@/lib/office/money";
+import { dec, round2, sum, toNumber } from "@/lib/office/money";
 import { formatDateOnly } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -100,6 +100,43 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const wasool = sum(payoutRows.map((row) => row.amount));
     const due = totalEarning.minus(expenseShare).minus(wasool);
 
+    // §W40 — PROFIT_SHARE office: owner ka formula (all-time) —
+    //   office profit = received − office exp − case exp − department exp − other
+    //   aap ka hissa  = office profit × aap ki %
+    // Account (earning − office expense share) isi ke barabar hona chahiye.
+    let officeProfit: Record<string, number> | null = null;
+    if (member.bookingOffice.type === "PROFIT_SHARE") {
+      const officeId = member.bookingOffice.id;
+      const [received, caseExp, officeExp, dept, salaries] = await Promise.all([
+        prisma.payment.aggregate({ where: { status: "RECEIVED", case: { bookingOfficeId: officeId } }, _sum: { amount: true } }),
+        prisma.caseExpense.aggregate({ where: { case: { bookingOfficeId: officeId } }, _sum: { amount: true } }),
+        prisma.officeExpense.aggregate({ where: { bookingOfficeId: officeId }, _sum: { amount: true } }),
+        prisma.ledgerEntry.groupBy({ by: ["direction"], where: { bookingOfficeId: officeId, type: "DEPT_COMMISSION" }, _sum: { amount: true } }),
+        prisma.salaryEntry.aggregate({ where: { bookingOfficeId: officeId }, _sum: { amount: true } }),
+      ]);
+      const deptNet = dept.reduce(
+        (acc, row) => (row.direction === "CREDIT" ? acc.plus(row._sum.amount ?? 0) : acc.minus(row._sum.amount ?? 0)),
+        new Prisma.Decimal(0)
+      );
+      const profit = dec(received._sum.amount ?? 0)
+        .minus(dec(officeExp._sum.amount ?? 0))
+        .minus(dec(caseExp._sum.amount ?? 0))
+        .minus(deptNet)
+        .minus(dec(salaries._sum.amount ?? 0));
+      const percent = dec(member.profitPercent);
+      officeProfit = {
+        received: toNumber(dec(received._sum.amount ?? 0)),
+        officeExpenses: toNumber(dec(officeExp._sum.amount ?? 0)),
+        caseExpenses: toNumber(dec(caseExp._sum.amount ?? 0)),
+        deptCommissions: toNumber(deptNet),
+        otherExpenses: toNumber(dec(salaries._sum.amount ?? 0)),
+        officeProfit: toNumber(profit),
+        percent: toNumber(percent),
+        share: toNumber(round2(profit.mul(percent).div(100))),
+        account: toNumber(totalEarning.minus(expenseShare)),
+      };
+    }
+
     return NextResponse.json({
       member: {
         memberId: member.id,
@@ -138,6 +175,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         wasool: toNumber(wasool),
         due: toNumber(due),
       },
+      officeProfit,
       summary: {
         earning: toNumber(totalEarning),
         expenseShare: toNumber(expenseShare),

@@ -1624,3 +1624,48 @@ Investigation-first (live DB audit):
 - **Note**: AF-2026-000031 par 500 ka PRINTING commission hai magar printing
   file 0 (dept user ki "47542.pdf" — case 21 ka roll — baad mein delete; phir
   admin ne PRINTED kiya). Owner ko bataya; chheda nahi.
+
+## WAVE 40 (2026-10-27) — PROFIT_SHARE office profit audit + formula, AF-2026-000031, 10 MB upload
+
+- **Owner request**: office-scoped profit ka formula ghalat lagta hai — us
+  office ke purane + naye sab records par: Profit = total received − office
+  expense − case expense − department expense − other expense; ye profit admin
+  + tamam users ki percentage ke mutabiq; admin aur har user ko bilkul sahi
+  hisaab. AF-2026-000031: printing file nahi to WAITING_FOR_PRINTING +
+  printing commission khatam. Admin status change par department commission
+  nahi. Files aam taur par 10 MB se chhoti.
+- **Audit (read-only, "Haroon Diploma Services" PROFIT_SHARE: AW D 25%, Fan
+  25%, admin 50%)**: received 1,377,390; office exp 159,809 (members ke 25%
+  EXPENSE debits theek); case exp 26,250; dept 1,500. Do ghaltiyan:
+  (1) AF-2026-000011 — received ab 28,000 magar members ko 63,451 par
+  31,725.5 (14,000 hona tha): payment RECEIVED se hatne / badalne / delete par
+  profit share dobara chalta hi nahi tha (sirf naye RECEIVED par);
+  (2) department commission pool se nahi katti thi (admin 100% bear).
+  Natija: har member +9,237.75 zyada, admin net 576,440 (hona 594,915.5).
+- **Fix (code)**: `profit-share.ts` — pool = received − case exp − is case ki
+  DEPT_COMMISSION (clamp 0 hata — nuqsan bhi bant-ta hai), received 0 par bhi
+  shares wapas 0; `syncProfitShare` (never throws) payment create / PATCH (har
+  badlaav) / DELETE, case expense add/delete, creditDeptCommission ke baad.
+  `removeDeptCommission`; files DELETE: case ki AAKHRI PRINTING file → PRINTING
+  commission rows delete + case PRINTED ho to WAITING_FOR_PRINTING. Admin
+  status route mein commission pehle se nahi (F22.4) — test se tasdeeq.
+  Finance API per-office `profit.split` (PROFIT_SHARE): officeProfit, lines,
+  adminPercent/adminShare, members share + ledger (farq audit).
+  ProfitBreakdownModal: formula + "Profit ka hissa" (farq par laal note).
+  Member detail API `officeProfit` + `OfficeProfitShareCard` (member "Mera
+  account" + admin UserDrawer).
+- **Upload ≤10 MB bina CORS**: `POST /api/office/cases/[id]/files/chunks`
+  (3 MB tukde → `<key>.part<n>`, phir complete → jod kar key; prefix / naam /
+  ≤4 tukde / tukda ≤3.5 MB / overwrite nahi); client fallback: photo shrink na
+  ho sake aur ≤10 MB → tukdon mein, phir JSON register. Sirf >10 MB video ko
+  CORS chahiye.
+- **Verify**: tsc 0, lint 0, build exit 0. Rollback test 13/13 (pehle garbar;
+  sync ke baad AW D / Fan = profit × 25%, admin = 50%; 000011 −8,862.75 har
+  member; idempotent; payment hatna / delete; 000031 commission hatna +125;
+  naya courier commission pool se; dusra office no-op). Chunk upload (local
+  S3 mock, register intercept) 13/13: 8 MB PDF 3 tukde, byte-identical,
+  content-type, tukde saaf, ghalat key / >10 MB / bara tukda / overwrite 400.
+  Finance UI 12/12 (split API, modal formula + farq warning, member card).
+- **Data repair (live, deploy ke baad)**: 000031 → WAITING_FOR_PRINTING +
+  500 PRINTING commission delete; phir office ke tamam cases syncProfitShare;
+  audit `case.status.repair` / `ledger.repair`.

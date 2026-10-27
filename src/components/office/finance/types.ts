@@ -117,6 +117,21 @@ export type MemberFinanceDetail = {
   expenses: MemberExpenseEntry[];
   payouts: MemberPayoutEntry[];
   summary: MemberSummary;
+  // §W40 — PROFIT_SHARE office ka formula hisaab (all-time); baqi offices null.
+  officeProfit: MemberOfficeProfit | null;
+};
+
+export type MemberOfficeProfit = {
+  received: number;
+  officeExpenses: number;
+  caseExpenses: number;
+  deptCommissions: number;
+  otherExpenses: number;
+  officeProfit: number;
+  percent: number;
+  share: number;
+  // Account mein asal (earning − office expense share) — share ke barabar hona chahiye.
+  account: number;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,6 +181,20 @@ export function normalizeMemberDetail(data: any): MemberFinanceDetail {
       wasool,
       due: num(data?.summary?.due ?? data?.totals?.due ?? earning - expenseShare - wasool),
     },
+    officeProfit:
+      data?.officeProfit && typeof data.officeProfit === "object"
+        ? {
+            received: num(data.officeProfit.received),
+            officeExpenses: num(data.officeProfit.officeExpenses),
+            caseExpenses: num(data.officeProfit.caseExpenses),
+            deptCommissions: num(data.officeProfit.deptCommissions),
+            otherExpenses: num(data.officeProfit.otherExpenses),
+            officeProfit: num(data.officeProfit.officeProfit),
+            percent: num(data.officeProfit.percent),
+            share: num(data.officeProfit.share),
+            account: num(data.officeProfit.account),
+          }
+        : null,
   };
 }
 
@@ -243,6 +272,20 @@ export type PayoutRequestRow = {
 // §W21 — Admin profit breakdown (GET /api/office/finance ...profit). Top-level
 // profit is period-scoped; with ?officeId= it is scoped to that office. Har
 // offices[] row bhi apna `profit` object + `remaining` (Σ baqi) rakhta hai.
+// §W40 — PROFIT_SHARE office: owner ka formula + admin / members ka hissa.
+// `ledger` = member ke account mein asal (PROFIT_SHARE/ADJUSTMENT − EXPENSE
+// debits) — formula wale `share` se farq ho to modal warning dikhata hai.
+export type ProfitSplit = {
+  officeProfit: number;
+  officeExpenses: number;
+  caseExpenses: number;
+  deptCommissions: number;
+  otherExpenses: number;
+  adminPercent: number;
+  adminShare: number;
+  members: Array<{ memberId: string; name: string; percent: number; share: number; ledger: number }>;
+};
+
 export type ProfitBreakdown = {
   received: number;
   caseExpenses: number;
@@ -260,6 +303,7 @@ export type ProfitBreakdown = {
   officeExpensesMemberShare: number;
   deductionsTotal: number;
   net: number;
+  split?: ProfitSplit | null;
 };
 
 export const EMPTY_PROFIT: ProfitBreakdown = {
@@ -299,6 +343,27 @@ export function normalizeProfit(raw: any): ProfitBreakdown | null {
     officeExpensesMemberShare: num(raw.officeExpensesMemberShare),
     deductionsTotal: num(raw.deductionsTotal),
     net: num(raw.net),
+    split:
+      raw.split && typeof raw.split === "object"
+        ? {
+            officeProfit: num(raw.split.officeProfit),
+            officeExpenses: num(raw.split.officeExpenses),
+            caseExpenses: num(raw.split.caseExpenses),
+            deptCommissions: num(raw.split.deptCommissions),
+            otherExpenses: num(raw.split.otherExpenses),
+            adminPercent: num(raw.split.adminPercent),
+            adminShare: num(raw.split.adminShare),
+            members: Array.isArray(raw.split.members)
+              ? raw.split.members.map((member: { memberId?: unknown; name?: unknown; percent?: unknown; share?: unknown; ledger?: unknown }) => ({
+                  memberId: String(member?.memberId ?? ""),
+                  name: String(member?.name ?? "Member"),
+                  percent: num(member?.percent),
+                  share: num(member?.share),
+                  ledger: num(member?.ledger),
+                }))
+              : [],
+          }
+        : null,
   };
 }
 

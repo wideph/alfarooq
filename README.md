@@ -111,9 +111,10 @@ design, business rules, roadmap and agent log live in `docs/office-module/`.
   ]
   ```
 
-  Without this rule, files up to 4 MB (and photos, which the browser shrinks to
-  fit) still upload through the server; bigger
-  files show a clear "CORS setting zaroori hai" error.
+  Without this rule, files still upload through the server: up to 4 MB in one
+  request, photos are shrunk by the browser to fit, and any file up to 10 MB is
+  sent in 3 MB chunks (`POST /api/office/cases/[id]/files/chunks`) and joined on
+  R2. Only videos bigger than 10 MB need the CORS rule (clear error otherwise).
 - Expected printing date uses the bot AI configured in Admin → Settings (falls back
   to weekend-only skipping when no AI key is set); override from `/office/setup`.
 - Migration: `prisma/migrations/20261001120000_office_module/migration.sql`

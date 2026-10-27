@@ -187,6 +187,12 @@ function departmentContentType(name: string, mimeType: string | null | undefined
   return WORD_MIME_BY_EXT[ext] || VIDEO_MIME_BY_EXT[ext] || getMimeType(name);
 }
 
+// §W40 — chunked upload ke jode hue object ka Content-Type key ki extension se
+// (client ki di hui value par bharosa nahi).
+export function contentTypeForDepartmentKey(key: string) {
+  return departmentContentType(path.basename(key), "");
+}
+
 export function planDepartmentUpload(
   file: { name: string; type?: string | null; size: number },
   prefix: string
@@ -307,6 +313,35 @@ export function ensureOfficeBucketCors(origin: string): Promise<boolean> {
 export async function deleteOfficeFile(key: string) {
   const { bucket } = getR2Config();
   await getR2Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
+// §W40 — CORS ke baghair 4 MB se bari (≤10 MB) file: browser 3 MB ke tukde
+// server ke raaste bhejta hai (har request Vercel ki 4.5 MB limit ke andar);
+// server tukde `<key>.part<n>` par rakhta hai aur aakhir mein jod kar asal key
+// par ek object banata hai. Bytes jaise aaye waise hi — file kharab nahi hoti.
+export const CHUNKED_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+export const UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
+
+export function chunkPartKey(key: string, index: number) {
+  return `${key}.part${index}`;
+}
+
+export async function putOfficeObject(key: string, body: Buffer, contentType: string) {
+  const { bucket } = getR2Config();
+  await getR2Client().send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
+}
+
+export async function readOfficeObject(key: string): Promise<Buffer | null> {
+  const { bucket } = getR2Config();
+  try {
+    const result = await getR2Client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!result.Body) return null;
+    return Buffer.from(await result.Body.transformToByteArray());
+  } catch (error) {
+    const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (err?.$metadata?.httpStatusCode === 404 || err?.name === "NoSuchKey") return null;
+    throw error;
+  }
 }
 
 // Signed GET url. `options.download` (W21): true → force an attachment

@@ -3,6 +3,7 @@ import { hasPermission, type AdminPermission, type AdminSession } from "@/lib/au
 import { prisma } from "@/lib/prisma";
 import { round2 } from "@/lib/office/money";
 import { todayPakistan } from "@/lib/office/serializers";
+import { syncProfitShare } from "@/lib/office/profit-share";
 
 // ---------------------------------------------------------------------------
 // F4 — Department commission engine.
@@ -163,7 +164,7 @@ export async function creditDeptCommission(
     });
     if (existing) return null;
 
-    return await db.ledgerEntry.create({
+    const created = await db.ledgerEntry.create({
       data: {
         bookingOfficeId: item.bookingOfficeId,
         memberId: null,
@@ -178,8 +179,34 @@ export async function creditDeptCommission(
         createdById: input.adminId,
       },
     });
+    // §W40: partner (PROFIT_SHARE) office — department commission case pool se
+    // minus hoti hai (admin + members sab ke hisse se), is liye share dobara.
+    if (db === prisma) await syncProfitShare(item.id, input.adminId);
+    return created;
   } catch (error) {
     console.warn("[office] dept commission credit fail", error);
     return null;
   }
+}
+
+// §W40 — department ka saboot (maslan case ki aakhri PRINTING file) delete ho
+// jaye to us case ka us kind ka commission bhi khatam (owner: "file upload
+// nahi huee to commission printing department se khatam"). Rows delete hoti
+// hain (reversal row nahi) taake dobara asal upload par credit idempotency
+// check se na ruke. Partner office ka profit share bhi dobara.
+export async function removeDeptCommission(
+  input: { caseId: string; kind: DeptCommissionKind; actorId: string }
+): Promise<Array<{ id: string; adminId: string | null; amount: number; remarks: string | null }>> {
+  const rows = await prisma.ledgerEntry.findMany({
+    where: {
+      type: DEPT_COMMISSION_TYPE,
+      caseId: input.caseId,
+      remarks: { startsWith: deptCommissionRemarksPrefix(input.kind, input.caseId) },
+    },
+    select: { id: true, adminId: true, amount: true, remarks: true },
+  });
+  if (rows.length === 0) return [];
+  await prisma.ledgerEntry.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
+  await syncProfitShare(input.caseId, input.actorId);
+  return rows.map((row) => ({ ...row, amount: Number(row.amount) }));
 }
