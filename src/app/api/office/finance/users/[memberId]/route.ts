@@ -19,6 +19,8 @@ const EARNING_TYPES = [
   "PROFIT_SHARE",
   "ADJUSTMENT",
   "BONUS",
+  // §W45: discount ka commission wala hissa (DEBIT) — earning se minus.
+  "DISCOUNT",
 ];
 
 // EXPENSE debit remarks ko display description tak strip karta hai:
@@ -133,7 +135,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
         officeProfit: toNumber(profit),
         percent: toNumber(percent),
         share: toNumber(round2(profit.mul(percent).div(100))),
-        account: toNumber(totalEarning.minus(expenseShare)),
+        // §W45: bonus / discount formula ke bahar hain — muqable mein sirf
+        // profit share + adjustment − expense share.
+        account: toNumber(
+          earningRows
+            .filter((row) => row.type !== "BONUS" && row.type !== "DISCOUNT")
+            .reduce((acc, row) => (row.direction === "CREDIT" ? acc.plus(row.amount) : acc.minus(row.amount)), new Prisma.Decimal(0))
+            .minus(expenseShare)
+        ),
       };
     }
 

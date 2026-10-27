@@ -7,7 +7,10 @@ import { toNumber } from "@/lib/office/money";
 export async function officeBalances(officeIds?: string[]) {
   const rows = await prisma.ledgerEntry.groupBy({
     by: ["bookingOfficeId", "direction"],
-    where: officeIds ? { bookingOfficeId: { in: officeIds } } : {},
+    // §W45: department users ki rows (adminId — DEPT_COMMISSION / un ke
+    // payouts) office ke case par likhi jati hain magar office ka paisa nahi;
+    // office balance = sirf office / members ki entries.
+    where: { adminId: null, ...(officeIds ? { bookingOfficeId: { in: officeIds } } : {}) },
     _sum: { amount: true },
   });
   const balances: Record<string, Prisma.Decimal> = {};

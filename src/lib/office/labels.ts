@@ -104,6 +104,8 @@ export const LEDGER_TYPE_LABELS: Record<string, string> = {
   PAYOUT: "Payout",
   ADJUSTMENT: "Adjustment",
   EXPENSE: "Office expense",
+  BONUS: "Bonus",
+  DISCOUNT: "Discount (commission se)",
 };
 
 // §W30 — department commission kinds (finance drawer, Mera account, case

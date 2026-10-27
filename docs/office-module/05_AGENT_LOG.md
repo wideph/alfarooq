@@ -1796,3 +1796,62 @@ Investigation-first (live DB audit):
      cashier ne case banaya to memberId null (live: 0).
   9. Dept payout ki bookingOfficeId aakhri commission wale office se →
      per-office balance mein dept ki raqam (live: 0 payouts).
+
+## WAVE 45 (2026-10-28) — Commission ka faisla (admin), office balance, bonus / discount member par
+
+- **Owner request**: W44 audit point 8 (fixed office ki commission sirf case
+  banane wale member ko) theek hai, magar admin commission office ka case banaye
+  to poochha jaye "is case ka itna commission banta hai — booking office ko dena
+  hai ya nahi?" — partial ka option bhi. Baqi audit points dobara gehrai se check
+  karke sirf asal bugs theek karo; jo sahi hai usay mat chhero. (Owner ka "bonus"
+  test asal mein extra payment / EXTRA_SHARE flow tha — wo sahi hai; BonusRequest
+  aur DiscountRequest ki live rows 0.)
+- **DB**: migration `20261030120000_office_wave45` — Case.commissionMode (TEXT),
+  Case.commissionMemberId (FK BookingOfficeMember, SET NULL). Additive +
+  idempotent. **Live apply BAQI** — auto mode ne `prisma migrate deploy` rok diya;
+  owner ki ijazat / khud chalane ke baad hi push (naya Prisma client naye columns
+  select karta hai — migration ke baghair deploy case pages tod dega).
+- **Commission faisla**: cases POST — FIXED office + creator office ka member
+  nahi + role booking_office nahi + grid > 0 → `commissionDecision` na ho to 409
+  `needsCommissionDecision {amount, officeName, categoryName, members}` (koi write
+  nahi, client picture upload se bhi pehle). FULL / NONE / PARTIAL (0 < x < grid)
+  + memberId (akela active member khud; >1 par FULL/PARTIAL ke liye lazmi).
+  `parseCaseInput` multipart mein commissionDecision JSON. Naya
+  `CommissionDecisionPopup` (new case page): Haan poora / Nahi / Partial + raqam,
+  member select, "Case banayein" faisle ke baghair band. `caseCommissionMemberId`
+  (commission.ts) = commissionMemberId ?? creator member — recompute, discount,
+  bonus sab isi se. Case PATCH category: NONE / PARTIAL par commission grid ke
+  saath nahi badalti. Commission panel mein "Admin ka faisla" line.
+- **Audit points dobara (W44 list)**:
+  1. Discount — asal bug: DISCOUNT row bina member → member due nahi katta;
+     finance buckets mein nahi. Ab: member par (caseCommissionMemberId),
+     EARNING_TYPES (users, member detail, dashboard) + finance SHARE_TYPES /
+     commissions bucket mein DISCOUNT; commission / partial sirf FIXED office
+     (server 400 + UI mein sirf profit option). Live rows 0 → purana hisaab same.
+  2. Bonus — asal bug: BONUS EARNING_TYPES mein tha magar row bina member → member
+     ke account mein kabhi nahi aata. Ab requester member → case commission member
+     → akela active member. Member card ka formula `account` bonus / discount ke
+     baghair (warna ghalat "farq"). "Commission se / admin profit se" sirf note
+     (pehle jaisa).
+  3. Period timing — design (BR6): koi change nahi.
+  4. summary.profit — sirf API, UI profit buckets use karti hai: koi change nahi.
+  5. Dashboard pending — asal bug (finance ka comment "dashboard wala formula:
+     non-CANCELLED"): ab CANCELLED bahar. Live cancelled cases 0.
+  6. Inactive members — design (active list): koi change nahi.
+  7. Partner split current % vs snapshot — live mein koi % nahi badla (farq 0);
+     chhera nahi (risk > faida).
+  8. Commission member — upar wala naya faisla.
+  9. + LIVE bug: `officeBalances` aur office statement department rows (adminId)
+     bhi gin rahe the → Haroon 76,165.5 (sahi 75,165.5), AW-Knj 40,500 (sahi
+     39,500). Ab `adminId: null` — balance = members ka total. Dept payouts bhi
+     isi se bahar (point 9).
+- **Verify**: tsc 0, lint 0, build exit 0. Read-only harness (writes blocked,
+  final POST mocked) 26/26: office balance 75,165.5 / 39,500 = members total,
+  statement mein DEPT_COMMISSION nahi; 409 (Rs 3,000, AW-K), partial = grid /
+  0 → 400, ghalat member 400, ghalat mode 409, multipart parse; dashboard /
+  finance / users 200; popup (Nahi → NONE body, error par band, partial check,
+  "AW-K ke account mein", PARTIAL 1000 + memberId body, case page par); 0
+  write attempts. Rollback ledger test migration ke baad (columns live chahiye).
+- **Next step**: owner migration live kare (`npx prisma migrate deploy`) → push →
+  live par admin se AW-Knj ka test case (Partial) → ledger mein AW-K par half
+  commission check.

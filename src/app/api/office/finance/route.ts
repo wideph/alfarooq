@@ -39,7 +39,10 @@ export const preferredRegion = ["sin1"];
 //   SALARY / flag=false expenses pooray. Company expenses sirf top-level
 //   bucket mein (kisi office se attributed nahi).
 
-const SHARE_TYPES = ["COMMISSION_HALF", "COMMISSION_ADJUST", "COMMISSION_FINAL", "EXTRA_SHARE", "PROFIT_SHARE", "ADJUSTMENT"];
+// §W45: DISCOUNT (commission se minus hone wala discount, DEBIT) commission ka
+// net kam karta hai — office ne discount bardasht kiya to company ka profit utna
+// zyada.
+const SHARE_TYPES = ["COMMISSION_HALF", "COMMISSION_ADJUST", "COMMISSION_FINAL", "EXTRA_SHARE", "PROFIT_SHARE", "ADJUSTMENT", "DISCOUNT"];
 // §W21 profit buckets ke liye ledger types (SHARE_TYPES + BONUS + DEPT_COMMISSION).
 const PROFIT_LEDGER_TYPES = [...SHARE_TYPES, "BONUS", "DEPT_COMMISSION"];
 
@@ -109,7 +112,7 @@ function newProfitBucket(): ProfitBucket {
 }
 
 function addLedgerToBucket(bucket: ProfitBucket, type: string, signed: Prisma.Decimal) {
-  if (type === "COMMISSION_HALF" || type === "COMMISSION_FINAL" || type === "COMMISSION_ADJUST") {
+  if (type === "COMMISSION_HALF" || type === "COMMISSION_FINAL" || type === "COMMISSION_ADJUST" || type === "DISCOUNT") {
     bucket.commissions = bucket.commissions.plus(signed);
   } else if (type === "PROFIT_SHARE" || type === "ADJUSTMENT") {
     // §W21.4: ADJUSTMENT entries SIRF finalizeProfitShare ke share re-calc

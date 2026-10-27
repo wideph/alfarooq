@@ -103,10 +103,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data.category = { disconnect: true };
       }
       // Commission follows the grid until something has been credited.
+      // §W45: admin ne "Nahi" / "Partial" chuna tha to wahi faisla qaim rehta
+      // hai (sirf "Poora" / member ka case grid ke saath chalta hai).
       if (
         existing.bookingOffice.type === "FIXED_COMMISSION" &&
         !existing.commissionHalfCreditedAt &&
-        categoryId !== existing.categoryId
+        categoryId !== existing.categoryId &&
+        existing.commissionMode !== "NONE" &&
+        existing.commissionMode !== "PARTIAL"
       ) {
         const grid = categoryId
           ? await prisma.bookingOfficeCommission.findUnique({

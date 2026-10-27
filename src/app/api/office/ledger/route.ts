@@ -47,7 +47,10 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const pageSize = 100;
 
-  const where: Prisma.LedgerEntryWhereInput = {};
+  // §W45: office statement mein department users ki rows (adminId) nahi —
+  // wo un ke apne account (Finance → departments) mein hain; balance bhi
+  // isi tarah (officeBalances).
+  const where: Prisma.LedgerEntryWhereInput = { adminId: null };
   if (officeId) where.bookingOfficeId = officeId;
   if (memberId) where.memberId = memberId;
   if (from || to) {

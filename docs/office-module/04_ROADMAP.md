@@ -89,3 +89,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W42 Medical Bmfq 2Y par 1Y ke 3 Sets of Attestations (same steps → same dates); Setup mein "Sets copy karein" + har category ke sets count.
 - [x] W43 2Y BBTE par 1Y BBTE ke 2 Sets of Attestations (same steps → same dates).
 - [x] W44 Commission dobara admin ke faisle se (status wapas par har dafa sawal; partner pool se bhi), custom case label (detail + list + queues), payments / finance "Case detail" + tab wapsi, extra popup naya tab; finance audit report (9 points, sirf report).
+- [x] W45 Admin / cashier commission office ka case banaye to commission ka faisla (poora / nahi / partial + member); office balance se department rows bahar; bonus / discount member ke account mein; discount commission se sirf fixed office; dashboard pending bina CANCELLED.

@@ -439,10 +439,24 @@ function CommissionPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
               )}
             </div>
           </div>
-          {detail.commissionAmount === 0 && (
-            <p className="text-xs text-amber-600">
-              Is office/category ke liye commission set nahi hai (Setup → Booking office → commissions).
+          {detail.commissionMode ? (
+            <p className="rounded-xl bg-primary-50 px-3 py-2 text-xs text-primary-800">
+              Admin ka faisla (case banate waqt):{" "}
+              <span className="font-semibold">
+                {detail.commissionMode === "FULL"
+                  ? "poora commission"
+                  : detail.commissionMode === "PARTIAL"
+                    ? "partial commission"
+                    : "commission nahi"}
+              </span>
+              {detail.commissionMember && detail.commissionMode !== "NONE" ? ` — ${detail.commissionMember.name} ke account mein` : ""}
             </p>
+          ) : (
+            detail.commissionAmount === 0 && (
+              <p className="text-xs text-amber-600">
+                Is office/category ke liye commission set nahi hai (Setup → Booking office → commissions).
+              </p>
+            )
           )}
           {canLedgerWrite && (
             <div className="space-y-2 rounded-xl border border-slate-200 p-3">

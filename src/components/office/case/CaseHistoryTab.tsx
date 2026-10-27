@@ -53,7 +53,13 @@ export default function CaseHistoryTab(props: TabProps) {
       <DeptCommissionsAttached detail={props.detail} />
       <LedgerPanel {...props} />
       <AuditPanel {...props} />
-      <DiscountPanel caseId={props.detail.id} admin={props.admin} onReload={props.onReload} onMessage={props.onMessage} />
+      <DiscountPanel
+        caseId={props.detail.id}
+        officeType={props.detail.bookingOffice.type}
+        admin={props.admin}
+        onReload={props.onReload}
+        onMessage={props.onMessage}
+      />
       <BonusPanel caseId={props.detail.id} admin={props.admin} onReload={props.onReload} onMessage={props.onMessage} />
     </div>
   );
@@ -317,11 +323,13 @@ function AuditPanel({ detail, admin }: TabProps) {
 // cashier decide karte hain (commission / admin profit / partial se minus).
 function DiscountPanel({
   caseId,
+  officeType,
   admin,
   onReload,
   onMessage,
 }: {
   caseId: string;
+  officeType: CaseDetail["bookingOffice"]["type"];
   admin: AdminNavUser;
   onReload: () => Promise<void>;
   onMessage: (message: string, kind?: ToastKind) => void;
@@ -333,7 +341,11 @@ function DiscountPanel({
   const [form, setForm] = useState({ amount: "", reason: "" });
   const [busy, setBusy] = useState(false);
   const [deciding, setDeciding] = useState<DiscountRequestItem | null>(null);
-  const [deductFrom, setDeductFrom] = useState<"COMMISSION" | "PROFIT" | "PARTIAL">("COMMISSION");
+  // §W45: commission sirf fixed-commission office ki — partner / salary
+  // office mein discount sirf profit se (server bhi yahi check karta hai).
+  const isFixed = officeType === "FIXED_COMMISSION";
+  const defaultDeduct = isFixed ? "COMMISSION" : "PROFIT";
+  const [deductFrom, setDeductFrom] = useState<"COMMISSION" | "PROFIT" | "PARTIAL">(defaultDeduct);
   const [partialAmount, setPartialAmount] = useState("");
 
   const load = useCallback(async () => {
@@ -444,7 +456,7 @@ function DiscountPanel({
                   <button
                     onClick={() => {
                       setDeciding(item);
-                      setDeductFrom("COMMISSION");
+                      setDeductFrom(defaultDeduct);
                       setPartialAmount("");
                     }}
                     className="min-h-[36px] rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white"
@@ -470,12 +482,20 @@ function DiscountPanel({
             {deciding.reason && <p className="text-sm text-slate-500">Wajah: {deciding.reason}</p>}
             <div className="space-y-2 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accept karein to kahan se minus ho:</p>
-              {(
-                [
-                  ["COMMISSION", "Booking office ki commission se"],
-                  ["PROFIT", "Admin profit se"],
-                  ["PARTIAL", "Partial (donon se split)"],
-                ] as const
+              {(isFixed
+                ? ([
+                    ["COMMISSION", "Booking office ki commission se"],
+                    ["PROFIT", "Admin profit se"],
+                    ["PARTIAL", "Partial (donon se split)"],
+                  ] as const)
+                : ([
+                    [
+                      "PROFIT",
+                      officeType === "PROFIT_SHARE"
+                        ? "Profit se (shareholders apne % ke mutabiq)"
+                        : "Admin profit se",
+                    ],
+                  ] as const)
               ).map(([value, label]) => (
                 <label key={value} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
                   <input type="radio" name="deductFrom" checked={deductFrom === value} onChange={() => setDeductFrom(value)} />

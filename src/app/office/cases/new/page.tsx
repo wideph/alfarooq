@@ -6,6 +6,10 @@ import { ImagePlus, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import { officeFetch } from "@/lib/office/client";
 import { announceOfficeChange } from "@/lib/office/live";
+import CommissionDecisionPopup, {
+  type CommissionAsk,
+  type CommissionDecision,
+} from "@/components/office/CommissionDecisionPopup";
 
 type Office = { id: string; name: string; type: string; isActive: boolean };
 type Category = { id: string; name: string; defaultAmount: number | null; isActive: boolean };
@@ -23,6 +27,9 @@ export default function NewCasePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [picture, setPicture] = useState<File | null>(null);
+  // §W45: commission office ka case admin banaye to server 409 ke saath
+  // poochta hai — popup faisla le kar wahi form dobara bhejta hai.
+  const [commissionAsk, setCommissionAsk] = useState<CommissionAsk | null>(null);
   const [form, setForm] = useState({
     bookingOfficeId: "",
     clientName: "",
@@ -106,7 +113,7 @@ export default function NewCasePage() {
   // (optional) — baqi categories par hidden rehta hai.
   const isBmfq = (categories.find((c) => c.id === form.categoryId)?.name || "").toLowerCase().includes("bmfq");
 
-  async function submit() {
+  async function submit(commissionDecision?: CommissionDecision) {
     setError("");
     // §N7: Roll Number ya Registration Number — in men se aik lazmi hai (client-side check).
     if (!hasRorReg) {
@@ -138,6 +145,7 @@ export default function NewCasePage() {
     fd.append("addresses", JSON.stringify(form.addresses));
     fd.append("attestationTypeIds", JSON.stringify(form.attestationTypeIds));
     if (picture) fd.append("clientPicture", picture);
+    if (commissionDecision) fd.append("commissionDecision", JSON.stringify(commissionDecision));
     const res = await fetch("/api/office/cases", { method: "POST", body: fd });
     if (res.ok) announceOfficeChange();
     const data = await res.json().catch(() => ({}));
@@ -145,6 +153,12 @@ export default function NewCasePage() {
       router.push(`/office/cases/${data.id}`);
       return;
     }
+    if (res.status === 409 && data.needsCommissionDecision) {
+      setCommissionAsk(data.needsCommissionDecision);
+      setSaving(false);
+      return;
+    }
+    setCommissionAsk(null);
     setError(data.error || "Case save nahi ho saka");
     setSaving(false);
   }
@@ -378,7 +392,7 @@ export default function NewCasePage() {
 
           <div className="flex gap-2">
             <button
-              onClick={submit}
+              onClick={() => void submit()}
               disabled={saving || !hasRorReg || (admin.role !== "booking_office" && !form.bookingOfficeId)}
               className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
@@ -389,6 +403,13 @@ export default function NewCasePage() {
               Cancel
             </button>
           </div>
+          {commissionAsk && (
+            <CommissionDecisionPopup
+              ask={commissionAsk}
+              onSubmit={(decision) => submit(decision)}
+              onClose={() => setCommissionAsk(null)}
+            />
+          )}
         </div>
       )}
     </OfficePageFrame>

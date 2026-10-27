@@ -36,6 +36,9 @@ export function stripCaseMoney<T extends Record<string, unknown>>(row: T): T {
     claimedRemaining: null,
     claimedRemainingStatus: "NONE",
     commissionAmount: 0,
+    commissionMode: null,
+    commissionMemberId: null,
+    commissionMember: null,
     commissionHalfCreditedAt: null,
     commissionFullCreditedAt: null,
     extraSharePercent: null,
@@ -194,6 +197,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     where: { id: caseId, ...caseScope(session) },
     include: {
       bookingOffice: { select: { id: true, name: true, type: true } },
+      // §W45: admin ke faisle wala commission member (Commission panel).
+      commissionMember: { select: { id: true, name: true } },
       category: { select: { id: true, name: true } },
       set: { select: { id: true, name: true } },
       contacts: { orderBy: { createdAt: "asc" } },

@@ -6,7 +6,7 @@ import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, canSeeOffice, isDeptWorker } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
-import { parseAmount } from "@/lib/office/money";
+import { parseAmount, toNumber } from "@/lib/office/money";
 import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
 import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
@@ -325,6 +325,63 @@ export async function POST(request: NextRequest) {
       if (grid) commissionAmount = grid.amount;
     }
 
+    // §W45 (BR3.1a): commission office ka case us office ka member khud
+    // banaye to grid ka poora commission usi ke naam (pehle jaisa). Admin /
+    // cashier banaye to admin se faisla: poora / nahi / partial — aur
+    // commission kis member ke account mein jaye. Faisla na ho to 409
+    // (koi write nahi; page sawal dikha kar dobara bhejta hai).
+    let commissionMode: string | null = null;
+    let commissionMemberId: string | null = null;
+    if (office.type === "FIXED_COMMISSION" && session.role !== "booking_office") {
+      const members = await prisma.bookingOfficeMember.findMany({
+        where: { bookingOfficeId },
+        select: { id: true, name: true, adminId: true, isActive: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!members.some((member) => member.adminId === session.adminId)) {
+        const activeMembers = members.filter((member) => member.isActive);
+        const raw = (body.commissionDecision ?? null) as { mode?: unknown; amount?: unknown; memberId?: unknown } | null;
+        const pickedMemberId = typeof raw?.memberId === "string" ? raw.memberId : "";
+        if (pickedMemberId && !activeMembers.some((member) => member.id === pickedMemberId)) {
+          return badRequest("Commission wala member nahi mila ya inactive hai");
+        }
+        commissionMemberId = pickedMemberId || (activeMembers.length === 1 ? activeMembers[0].id : null);
+
+        if (commissionAmount.greaterThan(0)) {
+          const mode = typeof raw?.mode === "string" ? raw.mode : "";
+          if (!["FULL", "NONE", "PARTIAL"].includes(mode)) {
+            return NextResponse.json(
+              {
+                error: `Is case ka commission Rs ${toNumber(commissionAmount).toLocaleString("en-PK")} banta hai — booking office ko dena hai ya nahi?`,
+                needsCommissionDecision: {
+                  amount: toNumber(commissionAmount),
+                  officeName: office.name,
+                  categoryName: category.name,
+                  members: activeMembers.map((member) => ({ id: member.id, name: member.name })),
+                },
+              },
+              { status: 409 }
+            );
+          }
+          if (mode === "PARTIAL") {
+            const partial = parseAmount(raw?.amount);
+            if (!partial || !partial.greaterThan(0) || !partial.lessThan(commissionAmount)) {
+              return badRequest(
+                `Partial commission 0 se zyada aur poore commission (Rs ${toNumber(commissionAmount).toLocaleString("en-PK")}) se kam ho`
+              );
+            }
+            commissionAmount = partial;
+          } else if (mode === "NONE") {
+            commissionAmount = new Prisma.Decimal(0);
+          }
+          if (mode !== "NONE" && !commissionMemberId && activeMembers.length > 1) {
+            return badRequest("Commission kis member ke account mein jaye — member select karein");
+          }
+          commissionMode = mode;
+        }
+      }
+    }
+
     const year = new Date(Date.now() + 5 * 3_600_000).getUTCFullYear();
 
     // Client picture (optional) goes to R2 like payment slips.
@@ -360,6 +417,8 @@ export async function POST(request: NextRequest) {
           clientPictureKey,
           clientPictureType,
           commissionAmount,
+          commissionMode,
+          commissionMemberId,
           notes: cleanText(body.notes, 2000),
           contacts: { create: contacts },
           addresses: { create: addresses },
@@ -388,7 +447,14 @@ export async function POST(request: NextRequest) {
       action: "case.create",
       entity: "Case",
       entityId: created.id,
-      after: { caseNumber: created.caseNumber, clientName, bookingOfficeId, categoryId, agreedAmount },
+      after: {
+        caseNumber: created.caseNumber,
+        clientName,
+        bookingOfficeId,
+        categoryId,
+        agreedAmount,
+        ...(commissionMode ? { commissionMode, commissionAmount, commissionMemberId } : {}),
+      },
     });
 
     // §W11.8: case.create → tamam admins ko notification.

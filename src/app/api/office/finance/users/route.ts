@@ -22,6 +22,8 @@ const EARNING_TYPES = [
   "PROFIT_SHARE",
   "ADJUSTMENT",
   "BONUS",
+  // §W45: discount ka commission wala hissa (DEBIT) — earning se minus.
+  "DISCOUNT",
 ];
 
 type MemberTotals = {

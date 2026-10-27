@@ -10,6 +10,12 @@ export type CaseDetail = {
   claimedRemaining: number | null;
   claimedRemainingStatus: "NONE" | "PENDING" | "ACCEPTED";
   commissionAmount: number;
+  // §W45: admin / cashier ne commission office ka case banaya to faisla
+  // (FULL / NONE / PARTIAL) aur kis member ke account mein; member ka banaya
+  // case = null (grid ka poora commission usi member ko).
+  commissionMode?: "FULL" | "NONE" | "PARTIAL" | null;
+  commissionMemberId?: string | null;
+  commissionMember?: { id: string; name: string } | null;
   commissionHalfCreditedAt: string | null;
   commissionFullCreditedAt: string | null;
   extraSharePercent: number | null;

@@ -513,7 +513,7 @@ export async function parseCaseInput(request: NextRequest): Promise<{
       if (key === "clientPicture" && value.size > 0) clientPicture = value;
       continue;
     }
-    if (["contacts", "addresses", "attestationTypeIds"].includes(key)) {
+    if (["contacts", "addresses", "attestationTypeIds", "commissionDecision"].includes(key)) {
       try {
         fields[key] = JSON.parse(value);
       } catch {

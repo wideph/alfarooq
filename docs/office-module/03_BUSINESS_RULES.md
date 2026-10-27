@@ -30,6 +30,15 @@ All money is `Decimal(12,2)`. Use `src/lib/office/money.ts` helpers.
 
 3.1 On case create: `commissionAmount = BookingOfficeCommission[office, category].amount`
     (0 if not configured; show a warning in UI).
+3.1a §W45: case us office ka member khud banaye → upar wala poora commission usi
+    member ke account mein (pehle jaisa). Admin / cashier (office ka member nahi)
+    banaye aur grid commission > 0 ho → admin se faisla: **poora / nahi / partial**
+    (partial: 0 < raqam < grid) aur office mein ek se zyada active member hon to
+    kis member ke account mein (akela member khud chun liya jata hai). Faisla
+    `Case.commissionMode` (FULL / NONE / PARTIAL) + `Case.commissionMemberId`.
+    Commission / extra share / commission-discount ki ledger rows isi member par.
+    "Nahi" / "Partial" wale case par category badle to commission grid ke saath
+    nahi badalti (admin ka faisla qaim); baad mein 3.2 se badli ja sakti hai.
 3.2 Cashier/super admin may **reduce** `commissionAmount` any time
     (`PATCH /commission`). Reason required (remarks). Cannot go below 0.
 3.3 **Half credit**: when the case has ≥ 1 RECEIVED payment and
@@ -247,3 +256,19 @@ complete-all 400. Admin ke ikhtiyar pehle jaise.
 §W40: admin ke status change par kisi department ko commission nahi. Case ki aakhri
 PRINTING file delete ho to us case ka PRINTING commission khatam aur case PRINTED ho
 to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
+
+## BR16. Office balance, bonus aur discount — §W45
+
+- Office balance ("Company owes office") aur office ka statement = sirf office /
+  members ki ledger rows. Department users ki rows (adminId — DEPT_COMMISSION aur
+  un ke payouts) office ke case par likhi hoti hain magar office ka paisa nahi; wo
+  Finance → departments mein hain. Isliye office balance = members ke balance ka total.
+- Bonus accept → BONUS CREDIT member ke account mein: request karne wala member,
+  warna case ka commission member (3.1a), warna office ka akela active member.
+- Discount: "commission se" / "partial" sirf FIXED_COMMISSION office ke case par.
+  Commission wala hissa DISCOUNT DEBIT usi member par jis ke account mein case ki
+  commission jati hai — member ki earning / due se minus; company finance mein
+  commission ka net utna kam (profit utna zyada). Partner / salary office mein
+  sirf "profit se" (partner office ka share received kam hone se khud % ke mutabiq
+  kam ho jata hai).
+- Dashboard "pending" = sirf non-CANCELLED cases ka baqi (Finance remaining jaisa).

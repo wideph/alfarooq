@@ -6,6 +6,7 @@ import { isDeptWorker } from "@/lib/office/case-access";
 import { logOfficeAction } from "@/lib/office/audit";
 import { notifyAdmins, notifyUsers } from "@/lib/office/notifications";
 import { parseAmount } from "@/lib/office/money";
+import { caseCommissionMemberId } from "@/lib/office/commission";
 import { cleanText, todayPakistan, toJson } from "@/lib/office/serializers";
 import { findCachedOffice } from "@/lib/office/setup-cache";
 
@@ -158,6 +159,29 @@ export async function PATCH(request: NextRequest) {
       return badRequest("deductFrom zaroori hai (COMMISSION | PROFIT)");
     }
 
+    // §W45: bonus member ki earning hai (BONUS finance users / dashboard ke
+    // EARNING_TYPES mein) — is liye ledger row member par: request karne wala
+    // member, warna case ka commission member, warna office ka akela active
+    // member. Pehle memberId khali jata tha → member ke account / due mein
+    // bonus nazar hi nahi aata tha.
+    const [members, linkedCase] = await Promise.all([
+      prisma.bookingOfficeMember.findMany({
+        where: { bookingOfficeId: existing.bookingOfficeId },
+        select: { id: true, adminId: true, isActive: true },
+      }),
+      existing.caseId
+        ? prisma.case.findUnique({
+            where: { id: existing.caseId },
+            select: { commissionMemberId: true, createdByAdminId: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const activeMembers = members.filter((member) => member.isActive);
+    const bonusMemberId =
+      members.find((member) => member.adminId === existing.createdById)?.id ??
+      (linkedCase ? caseCommissionMemberId(linkedCase, members) : null) ??
+      (activeMembers.length === 1 ? activeMembers[0].id : null);
+
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.bonusRequest.update({
         where: { id },
@@ -166,6 +190,7 @@ export async function PATCH(request: NextRequest) {
       await tx.ledgerEntry.create({
         data: {
           bookingOfficeId: existing.bookingOfficeId,
+          memberId: bonusMemberId,
           caseId: existing.caseId,
           type: "BONUS",
           direction: "CREDIT",

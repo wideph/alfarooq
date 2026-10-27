@@ -44,6 +44,17 @@ function netOf(entries: Array<{ direction: string; amount: Prisma.Decimal }>) {
   );
 }
 
+// §W11.4 / §W45 — case ki commission kis member ke account mein: admin ka
+// chuna hua member (Case.commissionMemberId), warna case banane wala member.
+// Commission, extra share aur commission se minus hone wala discount sab isi
+// member par likhe jate hain.
+export function caseCommissionMemberId(
+  item: { commissionMemberId: string | null; createdByAdminId: string },
+  members: Array<{ id: string; adminId: string | null }>
+): string | null {
+  return item.commissionMemberId ?? members.find((member) => member.adminId === item.createdByAdminId)?.id ?? null;
+}
+
 export type RecomputeResult = CaseTotals & {
   needsExtraDecision: number | null;
   status: string;
@@ -75,8 +86,9 @@ export async function recomputeCaseFinancials(
     // member se linked hai, us member ki id nayi commission/extra ledger entries
     // par memberId mein jati hai. Creator member nahi hai to memberId=null.
     // Purani entries kabhi rewrite nahi hoti — sirf nayi entries par.
-    const attributionMemberId =
-      item.bookingOffice.members.find((member) => member.adminId === item.createdByAdminId)?.id ?? null;
+    // §W45: admin / cashier ne case banaya ho to admin ka chuna hua member
+    // (Case.commissionMemberId) pehle.
+    const attributionMemberId = caseCommissionMemberId(item, item.bookingOffice.members);
 
     const totals = computeTotals(item.payments, item.agreedAmount);
     const received = dec(totals.received);

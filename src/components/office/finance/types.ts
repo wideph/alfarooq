@@ -582,6 +582,7 @@ export const EARNING_TYPE_LABELS: Record<string, string> = {
   EXTRA_SHARE: "Extra share",
   BONUS: "Bonus",
   ADJUSTMENT: "Adjustment",
+  DISCOUNT: "Discount (commission se)",
 };
 
 export type OfficeGroup = {

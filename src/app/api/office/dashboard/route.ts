@@ -16,6 +16,8 @@ const EARNING_TYPES = [
   "PROFIT_SHARE",
   "ADJUSTMENT",
   "BONUS",
+  // §W45: discount ka commission wala hissa (DEBIT) — earning se minus.
+  "DISCOUNT",
 ];
 
 type MemberTotals = {
@@ -75,8 +77,9 @@ export async function GET() {
       }),
       // Pending payments + received totals: per case, RECEIVED payments ka
       // sum vs agreedAmount (computeTotals wala established formula).
+      // §W45: CANCELLED case ka baqi "pending" nahi (finance remaining jaisa).
       prisma.case.findMany({
-        where: { bookingOfficeId: { in: officeIds } },
+        where: { bookingOfficeId: { in: officeIds }, status: { not: "CANCELLED" } },
         select: {
           bookingOfficeId: true,
           agreedAmount: true,

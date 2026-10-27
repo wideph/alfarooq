@@ -239,6 +239,7 @@ model BookingOfficeMember {
   salaries        SalaryEntry[]
   officeExpenses  OfficeExpense[]
   payoutRequests  PayoutRequest[]
+  commissionCases Case[]        @relation("CaseCommissionMember")
 
   @@index([bookingOfficeId])
 }
@@ -373,11 +374,17 @@ model Case {
   // ({ PRINTING: 2, ... }); null / kind na ho = 1. Admin status peeche kare
   // (kaam dobara) to har dafa poochta hai — "Haan" par +1.
   deptCommissionRounds     Json?
+  // §W45: commission office ka case office ke member ke ilawa (admin / cashier)
+  // banaye to admin ka faisla: FULL | NONE | PARTIAL (null = member ne banaya,
+  // grid ka poora commission) aur commission kis member ke account mein jaye.
+  commissionMode           String?
+  commissionMemberId       String?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
   bookingOffice    BookingOffice     @relation(fields: [bookingOfficeId], references: [id])
+  commissionMember BookingOfficeMember? @relation("CaseCommissionMember", fields: [commissionMemberId], references: [id], onDelete: SetNull)
   category         CaseCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   set              CategorySet?      @relation(fields: [setId], references: [id], onDelete: SetNull)
   contacts         CaseContact[]

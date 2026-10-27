@@ -5,7 +5,7 @@ import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib
 import { logOfficeAction } from "@/lib/office/audit";
 import { notifyCourierStage, notifyUsers } from "@/lib/office/notifications";
 import { advanceCourierStage } from "@/lib/office/workflow";
-import { recomputeCaseFinancials } from "@/lib/office/commission";
+import { caseCommissionMemberId, recomputeCaseFinancials } from "@/lib/office/commission";
 import { dec, parseAmount, round2, toNumber } from "@/lib/office/money";
 import { todayPakistan, toJson } from "@/lib/office/serializers";
 
@@ -69,7 +69,20 @@ export async function PATCH(request: NextRequest) {
 
     const existing = await prisma.discountRequest.findUnique({
       where: { id },
-      include: { case: { select: { id: true, caseNumber: true, agreedAmount: true, bookingOfficeId: true, status: true } } },
+      include: {
+        case: {
+          select: {
+            id: true,
+            caseNumber: true,
+            agreedAmount: true,
+            bookingOfficeId: true,
+            status: true,
+            commissionMemberId: true,
+            createdByAdminId: true,
+            bookingOffice: { select: { type: true, members: { select: { id: true, adminId: true } } } },
+          },
+        },
+      },
     });
     if (!existing) return notFound("Discount request nahi mili");
     if (existing.status !== "PENDING") return badRequest("Ye request pehle se decide ho chuki hai");
@@ -102,6 +115,14 @@ export async function PATCH(request: NextRequest) {
     const deductFrom = String(body.deductFrom || "").toUpperCase();
     if (!(DEDUCT_OPTIONS as readonly string[]).includes(deductFrom)) {
       return badRequest("deductFrom zaroori hai (COMMISSION | PROFIT | PARTIAL)");
+    }
+
+    // §W45: commission sirf fixed-commission office ki hoti hai. Partner /
+    // salary office mein discount agreed (aur received) kam karta hai — partner
+    // office ka profit share khud % ke mutabiq kam ho jata hai; upar se office
+    // par alag debit double katoti thi.
+    if (deductFrom !== "PROFIT" && existing.case.bookingOffice.type !== "FIXED_COMMISSION") {
+      return badRequest("Commission se minus sirf fixed-commission office ke case par — yahan profit se chunein");
     }
 
     const amount = dec(existing.amount);
@@ -141,6 +162,9 @@ export async function PATCH(request: NextRequest) {
         await tx.ledgerEntry.create({
           data: {
             bookingOfficeId: existing.case.bookingOfficeId,
+            // §W45: commission se minus = usi member ki commission se (jis ke
+            // account mein is case ki commission jati hai).
+            memberId: caseCommissionMemberId(existing.case, existing.case.bookingOffice.members),
             caseId: existing.caseId,
             type: "DISCOUNT",
             direction: "DEBIT",
