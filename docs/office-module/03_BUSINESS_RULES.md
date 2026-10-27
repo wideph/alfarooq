@@ -227,3 +227,13 @@ filing is mein nahi) — `isDeptWorkerAccess` (permissions.ts).
   (+ contacts / addresses courier ke liye), Set + Steps & dates, Files,
   Remarks, aur "Is case par aap ka commission". Payments tab aur History /
   Finance ki baqi cheezein nahi.
+
+## BR15. PRINTED sirf proof ya admin se — §W39
+
+Case PRINTED (isPrinted) sirf do tareeqon se: printing department ka printed proof
+upload, ya admin ka status change. F22.5 ka "dual-permission auto-bridge" (printing +
+attestation wala user WAITING_FOR_PRINTING case par attestation kaam kare to khud
+PRINTED) hata diya. Printing se pehle ke statuses (FIRST_PAYMENT_PENDING /
+WAITING_FOR_FILE / WAITING_FOR_PRINTING) par department user ka attestation kaam
+(step IN_PROGRESS, attestation file, complete-all) case ko aage nahi le jata;
+complete-all 400. Admin ke ikhtiyar pehle jaise.

@@ -187,6 +187,12 @@ export const CASE_STATUSES = [
 ] as const;
 export type CaseStatus = (typeof CASE_STATUSES)[number];
 
+// §W39 — printing se pehle ke statuses. Case PRINTED sirf do tareeqon se hota
+// hai: printing department ka printed proof upload, ya admin ka status change.
+// Department user ka attestation kaam (step, file, complete) in statuses par
+// case ko printing se aage nahi le jata.
+export const PRE_PRINTING_STATUSES: readonly string[] = ["FIRST_PAYMENT_PENDING", "WAITING_FOR_FILE", "WAITING_FOR_PRINTING"];
+
 // "Open" filter se bahar: delivery ho chuki (musadiqa post-delivery stages
 // samait) ya cancelled. Cases list ka ?status=open aur §W35 queue chips.
 export const CLOSED_CASE_STATUSES: readonly CaseStatus[] = [

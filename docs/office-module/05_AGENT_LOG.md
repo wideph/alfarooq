@@ -1586,3 +1586,41 @@ Investigation-first (live DB audit):
 - **Next step**: owner ke Chrome mein is site ke liye "Always translate"
   laga ho to ek dafa page reload (purana tarjuma hat jaye). Aage crash ho to
   audit log `client.error` dekhein.
+
+## WAVE 39 (2026-10-27) — auto "Printed" band; auto-printed cases wapas (data repair)
+
+- **Owner request**: printing date guzarne par case khud printed ho jata hai —
+  printed sirf admin status change ya printing proof se ho; jo cases pehle
+  auto printed hue un ka status wapas WAITING_FOR_PRINTING.
+- **Tehqeeq (read-only)**: app mein date par chalne wala koi auto-print nahi.
+  Asal wajah F22.5 `autoBridgePrintingForDualDept`: printing +
+  attestation-dept dono permission wala actor (live user "rwp prnt att
+  courier", aur admin bhi — hasPermission admin ke liye true) WAITING_FOR_
+  PRINTING case par attestation step update (date / DONE), attestation file ya
+  complete-all kare to case printed proof ke baghair PRINTED. Live: AF-2026-
+  000017, -000018 (PRINTED, 0 printing file, attestation.update by dept user),
+  -000023 (bridge se isPrinted, phir admin ne WAITING_FOR_FILE kiya — flag
+  baqi). Koi bridge commission nahi bana. Baqi printed cases admin status ya
+  printing proof se (theek).
+- **Fix**: bridge function + saare istemal hataye (case-files, files route,
+  attestations route, complete-all) aur bridge ka PRINTING commission bhi.
+  `permissions.ts` PRE_PRINTING_STATUSES; `evaluateCaseCompletion` option
+  `allowBeforePrinting` (sirf admin) — printing se pehle completion nahi.
+  attestations PATCH: non-admin IN_PROGRESS sirf PRINTED / ATTESTATION case ko
+  ATTESTATION banata hai. complete-all: non-admin printing se pehle 400
+  ("pehle printing proof upload karein"). CaseFilesTab: printing se pehle dept
+  user ko "Saari attestations complete karein" nahi.
+- **Data repair (live, deploy ke baad, ek transaction + audit
+  `case.status.repair`)**: 000017, 000018 → WAITING_FOR_PRINTING, isPrinted
+  false, printedAt null; 000023 → sirf isPrinted false / printedAt null
+  (status admin ka WAITING_FOR_FILE hi).
+- **Verify**: tsc 0, lint 0, build exit 0. Rollback test 9/9 (bridge export
+  nahi, dual user FINAL file → WAITING_FOR_PRINTING / isPrinted false,
+  printing se pehle dept completion nahi, printing proof → PRINTED / bina-set
+  auto complete, admin allowBeforePrinting complete). W30 23/23. W32: 3 checks
+  live data badalne se (000026 / 000029 ab printed) — code regression nahi.
+  Browser/HTTP 6/6 (dept complete-all 400, WAITING_FOR_PRINTING par complete
+  button nahi, PRINTED par hai).
+- **Note**: AF-2026-000031 par 500 ka PRINTING commission hai magar printing
+  file 0 (dept user ki "47542.pdf" — case 21 ka roll — baad mein delete; phir
+  admin ne PRINTED kiya). Owner ko bataya; chheda nahi.

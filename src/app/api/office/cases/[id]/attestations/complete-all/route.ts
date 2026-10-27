@@ -7,9 +7,9 @@ import { findAccessibleCase, findDeptAccessibleCase } from "@/lib/office/case-ac
 import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import {
   advanceCourierStage,
-  autoBridgePrintingForDualDept,
   canCompleteAttestationWithReason,
   evaluateCaseCompletion,
+  PRE_PRINTING_STATUSES,
 } from "@/lib/office/workflow";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import { cleanText, toJson } from "@/lib/office/serializers";
@@ -53,6 +53,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       (deptUser ? await findDeptAccessibleCase(session, id, { attestations: true }) : null);
     if (!item) return notFound("Case nahi mila");
     if (item.status === "CANCELLED") return badRequest("Cancelled case par ye kaam nahi ho sakta");
+    // §W39: printing se pehle department user attestation complete nahi kar
+    // sakta (case printing proof ya admin ke baghair aage na jaye).
+    const isAdmin = session.role === "admin";
+    if (!isAdmin && PRE_PRINTING_STATUSES.includes(item.status)) {
+      return badRequest("Case abhi printing se pehle ke stage par hai — pehle printing proof upload karein");
+    }
 
     const body = (await request.json().catch(() => ({}))) as { reason?: unknown };
     const reason = cleanText(body?.reason, 500);
@@ -89,15 +95,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           where: { caseId: id, status: "DONE", completedDate: null },
           data: { completedDate: now },
         });
-        // §F22.5: dual-perm actor (printing + attestation-dept write) ke liye
-        // — case WAITING_FOR_PRINTING par ho to pehle auto PRINTED.
-        const bridged = await autoBridgePrintingForDualDept(id, session, tx);
         // §W11.1 normal: steps DONE + FINAL → ATTESTATION_COMPLETE.
         // §W32 wajah wala: FINAL zaroori nahi; bina steps wala case bhi.
+        // §W39: F22.5 ka auto-PRINTED bridge hata — printing se pehle sirf admin.
         const completed = await evaluateCaseCompletion(
           id,
           tx,
-          reasonPath ? { allowWithoutFinal: true, allowNoAttestations: true } : {}
+          reasonPath
+            ? { allowWithoutFinal: true, allowNoAttestations: true, allowBeforePrinting: isAdmin }
+            : { allowBeforePrinting: isAdmin }
         );
         // §W30: payment pehle se poori ho to seedha courier stage.
         const courierStage = completed ? await advanceCourierStage(id, tx) : null;
@@ -119,15 +125,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             },
           });
         }
-        return { status: updated?.status ?? item.status, attestations, bridged, completed, courierStage };
+        return { status: updated?.status ?? item.status, attestations, completed, courierStage };
       },
       { maxWait: 10000, timeout: 30000 }
     );
 
-    // §F22.5: bridge ne case PRINTED kiya → actor ko PRINTING commission.
-    if (result.bridged) {
-      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
-    }
     // F4: is request ne attestation stage complete kiya → acting user ka
     // ATTESTATION commission (rule na ho to 0; idempotent, never throws).
     if (result.completed) {

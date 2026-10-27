@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminPermission, type AdminSession } from "@/lib/auth";
 import { getOfficeFileSignedUrl } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
+import { PRE_PRINTING_STATUSES } from "@/lib/office/permissions";
 
 // ---------------------------------------------------------------------------
 // Wave 4 (docs/office-module/06_NEW_REQUIREMENTS.md §N7): department workflow
@@ -231,6 +232,9 @@ export const CASE_STATUS_ORDER: Record<string, number> = {
   MUSADIQA_VERIFIED: 13,
 };
 
+// §W39 — PRE_PRINTING_STATUSES (permissions.ts, client bhi use karta hai).
+export { PRE_PRINTING_STATUSES };
+
 // Forward-only guard: once a case reaches ATTESTATION_COMPLETE (or beyond, or
 // CANCELLED) the completion evaluator must never move it again.
 const COMPLETION_GUARD_STATUSES = [
@@ -256,7 +260,7 @@ const COMPLETION_GUARD_STATUSES = [
 export async function evaluateCaseCompletion(
   caseId: string,
   db: Prisma.TransactionClient | typeof prisma = prisma,
-  options: { allowWithoutFinal?: boolean; allowNoAttestations?: boolean } = {}
+  options: { allowWithoutFinal?: boolean; allowNoAttestations?: boolean; allowBeforePrinting?: boolean } = {}
 ): Promise<boolean> {
   const item = await db.case.findUnique({
     where: { id: caseId },
@@ -267,6 +271,8 @@ export async function evaluateCaseCompletion(
   });
   if (!item) return false;
   if (COMPLETION_GUARD_STATUSES.includes(item.status)) return false;
+  // §W39: printing se pehle complete nahi (sirf admin — allowBeforePrinting).
+  if (PRE_PRINTING_STATUSES.includes(item.status) && !options.allowBeforePrinting) return false;
 
   const relevant = item.set
     ? item.attestations.filter((a) =>
@@ -351,32 +357,10 @@ export async function advanceCourierStage(
   return next;
 }
 
-// §F22.5 — dual-permission auto-bridge. Jab actor ke paas office:printing:write
-// + office:attestation-dept:write DONO hon aur case abhi bhi
-// WAITING_FOR_PRINTING par ho jab attestation work attestation complete karne
-// wala ho → pehle auto PRINTED (isPrinted + printedAt) taake PRINTING step
-// skip na ho. Call site (attestation completion se PEHLE, same tx ke andar)
-// is helper ko bulata hai; true return hone par caller post-tx PRINTING
-// commission credit karta hai (idempotent, never-throw — dept-commission.ts).
-// Single-perm actors: kabhi fire nahi hota, purana behavior unchanged.
-export async function autoBridgePrintingForDualDept(
-  caseId: string,
-  session: AdminSession,
-  db: Prisma.TransactionClient | typeof prisma = prisma
-): Promise<boolean> {
-  if (!hasPermission(session, "office:printing:write")) return false;
-  if (!hasPermission(session, "office:attestation-dept:write")) return false;
-  const item = await db.case.findUnique({
-    where: { id: caseId },
-    select: { status: true },
-  });
-  if (!item || item.status !== "WAITING_FOR_PRINTING") return false;
-  await db.case.update({
-    where: { id: caseId },
-    data: { status: "PRINTED", isPrinted: true, printedAt: new Date() },
-  });
-  return true;
-}
+// §W39: F22.5 ka "dual-permission auto-bridge" hata diya — printing +
+// attestation dono permission wala user WAITING_FOR_PRINTING case par
+// attestation kaam karta to case printed proof ke baghair khud PRINTED ho jata
+// tha (owner: "auto printed"). Ab PRINTED sirf printing proof ya admin se.
 
 // -- §W11.1 admin jump helpers ---------------------------------------------------
 

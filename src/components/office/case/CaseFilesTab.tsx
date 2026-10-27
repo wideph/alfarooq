@@ -21,6 +21,7 @@ import FileUploadBox from "@/components/office/case/FileUploadBox";
 import CompleteAttestationButton from "@/components/office/case/CompleteAttestationButton";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import { formatDateTime, officeFetch } from "@/lib/office/client";
+import { PRE_PRINTING_STATUSES } from "@/lib/office/permissions";
 import type { CaseFileItem, CategorySetWithSteps } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 
@@ -68,6 +69,8 @@ type Props = {
     setName: string | null;
     // §W11.6: booking office ko FILING files tabhi dikhti hain jab ye on ho.
     filingFilesVisibleToBooking?: boolean;
+    // §W39: printing se pehle department user ko complete button nahi.
+    status?: string;
   };
   admin: AdminNavUser;
   onReload: () => Promise<void>;
@@ -358,7 +361,10 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
 
                   {/* ATTA: ek click mein tamam steps complete. FINAL file ho to
                       wajah optional; na ho to (§W32) printed proof ke baad wajah lazmi. */}
-                  {department === "ATTESTATION" && (canCompleteAll || deptUser) && (
+                  {/* §W39: printing se pehle department user complete nahi kar sakta. */}
+                  {department === "ATTESTATION" &&
+                    (canCompleteAll || deptUser) &&
+                    (admin.role === "admin" || !PRE_PRINTING_STATUSES.includes(detail.status ?? "")) && (
                     <CompleteAttestationButton
                       caseId={detail.id}
                       label="Saari attestations complete karein"

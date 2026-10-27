@@ -83,3 +83,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W36 Dept worker (printing/attestation/courier): koi raqam nahi (API + UI), Payments/History tabs nahi, case detail ek hi page par sections.
 - [x] W37 Dept upload error: R2 403/CORS par server raasta, bari photo browser mein chhoti, bari PDF/video par saaf CORS paigham, upload masle audit log mein (upload-reports).
 - [x] W38 "Application error" crash: admin/office par Chrome auto-translate band (notranslate meta + translate="no"), crash par "Dobara load karein" page + client.error audit, stale deploy chunk par ek dafa auto reload.
+- [x] W39 Auto "Printed" band (F22.5 bridge hata; printing se pehle dept attestation kaam case aage nahi le jata); auto-printed 000017/000018 wapas WAITING_FOR_PRINTING, 000023 ka printed flag saaf.

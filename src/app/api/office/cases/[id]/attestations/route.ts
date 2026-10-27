@@ -12,8 +12,8 @@ import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   advanceCourierStage,
-  autoBridgePrintingForDualDept,
   evaluateCaseCompletion,
+  PRE_PRINTING_STATUSES,
 } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
@@ -126,16 +126,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // DONE (agar current tha) → pointer agle PENDING step par; phir
     // evaluateCaseCompletion (sab DONE + FINAL attestation file → ATTESTATION_COMPLETE).
     let nextStatus = item.status;
+    // §W39: department user ka step printing se pehle ke case ko ATTESTATION
+    // (printing se aage) nahi le jata — sirf admin; baqi ke liye sirf PRINTED /
+    // ATTESTATION wale case. Step khud phir bhi update hota hai.
+    const isAdmin = session.role === "admin";
+    const movableStatuses = isAdmin ? [...PRE_PRINTING_STATUSES, "PRINTED", "ATTESTATION"] : ["PRINTED", "ATTESTATION"];
     if (data.status === "IN_PROGRESS") {
-      if (
-        [
-          "FIRST_PAYMENT_PENDING",
-          "WAITING_FOR_FILE",
-          "WAITING_FOR_PRINTING",
-          "PRINTED",
-          "ATTESTATION",
-        ].includes(item.status)
-      ) {
+      if (movableStatuses.includes(item.status)) {
         nextStatus = "ATTESTATION";
         await prisma.case.update({
           where: { id },
@@ -154,24 +151,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    // §F22.5: dual-perm actor (printing + attestation-dept write) ke liye —
-    // agar case abhi WAITING_FOR_PRINTING par hai to pehle auto PRINTED
-    // (bridge) phir completion check; dono ek hi tx mein (atomic).
-    // Single-perm actor ke liye bridge kabhi fire nahi hota (purana behavior).
     // §W30/§W32: completion (FINAL file + tamam steps DONE) ke baad payment
     // poori ho to courier stage. FINAL ke baghair sirf wajah wala complete-all.
-    const { bridged, completed, courierStage } = await prisma.$transaction(async (tx) => {
-      const bridgedNow = await autoBridgePrintingForDualDept(id, session, tx);
-      const completedNow = await evaluateCaseCompletion(id, tx);
+    // §W39: printing se pehle sirf admin (F22.5 ka auto-PRINTED bridge hata).
+    const { completed, courierStage } = await prisma.$transaction(async (tx) => {
+      const completedNow = await evaluateCaseCompletion(id, tx, { allowBeforePrinting: isAdmin });
       const stage = completedNow ? await advanceCourierStage(id, tx) : null;
-      return { bridged: bridgedNow, completed: completedNow, courierStage: stage };
+      return { completed: completedNow, courierStage: stage };
     });
-    if (bridged) {
-      nextStatus = completed ? "ATTESTATION_COMPLETE" : "PRINTED";
-      // F22.5: bridge ne printing step complete kiya → actor ko PRINTING
-      // commission bhi (idempotent, never throws).
-      await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
-    }
     if (completed) {
       nextStatus = courierStage ?? "ATTESTATION_COMPLETE";
       // F4: the acting attestation user earns the rule's attestationAmount

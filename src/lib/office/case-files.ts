@@ -6,7 +6,6 @@ import type { DepartmentFileType } from "@/lib/office/r2";
 import {
   VERIFICATION_STICKER_STEP_KEY,
   advanceCourierStage,
-  autoBridgePrintingForDualDept,
   evaluateCaseCompletion,
   type CaseDepartment,
 } from "@/lib/office/workflow";
@@ -185,20 +184,17 @@ export async function registerCaseFiles(params: {
 
       // ATTESTATION uploads (step files or the mandatory FINAL file) may
       // complete the attestation stage (→ ATTESTATION_COMPLETE).
-      // §F22.5: dual-perm actor (printing + attestation-dept) bridged the case
-      // WAITING_FOR_PRINTING → PRINTED inside this tx BEFORE the completion
-      // check, so the printing step (and its commission) is not skipped.
+      // §W39: printing se pehle (WAITING_FOR_PRINTING waghera) department user
+      // ki attestation file case ko aage nahi le jati — pehle printing proof.
       let completed = false;
-      let bridged = false;
       if (department === "ATTESTATION") {
-        bridged = await autoBridgePrintingForDualDept(caseId, session, tx);
         // §W32: file upload se completion hamesha FINAL file ke saath; FINAL
         // ke baghair sirf wajah wala manual complete (complete-all).
-        completed = await evaluateCaseCompletion(caseId, tx);
+        completed = await evaluateCaseCompletion(caseId, tx, { allowBeforePrinting: session.role === "admin" });
         if (completed) {
           // §W30: payment pehle se poori ho to seedha courier stage.
           nextStatus = (await advanceCourierStage(caseId, tx)) ?? "ATTESTATION_COMPLETE";
-        } else if (bridged) nextStatus = "PRINTED";
+        }
       }
 
       // §W32: bina set auto-complete ke baad payment poori ho to courier stage.
@@ -207,7 +203,7 @@ export async function registerCaseFiles(params: {
       }
 
       const delivered = department === "COURIER" && nextStatus === "DELIVERED" && item.status !== "DELIVERED";
-      return { created, nextStatus, completed, bridged, delivered, printedNow, noSetAutoComplete };
+      return { created, nextStatus, completed, delivered, printedNow, noSetAutoComplete };
     },
     { maxWait: 10000, timeout: 30000 }
   );

@@ -246,12 +246,6 @@ async function afterUpload(
   if (printedNow) {
     await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
   }
-  // §F22.5: dual-perm bridge — case PRINTED ho gaya is attestation upload
-  // se → actor ko PRINTING commission bhi (idempotent; printedNow wali call
-  // ke saath overlap ho to second call no-op hai).
-  if (result.bridged) {
-    await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "PRINTING" });
-  }
   if (result.completed) {
     await creditDeptCommission({ adminId: session.adminId, caseId: id, kind: "ATTESTATION" });
   }
