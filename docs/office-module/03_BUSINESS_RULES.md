@@ -272,3 +272,15 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   sirf "profit se" (partner office ka share received kam hone se khud % ke mutabiq
   kam ho jata hai).
 - Dashboard "pending" = sirf non-CANCELLED cases ka baqi (Finance remaining jaisa).
+
+## BR17. Courier queue mein address — §W46
+
+- Courier queue (WAITING_FOR_COURIER + DELIVERED) ki har row: case # ke saath student
+  ka naam aur Roll / Reg, aur pehle delivery address ki EK line (aur address hon to
+  "+N"). Lamba address "poora" dikhata hai; address par click → poore address ka
+  view (case #, student, Roll #, Reg #, category, office, har address label ke saath
+  + Copy, Case detail). Address click se case page nahi khulta; row ka baqi hissa
+  pehle jaisa case page kholta hai.
+- Addresses sirf courier queue ki API rows mein: admin / cashier / booking (apna
+  office) ko, aur department worker ko sirf courier permission ke saath (detail
+  payload jaisa). Raqam pehle ki tarah kabhi nahi.

@@ -151,6 +151,10 @@ export async function GET(request: NextRequest) {
   const filingLimited = isFilingLimited(session);
   // §W36: printing / attestation / courier worker — rows mein koi raqam nahi.
   const deptWorker = isDeptWorker(session);
+  // §W46: courier queue — har row par delivery address(es) (courier slip ka
+  // kaam). Dept worker ko sirf courier permission ke saath (detail payload
+  // jaisa); admin / cashier / booking (apna office) ko hamesha.
+  const courierAddresses = dept === "courier" && (!deptWorker || hasPermission(session, "office:courier:write"));
   const tracksReads = tracksCaseReads(session);
   const [items, total, counts, unread] = await Promise.all([
     prisma.case.findMany({
@@ -184,13 +188,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE }, { headers: NO_STORE });
   }
 
-  const [unseen, unreadIds] = await Promise.all([
+  const [unseen, unreadIds, addressRows] = await Promise.all([
     unseenWarningCaseIds(
       session,
       items.map((item) => item.id)
     ),
     tracksReads ? unreadCaseIds(session.adminId, items) : Promise.resolve(null),
+    courierAddresses && items.length > 0
+      ? prisma.caseAddress.findMany({
+          where: { caseId: { in: items.map((item) => item.id) } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, caseId: true, address: true, label: true },
+        })
+      : Promise.resolve(null),
   ]);
+  const addressesOf = (caseId: string) =>
+    (addressRows || [])
+      .filter((row) => row.caseId === caseId)
+      .map((row) => ({ id: row.id, address: row.address, label: row.label }));
 
   const rows = await Promise.all(
     items.map(async (item) => {
@@ -199,6 +214,7 @@ export async function GET(request: NextRequest) {
       if (!canSeeOffice(session, item.bookingOfficeId)) {
         const slim = (await serializeDeptQueueCase(item)) as Record<string, unknown>;
         if (unreadIds) slim.unread = unreadIds.has(item.id);
+        if (addressRows) slim.addresses = addressesOf(item.id);
         return slim;
       }
       const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
@@ -213,6 +229,7 @@ export async function GET(request: NextRequest) {
       row.filingDone = item._count.files > 0;
       row.limited = false;
       if (unreadIds) row.unread = unreadIds.has(item.id);
+      if (addressRows) row.addresses = addressesOf(item.id);
       if (deptWorker) {
         const safe = stripCaseMoney(row);
         delete safe.payments;

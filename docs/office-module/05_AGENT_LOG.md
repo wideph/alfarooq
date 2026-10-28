@@ -1857,3 +1857,32 @@ Investigation-first (live DB audit):
   rollback ke baad ledger / cases wahi. `office-finance-audit.cjs` 0 issues.
 - **Next step**: owner live par admin se commission office ka naya case bana kar
   popup istemal kare; agla kaam owner ki nayi requirement se.
+
+## WAVE 46 (2026-10-29) — Courier queue: address ki line + poora address view
+
+- **Owner request**: courier tab ki list mein har case ka address ek line mein;
+  ek line se lamba ho to click par poora address. List mein case number ke saath
+  student ka naam, Roll ya Registration number. Poore address wale view par bhi ye
+  sab.
+- **API** (`cases/route.ts` GET): `dept=courier` par `courierAddresses` (dept worker
+  sirf `office:courier:write` ke saath; admin / cashier / booking hamesha) → ek
+  extra query `caseAddress.findMany({ caseId in page ids })` (createdAt asc),
+  full + slim dono rows par `addresses [{id, address, label}]`. Doosri queues ka
+  payload same.
+- **UI** (`DeptQueue.tsx`): `AddressLine` (MapPin + truncate ek line,
+  ResizeObserver se overflow → "poora", >1 address → "+N · poora"; bina address
+  "Delivery address abhi nahi"; click stopPropagation → row ka case page nahi).
+  Address view (dialog "Delivery address"): Case # (+ label chip), Student, Roll #,
+  Reg #, Category, Office, har address (label / "Address N") whitespace-pre-line +
+  Copy (clipboard toast), "Case detail", "Band karein". Courier rows mein naam
+  (warna "Naam —") + "Roll … · Reg …" case # ke neeche. identityBlock ab ek
+  `div.min-w-0` (mobile card header mein case # / naam / Roll / date bikharte the).
+- **Verify**: tsc 0, lint 0, build exit 0 (pehli koshish next/font Google fetch
+  aarzi fail — retry). Read-only harness (0 write attempts) 3 views × 17 checks
+  ALL PASS (courier desktop + mobile, admin desktop): API 000022 address 132 chars,
+  000010 [] , courier ko raqam nahi; Roll / Reg lines; address ek line (16px),
+  "poora"; bina address message; click → view (case #, Student, Roll 1148404,
+  Reg —, poora address aakhir tak, Copy + Case detail), case page nahi khula; row
+  click → case page. Printing / attestation queues mobile + desktop screenshots
+  theek, 0 page errors.
+- **Next step**: owner ki nayi requirement.

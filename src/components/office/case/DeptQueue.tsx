@@ -1,9 +1,21 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Building2, CheckCircle2, Flame, ImagePlus, Loader2, Upload, X } from "lucide-react";
+import {
+  BadgeCheck,
+  Building2,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Flame,
+  ImagePlus,
+  Loader2,
+  MapPin,
+  Upload,
+  X,
+} from "lucide-react";
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import { formatDate } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
@@ -54,6 +66,8 @@ export type DeptQueueRow = {
   // §W44: admin ka custom label.
   customLabel?: string | null;
   customLabelColor?: string | null;
+  // §W46: courier queue — delivery address(es), purane pehle.
+  addresses?: Array<{ id: string; address: string; label: string | null }>;
 };
 
 const DEPT_CONFIG: Record<
@@ -157,6 +171,59 @@ function stopRowClick(e: React.MouseEvent) {
   e.stopPropagation();
 }
 
+function rollRegText(item: DeptQueueRow) {
+  return `${item.rollNumber ? `Roll ${item.rollNumber}` : "Roll —"} · ${
+    item.registrationNumber ? `Reg ${item.registrationNumber}` : "Reg —"
+  }`;
+}
+
+// §W46: courier row mein address ki EK line; lambi ho to "poora" nazar aata
+// hai aur click par poore address ka view (row ka case detail click nahi).
+function AddressLine({ item, onOpen }: { item: DeptQueueRow; onOpen: () => void }) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const addresses = item.addresses || [];
+  const first = addresses[0]?.address || "";
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [first]);
+
+  if (!first) {
+    return (
+      <p className="inline-flex items-center gap-1 text-amber-700">
+        <MapPin className="h-3.5 w-3.5 shrink-0" /> Delivery address abhi nahi
+      </p>
+    );
+  }
+  const more = addresses.length - 1;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
+      title="Poora address dekhein"
+      className="flex w-full max-w-[20rem] items-center gap-1 rounded-lg text-left text-slate-700 hover:text-primary-700"
+    >
+      <MapPin className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+      <span ref={textRef} className="min-w-0 truncate">
+        {first}
+      </span>
+      {(overflow || more > 0) && (
+        <span className="shrink-0 font-semibold text-primary-700">{more > 0 ? `+${more} · poora` : "poora"}</span>
+      )}
+    </button>
+  );
+}
+
 export default function DeptQueue({
   dept,
   items,
@@ -192,6 +259,17 @@ export default function DeptQueue({
   // §W27: printing queue — proof upload ke foran baad row "Printed" (live
   // refresh ke baad row queue se hat jati hai kyun ke case PRINTED ho gaya).
   const [localPrinted, setLocalPrinted] = useState<Record<string, boolean>>({});
+  // §W46: courier — poore address ka view (case pehchan ke saath).
+  const [addressFor, setAddressFor] = useState<DeptQueueRow | null>(null);
+
+  async function copyAddress(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Address copy ho gaya");
+    } catch {
+      showToast("Copy nahi ho saka — address select kar ke copy karein", "error");
+    }
+  }
 
   const detailHref = (id: string) => caseDetailHref(id, from);
 
@@ -254,8 +332,10 @@ export default function DeptQueue({
 
   function identityBlock(item: DeptQueueRow) {
     const currentName = currentStepName(item);
+    // §W46: ek hi block — mobile card ke flex header mein case #, naam,
+    // Roll / Reg aur date upar neeche rehte hain (bikharte nahi).
     return (
-      <>
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-semibold text-primary-700">{item.caseNumber}</span>
           <CustomLabelChip label={item.customLabel} color={item.customLabelColor} />
@@ -271,9 +351,15 @@ export default function DeptQueue({
           </span>
         </div>
         {/* §W25: har dept row mein client ka naam — case pehchan ek nazar mein */}
-        {item.clientName && <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{item.clientName}</p>}
+        {item.clientName ? (
+          <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{item.clientName}</p>
+        ) : (
+          dept === "courier" && <p className="mt-0.5 text-sm text-slate-400">Naam —</p>
+        )}
+        {/* §W46: courier list mein case number ke saath Roll / Reg bhi */}
+        {dept === "courier" && <p className="text-xs font-semibold text-slate-600">{rollRegText(item)}</p>}
         {item.createdAt && <p className="text-xs text-slate-400">{formatDate(item.createdAt)}</p>}
-      </>
+      </div>
     );
   }
 
@@ -345,6 +431,7 @@ export default function DeptQueue({
       case "courier":
         return (
           <div className="space-y-1 text-xs">
+            <AddressLine item={item} onOpen={() => setAddressFor(item)} />
             <p className="text-slate-600">
               Courier #: <span className="font-semibold text-slate-800">{item.courierNumber || "—"}</span>
             </p>
@@ -599,6 +686,94 @@ export default function DeptQueue({
                 disabled={uploading}
                 onClick={() => setUploadFor(null)}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50"
+              >
+                Band karein
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* §W46: poora delivery address — case number, naam, Roll / Reg ke saath */}
+      {addressFor && (
+        <div
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          onClick={() => setAddressFor(null)}
+        >
+          <div
+            role="dialog"
+            aria-label="Delivery address"
+            className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                <MapPin className="h-5 w-5 text-teal-600" /> Delivery address
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAddressFor(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Band karein"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-xl bg-slate-50 p-3 text-sm">
+              <dt className="text-slate-500">Case #</dt>
+              <dd className="flex flex-wrap items-center gap-1.5 font-semibold text-primary-700">
+                {addressFor.caseNumber}
+                <CustomLabelChip label={addressFor.customLabel} color={addressFor.customLabelColor} />
+              </dd>
+              <dt className="text-slate-500">Student</dt>
+              <dd className="font-bold text-slate-900">{addressFor.clientName || "—"}</dd>
+              <dt className="text-slate-500">Roll #</dt>
+              <dd className="font-semibold text-slate-800">{addressFor.rollNumber || "—"}</dd>
+              <dt className="text-slate-500">Reg #</dt>
+              <dd className="font-semibold text-slate-800">{addressFor.registrationNumber || "—"}</dd>
+              {addressFor.category?.name && (
+                <>
+                  <dt className="text-slate-500">Category</dt>
+                  <dd className="text-slate-700">{addressFor.category.name}</dd>
+                </>
+              )}
+              {addressFor.bookingOffice?.name && (
+                <>
+                  <dt className="text-slate-500">Office</dt>
+                  <dd className="text-slate-700">{addressFor.bookingOffice.name}</dd>
+                </>
+              )}
+            </dl>
+            <ul className="space-y-2">
+              {(addressFor.addresses || []).map((row, index) => (
+                <li key={row.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      {row.label || ((addressFor.addresses || []).length > 1 ? `Address ${index + 1}` : "Address")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void copyAddress(row.address)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary-700 hover:bg-primary-50"
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Copy
+                    </button>
+                  </div>
+                  <p className="whitespace-pre-line break-words text-sm text-slate-900">{row.address}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Link
+                href={detailHref(addressFor.id)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-100"
+              >
+                <ExternalLink className="h-4 w-4" /> Case detail
+              </Link>
+              <button
+                type="button"
+                onClick={() => setAddressFor(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
               >
                 Band karein
               </button>
