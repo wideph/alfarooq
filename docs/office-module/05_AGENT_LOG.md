@@ -1808,9 +1808,9 @@ Investigation-first (live DB audit):
   aur DiscountRequest ki live rows 0.)
 - **DB**: migration `20261030120000_office_wave45` — Case.commissionMode (TEXT),
   Case.commissionMemberId (FK BookingOfficeMember, SET NULL). Additive +
-  idempotent. **Live apply BAQI** — auto mode ne `prisma migrate deploy` rok diya;
-  owner ki ijazat / khud chalane ke baad hi push (naya Prisma client naye columns
-  select karta hai — migration ke baghair deploy case pages tod dega).
+  idempotent. **Live applied** (owner ki ijazat se `prisma migrate deploy`, push
+  se pehle — naya Prisma client naye columns select karta hai). Purane cases par
+  dono fields null (koi data nahi badla).
 - **Commission faisla**: cases POST — FIXED office + creator office ka member
   nahi + role booking_office nahi + grid > 0 → `commissionDecision` na ho to 409
   `needsCommissionDecision {amount, officeName, categoryName, members}` (koi write
@@ -1851,7 +1851,9 @@ Investigation-first (live DB audit):
   0 → 400, ghalat member 400, ghalat mode 409, multipart parse; dashboard /
   finance / users 200; popup (Nahi → NONE body, error par band, partial check,
   "AW-K ke account mein", PARTIAL 1000 + memberId body, case page par); 0
-  write attempts. Rollback ledger test migration ke baad (columns live chahiye).
-- **Next step**: owner migration live kare (`npx prisma migrate deploy`) → push →
-  live par admin se AW-Knj ka test case (Partial) → ledger mein AW-K par half
-  commission check.
+  write attempts. Migration ke baad rollback 14/14: columns + FK live, purane
+  cases null, PARTIAL 1000 → HALF 500 + FINAL 500 AW-K par, NONE → 0 rows, FULL
+  3000 AW-K, extra 50% → EXTRA_SHARE AW-K, member ka apna case pehle jaisa;
+  rollback ke baad ledger / cases wahi. `office-finance-audit.cjs` 0 issues.
+- **Next step**: owner live par admin se commission office ka naya case bana kar
+  popup istemal kare; agla kaam owner ki nayi requirement se.
