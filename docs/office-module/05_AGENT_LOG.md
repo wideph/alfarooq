@@ -1962,3 +1962,22 @@ Investigation-first (live DB audit):
   PDF as-is; aakhri delete → band; Delivered page buttons; 0 page errors, 0 DB
   writes. Thumbnail X badge clip theek (pt / pr).
 - **Next step**: owner live par courier user se asal slip upload kar ke dekhe.
+
+## WAVE 49 (2026-10-29) — Courier tab ki duplication khatam
+
+- **Owner** (screenshot, courier user): courier page par duplication — confusing.
+  Wahan: navbar Printing / Attestation / Courier tabs + page par dobara "All cases /
+  Printing queue / Attestation queue / Courier queue" chips; courier ginti 2 teen
+  jagah (badge, chip, Waiting tab); har row par "Waiting for courier slip" chip
+  jabke page hi wahi; heading "Cases (2)".
+- **Fix** (`cases/page.tsx`): dept chips sirf `admin.role === "admin"` (OfficeNav
+  ke dept tabs + Cases ka rule same hai — office users ke liye poora dohraav);
+  filing History checkbox sab ke liye. Heading `DEPT_HEADINGS` (Filing / Printing /
+  Attestation / Courier), courier par ginti nahi (tabs par hai). Admin ka active
+  Courier queue chip bina ginti. `DeptQueue` identityBlock: printing / courier par
+  status chip nahi.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser (courier desktop + mobile, admin;
+  courier list asal JSON — DB flaky) 19/19: heading "Courier", office user ko chips
+  0, admin ko chips + bina dohri ginti, Waiting 2 / Delivered 2 tabs, rows par
+  "Waiting for courier slip" / "Delivered" chip nahi, 0 page errors, 0 writes.
+- **Next step**: owner ki nayi requirement.

@@ -365,11 +365,17 @@ export default function DeptQueue({
               <Flame className="w-3 h-3" /> URGENT
             </span>
           )}
-          <span
-            className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${caseStatusStyle(item.status)}`}
-          >
-            {caseStatusLabel(item.status, item.status === "ATTESTATION" ? currentName : null)}
-          </span>
+          {/* §W49: printing / courier page ki har row ka status wahi hai jo page
+              ka naam (Waiting for printing / Waiting for courier slip /
+              Delivered) — har row par chip dohraav tha. Filing / attestation
+              mein status farq batata hai, wahan chip rehta hai. */}
+          {dept !== "courier" && dept !== "printing" && (
+            <span
+              className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${caseStatusStyle(item.status)}`}
+            >
+              {caseStatusLabel(item.status, item.status === "ATTESTATION" ? currentName : null)}
+            </span>
+          )}
         </div>
         {/* §W25: har dept row mein client ka naam — case pehchan ek nazar mein */}
         {item.clientName ? (

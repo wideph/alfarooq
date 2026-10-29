@@ -68,6 +68,14 @@ function CountPill({ count, active }: { count: number | undefined; active: boole
   );
 }
 
+// §W49: dept tab ki heading — navbar tab ke naam jaisi.
+const DEPT_HEADINGS: Record<DeptQueueKey, string> = {
+  filing: "Filing",
+  printing: "Printing",
+  attestation: "Attestation",
+  courier: "Courier",
+};
+
 const chipClass = (active: boolean) =>
   `inline-flex shrink-0 items-center rounded-full px-3.5 py-1.5 text-sm font-semibold ${
     active ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-600 hover:border-primary-300"
@@ -459,8 +467,12 @@ function CasesList() {
         return (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* §W49: dept tab mein heading usi department ka naam (navbar tab
+                jaisa) — "Cases" likha hona confusing tha. Courier ki ginti
+                Waiting / Delivered tabs par hai, is liye yahan nahi. */}
             <h2 className="text-xl font-bold text-slate-900">
-              Cases <span className="text-sm font-normal text-slate-400">({total})</span>
+              {deptTab ? DEPT_HEADINGS[deptTab.key] : "Cases"}
+              {deptTab?.key !== "courier" && <span className="ml-1 text-sm font-normal text-slate-400">({total})</span>}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               {/* §W35: super admin — saare unread cases read (navbar count 0). */}
@@ -489,18 +501,30 @@ function CasesList() {
             </div>
           </div>
 
-          {DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission)) && (
+          {/* §W49: "All cases / Printing / Attestation / Courier queue" chips sirf
+              super admin ko — office users ke navbar (OfficeNav) mein yehi Cases +
+              department tabs pehle se hain (same rule), page par dobara confusing
+              tha. Filing ka History checkbox sab ke liye. */}
+          {((admin.role === "admin" && DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission))) ||
+            dept === "filing") && (
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => selectDept("")} className={chipClass(!dept && !status)}>
-                All cases
-                <CountPill count={counts?.total} active={!dept && !status} />
-              </button>
-              {DEPT_TABS.filter((tab) => canSeeDeptTab(admin, tab.permission)).map((tab) => (
-                <button key={tab.key} onClick={() => selectDept(tab.key)} className={chipClass(dept === tab.key)}>
-                  {tab.label}
-                  <CountPill count={counts?.depts[tab.key]} active={dept === tab.key} />
-                </button>
-              ))}
+              {admin.role === "admin" && (
+                <>
+                  <button onClick={() => selectDept("")} className={chipClass(!dept && !status)}>
+                    All cases
+                    <CountPill count={counts?.total} active={!dept && !status} />
+                  </button>
+                  {DEPT_TABS.filter((tab) => canSeeDeptTab(admin, tab.permission)).map((tab) => (
+                    <button key={tab.key} onClick={() => selectDept(tab.key)} className={chipClass(dept === tab.key)}>
+                      {tab.label}
+                      {/* courier khula ho to ginti Waiting / Delivered tabs par hai */}
+                      {!(tab.key === "courier" && dept === "courier") && (
+                        <CountPill count={counts?.depts[tab.key]} active={dept === tab.key} />
+                      )}
+                    </button>
+                  ))}
+                </>
+              )}
               {dept === "filing" && (
                 <label className="ml-1 inline-flex items-center gap-1.5 text-xs text-slate-500">
                   <input

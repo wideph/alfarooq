@@ -310,3 +310,8 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 - Remarks tab khula ho to upar wali "new remarks" patti nahi (card ke andar hai).
 - Wahi remark (same user + case + text) 2 minute ke andar dobara aaye to naya nahi
   banta.
+- §W49: cases page par "All cases / Filing / Printing / Attestation / Courier queue"
+  chips sirf super admin ko (AdminNav mein dept tabs nahi); office users ke navbar
+  (OfficeNav) mein yehi tabs pehle se hain. Dept tab mein heading usi department ka
+  naam. Printing aur courier pages ki rows par status chip nahi (page ka naam hi
+  status hai); filing / attestation mein chip rehta hai (status farq batata hai).
