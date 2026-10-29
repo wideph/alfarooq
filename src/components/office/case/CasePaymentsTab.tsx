@@ -18,7 +18,6 @@ import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
-import DeptCommissionsAttached from "@/components/office/case/DeptCommissionsAttached";
 import { formatDate, formatMoney, officeFetch, todayInputDate, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
 import { PAYMENT_METHODS } from "@/lib/office/permissions";
@@ -44,16 +43,12 @@ export default function CasePaymentsTab(props: TabProps) {
     <div className="space-y-4">
       <ClaimedRemainingStrip {...props} />
       <PaymentsPanel {...props} />
-      <DeptCommissionsAttached detail={props.detail} />
+      {/* §W47: department commissions ka card sirf History / Finance tab mein
+          (yahan bhi tha — do jagah same card confusing tha). */}
       <CommissionPanel {...props} />
     </div>
   );
 }
-
-/* -------- §W22 (F22.6): Department commissions (attached, read-only) -------- */
-
-// Shared component (./DeptCommissionsAttached) — Payments tab aur
-// History/expenses tab dono mein render hota hai.
 
 /* ------------- Claimed remaining: cashier/admin accept ya edit ------------- */
 
@@ -500,7 +495,8 @@ function CommissionPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
         </div>
       ) : detail.bookingOffice.type === "PROFIT_SHARE" ? (
         <p className="text-sm text-slate-600">
-          Profit-share office: (received − case expenses) ka % shareholders ko jata hai.{" "}
+          Profit-share office: (received − case expenses − department commission) ka % shareholders ko jata
+          hai; office expenses alag se % ke mutabiq.{" "}
           {detail.profitFinalizedAt ? `Last calculated ${formatDate(detail.profitFinalizedAt)}.` : "Abhi calculate nahi hua."}
         </p>
       ) : (

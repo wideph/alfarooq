@@ -311,7 +311,11 @@ function MoneySummary({ detail, admin, onUpdated, onMessage }: Omit<TabProps, "o
         {detail.totals.extra > 0 && (
           <StatTile icon={BadgePercent} label="Extra received" value={formatMoney(detail.totals.extra)} tone="violet" />
         )}
-        <StatTile icon={Coins} label="Commission" value={formatMoney(detail.commissionAmount)} tone="primary" />
+        {/* §W47: commission sirf fixed-commission office ki — partner / salary
+            office par "Commission Rs 0" be-maani aur confusing tha. */}
+        {detail.bookingOffice.type === "FIXED_COMMISSION" && (
+          <StatTile icon={Coins} label="Commission" value={formatMoney(detail.commissionAmount)} tone="primary" />
+        )}
       </div>
       <div className="mt-3">
         {canEditCase ? (

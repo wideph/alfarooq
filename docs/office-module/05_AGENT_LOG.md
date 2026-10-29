@@ -1886,3 +1886,49 @@ Investigation-first (live DB audit):
   click → case page. Printing / attestation queues mobile + desktop screenshots
   theek, 0 page errors.
 - **Next step**: owner ki nayi requirement.
+
+## WAVE 47 (2026-10-29) — Courier do pages, files duplicate khatam, UI/UX duplicates
+
+- **Owner request**: (1) courier tab mein "waiting for courier slip" aur
+  "delivered" alag pages, tab khulte hi waiting. (2) Booking office ke case ke
+  files tab mein printing / attestation files Courier hisse mein bhi dikhti thi —
+  confusing; kisi bhi user / admin ke paas ho to khatam. (3) UI/UX check —
+  duplication ki wajah se confusing cheezen theek.
+- **Courier pages**: `deptQueueWhere("courier", history)` → history ? DELIVERED :
+  WAITING_FOR_COURIER. `caseQueueCounts` + `deptDone.courier`. Cases page:
+  courier par segmented tabs "Waiting for courier slip" / "Delivered" (counts,
+  `history=1`). DeptQueue courier history: "Case dekhein" (Eye icon), empty
+  messages. `originLabel` → "Courier delivered". Navbar badge (WAITING) = chip ab
+  barabar (pehle chip 4 = waiting + delivered, badge 2).
+- **Files**: CaseFilesTab Courier section ka "Printing + Attestation files (yahan
+  dekhein)" block hata diya (main tabs + dept worker page dono; DeptCaseView mein
+  ye block tha hi nahi). Printing / attestation files apne sections mein "Dekhein"
+  (in-app viewer) se.
+- **UI/UX survey** (admin / booking AW D / dept worker, case 000031 har tab ki
+  screenshots) → theek kiya:
+  1. Department commissions card Payments + History dono tabs mein → sirf History.
+     Jumla "member shares se nahi kat-ti" partner office ke liye GHALAT tha (W40
+     se pool se minus) → office type ke mutabiq.
+  2. "Office account entries" mein DEPT_COMMISSION row "Office" ke naam credit
+     (card ka duplicate + ghalat) → filter.
+  3. Partner office par Money summary "Commission Rs 0" → tile sirf FIXED.
+  4. "Set of Attestations: Set of Attestations (v)…" → naam pehle se prefix wala
+     ho to dobara nahi.
+  5. Dept worker page par do complete buttons (header + Files) → header wala
+     `hideComplete` (Files wala FINAL file par wajah optional rakhta hai).
+  6. Remarks tab par "new remarks" warning do dafa → `remarksOpen` par patti nahi.
+  7. Queue rows: "Courier pending / Delivered" aur "Not printed" chips status chip
+     ke duplicate → hata diye (upload ✓ action column mein). Courier # sirf ho to.
+  8. Payments "Commission & remaining" partner formula text purana → (received −
+     case expenses − department commission), office expenses alag.
+  9. Live mein aik remark 8.4s baad dobara bana (000031) → remarks POST: same user +
+     case + text 2 min ke andar → pehla lautata hai (audit / notification nahi).
+     Purana duplicate remark live data mein waisa hi (delete nahi kiya).
+  Command bar ka status chip rakha (sticky — scroll par kaam ka).
+- **Verify**: tsc 0, lint 0, build exit 0. Read-only harness (0 writes) 54/54:
+  courier (desktop, mobile, admin) API waiting/delivered + counts 2/2, tab khulte
+  waiting selected, pages alag, "Case dekhein"; case 000031 booking + admin: koi
+  commission tile nahi, "yahan dekhein" nahi, printed proof 1 dafa, card sirf
+  History + sahi jumla, DEPT_COMMISSION row nahi, set double nahi, remarks warning
+  1; 000022 fixed: tile + "company deti hai"; dept page ek complete button.
+- **Next step**: owner ki nayi requirement.

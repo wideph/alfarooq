@@ -124,7 +124,12 @@ function SetPanel({ detail, admin, onReload, onMessage, setPendingReasons }: Pro
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${detail.setName ? "bg-primary-50 text-primary-700" : "bg-slate-100 text-slate-500"}`}>
-          {detail.setName ? `Set of Attestations: ${detail.setName}` : "Koi Set of Attestations select nahi"}
+          {/* §W47: set ke naam mein pehle se "Set of Attestations" hota hai — dobara prefix nahi. */}
+          {detail.setName
+            ? /^set of attestations/i.test(detail.setName)
+              ? detail.setName
+              : `Set of Attestations: ${detail.setName}`
+            : "Koi Set of Attestations select nahi"}
         </span>
         {detail.boardAttestationNumber && (
           <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">

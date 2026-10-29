@@ -515,6 +515,34 @@ function CasesList() {
             </div>
           )}
 
+          {/* §W47: courier ke do alag pages — tab khulte hi "Waiting for courier
+              slip"; delivered cases alag page par. */}
+          {dept === "courier" && (
+            <div role="tablist" aria-label="Courier pages" className="flex w-full gap-1 rounded-2xl bg-slate-100 p-1 sm:w-fit">
+              {[
+                { key: "", label: "Waiting for courier slip", count: counts?.depts.courier },
+                { key: "1", label: "Delivered", count: counts?.deptDone?.courier },
+              ].map((tab) => {
+                const active = (tab.key === "1") === history;
+                return (
+                  <button
+                    key={tab.label}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setParam("history", tab.key)}
+                    className={`inline-flex flex-1 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold sm:flex-none ${
+                      active ? "bg-white text-primary-700 shadow-sm" : "text-slate-600 hover:text-primary-700"
+                    }`}
+                  >
+                    {tab.label}
+                    <CountPill count={tab.count} active={false} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <form
               className="flex flex-1 min-w-[14rem] gap-2"

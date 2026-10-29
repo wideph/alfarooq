@@ -275,7 +275,11 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 
 ## BR17. Courier queue mein address — §W46
 
-- Courier queue (WAITING_FOR_COURIER + DELIVERED) ki har row: case # ke saath student
+- §W47: courier queue ke do alag pages — "Waiting for courier slip"
+  (WAITING_FOR_COURIER, tab khulte hi yahi) aur "Delivered" (DELIVERED,
+  `history=1`). Queue chip / navbar badge = waiting count; Delivered ka count
+  apne tab par. Delivered rows par "Case dekhein" (slip upload nahi).
+- Courier queue ki har row: case # ke saath student
   ka naam aur Roll / Reg, aur pehle delivery address ki EK line (aur address hon to
   "+N"). Lamba address "poora" dikhata hai; address par click → poore address ka
   view (case #, student, Roll #, Reg #, category, office, har address label ke saath
@@ -284,3 +288,19 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 - Addresses sirf courier queue ki API rows mein: admin / cashier / booking (apna
   office) ko, aur department worker ko sirf courier permission ke saath (detail
   payload jaisa). Raqam pehle ki tarah kabhi nahi.
+
+## BR18. Har cheez ek jagah (duplicate UI nahi) — §W47
+
+- Files tab: har department ki files SIRF apne section mein. Courier section mein
+  sirf courier slip (printing / attestation files ka doosra block nahi) — har user
+  ke liye (booking, admin, department).
+- Department commissions card sirf History / Finance tab mein; jumla office type
+  ke mutabiq (partner: case ke profit se minus, shareholders apne % se; fixed /
+  salary: company deti hai). "Office account entries" mein DEPT_COMMISSION rows
+  nahi (office ka paisa nahi).
+- Money summary ka Commission tile sirf FIXED_COMMISSION office par.
+- Department worker ke single page par attestation complete ka ek hi button (Files
+  section — FINAL file ho to wajah optional).
+- Remarks tab khula ho to upar wali "new remarks" patti nahi (card ke andar hai).
+- Wahi remark (same user + case + text) 2 minute ke andar dobara aaye to naya nahi
+  banta.

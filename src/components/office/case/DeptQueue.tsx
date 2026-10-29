@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  Eye,
   Flame,
   ImagePlus,
   Loader2,
@@ -101,7 +102,10 @@ const DEPT_CONFIG: Record<
   courier: {
     workHeading: "Courier",
     actionLabel: "Courier slip upload karein",
-    empty: "Courier ke liye koi case pending nahi",
+    // §W47: Delivered page (history) — slip ho chuki, sirf case dekhna.
+    historyActionLabel: "Case dekhein",
+    empty: "Courier slip ke liye koi case pending nahi",
+    historyEmpty: "Abhi koi case delivered nahi",
   },
 };
 
@@ -377,16 +381,11 @@ export default function DeptQueue({
           </div>
         );
       case "printing": {
-        const printed = isPrinted(item);
+        // §W47: "Not printed" chip hata diya — status chip ("Waiting for
+        // printing") wahi baat keh raha tha; upload ke baad ka ✓ action
+        // column mein hai.
         return (
           <div className="space-y-1 text-xs">
-            <span
-              className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                printed ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              {printed ? "Printed" : "Not printed"}
-            </span>
             {/* §W25: printing row mein Roll/Reg — list se hi pehchan */}
             <p className="text-slate-600">
               {item.rollNumber ? `Roll ${item.rollNumber}` : "Roll —"} ·{" "}
@@ -432,16 +431,13 @@ export default function DeptQueue({
         return (
           <div className="space-y-1 text-xs">
             <AddressLine item={item} onOpen={() => setAddressFor(item)} />
-            <p className="text-slate-600">
-              Courier #: <span className="font-semibold text-slate-800">{item.courierNumber || "—"}</span>
-            </p>
-            <span
-              className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                item.status === "DELIVERED" ? "bg-emerald-100 text-emerald-700" : "bg-teal-100 text-teal-700"
-              }`}
-            >
-              {item.status === "DELIVERED" ? "Delivered" : "Courier pending"}
-            </span>
+            {/* §W47: "Courier pending / Delivered" chip hata diya — status chip
+                aur page (Waiting / Delivered) wahi batate hain. */}
+            {item.courierNumber && (
+              <p className="text-slate-600">
+                Courier #: <span className="font-semibold text-slate-800">{item.courierNumber}</span>
+              </p>
+            )}
           </div>
         );
     }
@@ -457,7 +453,9 @@ export default function DeptQueue({
           fullWidth ? "w-full" : ""
         }`}
       >
-        <Upload className="h-3.5 w-3.5" /> {actionLabel}
+        {/* §W47: "Case dekhein" (history / delivered) par upload ka icon nahi. */}
+        {history && config.historyActionLabel ? <Eye className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}{" "}
+        {actionLabel}
       </Link>
     );
   }

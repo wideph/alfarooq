@@ -44,11 +44,14 @@ export default function CaseStatusHeader({
   admin,
   onChanged,
   onMessage,
+  hideComplete = false,
 }: {
   detail: CaseDetail;
   admin: AdminNavUser;
   onChanged: () => void;
   onMessage?: (message: string, kind?: ToastKind) => void;
+  // §W47: department worker page — complete button Files section mein hai.
+  hideComplete?: boolean;
 }) {
   const isAdmin = admin.role === "admin";
   const label = caseStatusLabel(detail.status, detail.currentAttestation?.attestationTypeName);
@@ -62,7 +65,11 @@ export default function CaseStatusHeader({
 
   const deptUser =
     !isAdmin && adminCanAny(admin, ["office:printing:write", ATTESTATION_DEPT_PERMISSION, "office:courier:write"]);
-  const showComplete = deptUser && (detail.status === "PRINTED" || detail.status === "ATTESTATION");
+  // §W47: department worker ke single page par Files section ka "Saari
+  // attestations complete karein" (FINAL file ho to wajah optional) pehle se
+  // hai — yahan doosra button duplicate tha.
+  const showComplete =
+    deptUser && !hideComplete && (detail.status === "PRINTED" || detail.status === "ATTESTATION");
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

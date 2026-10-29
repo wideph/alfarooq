@@ -27,8 +27,8 @@ import type { ToastKind } from "@/components/Toast";
 
 // docs 06 §N7 — department files: FILING (1–2 pdf/image), PRINTING (printed
 // proof; filing ki files upar Filing section se dekhta hai — §W24), ATTESTATION
-// (per set-step optional + FINAL lazmi), COURIER (printing+attestation files
-// in-app viewer mein + courier slip).
+// (per set-step optional + FINAL lazmi), COURIER (sirf courier slip — §W47:
+// printing / attestation files apne hi sections mein, "Dekhein" se in-app viewer).
 // Upload sirf us department ki write permission par; lists sab ko (read).
 // §W26: har section mein kai files ek sath (FileUploadBox — browser se seedha
 // R2, progress ke saath; fail ho to bhi page/button nahi atakta).
@@ -295,24 +295,9 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
                       printing section ke andar duplicate block hata diya (confusing
                       tha). View/download permission sab ke paas hai: Filing section
                       har viewer ko "sirf dekhne ke liye" mode mein milta hai. */}
-                  {/* COURIER: printing + atta files in-app viewer mein (sirf download nahi) */}
-                  {department === "COURIER" && (
-                    <div className="rounded-lg bg-slate-50 p-2">
-                      <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Printing + Attestation files (yahan dekhein)
-                      </p>
-                      {files.filter((file) => file.department === "PRINTING" || file.department === "ATTESTATION").length === 0 ? (
-                        <p className="p-2 text-xs text-slate-400">Abhi koi printing / attestation file nahi</p>
-                      ) : (
-                        <ul className="divide-y divide-slate-100">
-                          {files
-                            .filter((file) => file.department === "PRINTING" || file.department === "ATTESTATION")
-                            .map(fileRow)}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-
+                  {/* §W47: Courier section mein printing + attestation files ka
+                      doosra block hata diya — wahi files upar apne sections mein
+                      thi (confusing duplicate). Courier section = sirf courier slip. */}
                   {deptFiles.length === 0 ? (
                     <EmptyState icon={FileText} hint={`${DEPARTMENT_LABELS[department]} ki koi file nahi`} />
                   ) : (

@@ -211,12 +211,16 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
 /* --------------------------- Office ledger entries ------------------------- */
 
 function LedgerPanel({ detail, admin }: TabProps) {
-  const showLedger = detail.ledger.length > 0 || admin.role === "booking_office" || adminCanAny(admin, ["office:ledger:read"]);
+  // §W47: DEPT_COMMISSION rows office ka paisa nahi (department user ka) aur
+  // upar "Department commissions" card mein pehle se hain — yahan "Office"
+  // ke naam credit dikhna duplicate + ghalat tha (W45 office ledger jaisa).
+  const rows = detail.ledger.filter((l) => l.type !== "DEPT_COMMISSION");
+  const showLedger = rows.length > 0 || admin.role === "booking_office" || adminCanAny(admin, ["office:ledger:read"]);
   if (!showLedger) return null;
 
   return (
-    <SectionCard icon={Wallet} title="Office account entries (this case)" count={detail.ledger.length}>
-      {detail.ledger.length === 0 ? (
+    <SectionCard icon={Wallet} title="Office account entries (this case)" count={rows.length}>
+      {rows.length === 0 ? (
         <EmptyState icon={Wallet} hint="Abhi koi entry nahi" />
       ) : (
         <>
@@ -234,7 +238,7 @@ function LedgerPanel({ detail, admin }: TabProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {detail.ledger.map((l) => (
+                {rows.map((l) => (
                   <tr key={l.id}>
                     <td className="whitespace-nowrap py-1.5 pr-3">{formatDate(l.entryDate)}</td>
                     <td className="py-1.5 pr-3">{LEDGER_TYPE_LABELS[l.type] || l.type}</td>
@@ -251,7 +255,7 @@ function LedgerPanel({ detail, admin }: TabProps) {
           </div>
           {/* mobile card list */}
           <ul className="space-y-2 md:hidden">
-            {detail.ledger.map((l) => (
+            {rows.map((l) => (
               <li key={l.id} className="rounded-xl border border-slate-200 p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">{LEDGER_TYPE_LABELS[l.type] || l.type}</span>

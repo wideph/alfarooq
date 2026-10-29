@@ -175,11 +175,18 @@ export default function CaseDetailPage({
                   backHref={backHref}
                   backLabel={backLabel}
                 />
-                <CaseStatusHeader detail={detail} admin={admin} onChanged={reload} onMessage={setMessage} />
+                <CaseStatusHeader
+                  detail={detail}
+                  admin={admin}
+                  onChanged={reload}
+                  onMessage={setMessage}
+                  hideComplete={isDeptWorkerAccess(admin.role, admin.permissions)}
+                />
                 <CaseWarningStrip
                   detail={detail}
                   pendingReasons={pendingReasons}
                   onOpenTab={isDeptWorkerAccess(admin.role, admin.permissions) ? scrollToSection : openTab}
+                  remarksOpen={!isDeptWorkerAccess(admin.role, admin.permissions) && activeTab === "remarks"}
                 />
 
                 {/* §W36: printing / attestation / courier worker — tabs ki bajaye

@@ -19,10 +19,11 @@ export type DeptCommissionAttachment = {
 export type CaseDetailWithDeptCommissions = CaseDetail & { deptCommissions?: DeptCommissionAttachment[] };
 
 // Is case par credit hui dept commissions (printing/attestation) — read-only
-// mini-list. Ye REAL CaseExpense rows NAHI hain (pool/member formulas
-// unaffected; DEPT_COMMISSION bucket admin profit mein pehle se deduct hota
-// hai) — sirf display taake case ke sath attached commission nazar aaye.
-// Dono tabs (Payments + History/expenses) mein render hota hai.
+// mini-list. Ye REAL CaseExpense rows NAHI hain (ledger DEPT_COMMISSION;
+// W40 se PROFIT_SHARE case ke pool se minus, fixed / salary office mein
+// company ka kharch) — sirf display taake case ke sath attached commission
+// nazar aaye.
+// §W47: sirf History / Finance tab mein (Payments tab se hata diya — duplicate).
 // §W36: variant "own" — department worker ke case page par (API sirf us ki
 // apni rows bhejta hai): "Is case par aap ka commission".
 export default function DeptCommissionsAttached({
@@ -63,9 +64,13 @@ export default function DeptCommissionsAttached({
           );
         })}
       </ul>
+      {/* §W47: purana jumla ("member shares se nahi kat-ti") partner office ke
+          liye ghalat tha — W40 se dept commission partner pool se minus hoti hai. */}
       {variant === "attached" && (
         <p className="mt-2 text-xs text-slate-500">
-          Ye commission case ke sath attached hai — member shares se nahi kat-ti.
+          {detail.bookingOffice.type === "PROFIT_SHARE"
+            ? "Ye commission is case ke profit se minus hoti hai — shareholders ka hissa usi hisaab se (apne % ke mutabiq) kam hota hai."
+            : "Ye commission company deti hai — booking office ki commission / account se nahi katti."}
         </p>
       )}
     </SectionCard>

@@ -90,6 +90,8 @@ export function originLabel(from: string | null): string {
   const url = new URL(from, ORIGIN_BASE);
   if (url.pathname === CASES_HREF) {
     const dept = url.searchParams.get("dept") || "";
+    // §W47: courier ka Delivered page.
+    if (dept === "courier" && url.searchParams.get("history") === "1") return "Courier delivered";
     if (isOriginDept(dept)) return `${DEPT_LABELS[dept]} queue`;
     return "Cases";
   }

@@ -113,19 +113,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return forbidden("Aap in departments ko remark nahi bhej sakte");
     }
 
-    const remark = await prisma.caseRemark.create({
-      data: {
-        caseId: id,
-        text,
-        createdById: session.adminId,
-        createdByRole: session.role || "unknown",
-        recipients: { create: targets.map((target) => ({ target })) },
-      },
+    // §W47: wahi user, wahi case, wahi text 2 minute ke andar dobara (slow
+    // network par dobara "Remark bhejein") → naya remark nahi, pehla hi
+    // lautaya jata hai (live mein aik remark 8 second baad dobara ban gaya tha).
+    const repeat = await prisma.caseRemark.findFirst({
+      where: { caseId: id, createdById: session.adminId, text, createdAt: { gte: new Date(Date.now() - 120_000) } },
+      orderBy: { createdAt: "desc" },
       include: { recipients: true },
     });
+    const remark =
+      repeat ??
+      (await prisma.caseRemark.create({
+        data: {
+          caseId: id,
+          text,
+          createdById: session.adminId,
+          createdByRole: session.role || "unknown",
+          recipients: { create: targets.map((target) => ({ target })) },
+        },
+        include: { recipients: true },
+      }));
 
-    // W13.2: audit log + notifications response ke baad.
-    after(async () => {
+    // W13.2: audit log + notifications response ke baad (dobara wale par nahi).
+    if (!repeat) after(async () => {
       await logOfficeAction(session, {
         action: "case.remark.create",
         entity: "Case",

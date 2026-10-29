@@ -125,7 +125,9 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
       // §W30: WAITING_FOR_COURIER = payment poori + delivery address maujood
       // (slip ka intezar). Address ke baghair (WAITING_FOR_COURIER_ADDRESS)
       // courier kuch bhej nahi sakta — wo booking office / admin ka kaam hai.
-      return { status: { in: ["WAITING_FOR_COURIER", "DELIVERED"] } };
+      // §W47: do alag pages — default "Waiting for courier slip", history=1
+      // par "Delivered".
+      return history ? { status: "DELIVERED" } : { status: "WAITING_FOR_COURIER" };
     default:
       return null;
   }

@@ -22,6 +22,8 @@ export type CaseQueueCounts = {
   // Department queues (deptQueueWhere, history nahi) — sirf jo tabs user ko
   // dikhte hain (us dept ki write permission ya cashier).
   depts: Record<string, number>;
+  // §W47: courier ka doosra page (Delivered = deptQueueWhere history).
+  deptDone: Record<string, number>;
 };
 
 // §W35 — cases page ki har queue ke upar us queue ke cases ki tadad. Scope
@@ -33,23 +35,21 @@ export async function caseQueueCounts(session: AdminSession, officeId: string): 
     (dept) => hasPermission(session, DEPT_QUEUE_PERMISSIONS[dept]) || session.role === "cashier"
   );
 
-  const [statusRows, deptTotals] = await Promise.all([
+  const doneDepts = depts.filter((dept) => dept === "courier");
+  const deptWhereFor = (dept: string, history: boolean) => ({
+    ...(hasPermission(session, DEPT_QUEUE_PERMISSIONS[dept]) ? {} : caseScope(session)),
+    ...officeWhere,
+    AND: [deptQueueWhere(dept, history) ?? {}],
+  });
+
+  const [statusRows, deptTotals, doneTotals] = await Promise.all([
     prisma.case.groupBy({
       by: ["status"],
       where: { ...caseScope(session), ...officeWhere },
       _count: { _all: true },
     }),
-    Promise.all(
-      depts.map((dept) =>
-        prisma.case.count({
-          where: {
-            ...(hasPermission(session, DEPT_QUEUE_PERMISSIONS[dept]) ? {} : caseScope(session)),
-            ...officeWhere,
-            AND: [deptQueueWhere(dept, false) ?? {}],
-          },
-        })
-      )
-    ),
+    Promise.all(depts.map((dept) => prisma.case.count({ where: deptWhereFor(dept, false) }))),
+    Promise.all(doneDepts.map((dept) => prisma.case.count({ where: deptWhereFor(dept, true) }))),
   ]);
 
   const statuses: Record<string, number> = {};
@@ -58,5 +58,10 @@ export async function caseQueueCounts(session: AdminSession, officeId: string): 
     statuses[row.status] = row._count._all;
     total += row._count._all;
   }
-  return { statuses, total, depts: Object.fromEntries(depts.map((dept, index) => [dept, deptTotals[index]])) };
+  return {
+    statuses,
+    total,
+    depts: Object.fromEntries(depts.map((dept, index) => [dept, deptTotals[index]])),
+    deptDone: Object.fromEntries(doneDepts.map((dept, index) => [dept, doneTotals[index]])),
+  };
 }

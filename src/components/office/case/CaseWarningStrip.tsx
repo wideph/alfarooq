@@ -9,12 +9,17 @@ export default function CaseWarningStrip({
   detail,
   pendingReasons,
   onOpenTab,
+  remarksOpen = false,
 }: {
   detail: CaseDetail;
   pendingReasons: string[];
   onOpenTab: (tab: string) => void;
+  // §W47: Remarks tab khula ho to remarks wali patti nahi — wahi warning
+  // remarks card ke andar (Mark seen ke saath) pehle se hai.
+  remarksOpen?: boolean;
 }) {
-  if (!detail.setMissingWarning && !detail.hasUnseenWarning && pendingReasons.length === 0) return null;
+  const showRemarks = detail.hasUnseenWarning && !remarksOpen;
+  if (!detail.setMissingWarning && !showRemarks && pendingReasons.length === 0) return null;
 
   return (
     <div className="space-y-2">
@@ -33,7 +38,7 @@ export default function CaseWarningStrip({
         </div>
       )}
 
-      {detail.hasUnseenWarning && (
+      {showRemarks && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 sm:text-sm">
           <MessageSquareWarning className="h-4 w-4 shrink-0" />
           <span className="flex-1">Aap ke department ke liye new remarks hain.</span>
