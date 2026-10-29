@@ -617,6 +617,7 @@ function CasesList() {
               history={history}
               from={fromHere}
               readControl={unread !== null ? readControl : undefined}
+              canUploadSlip={adminCanAny(admin, ["office:courier:write"])}
             />
           ) : (
           <>

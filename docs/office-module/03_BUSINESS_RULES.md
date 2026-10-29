@@ -279,6 +279,12 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   (WAITING_FOR_COURIER, tab khulte hi yahi) aur "Delivered" (DELIVERED,
   `history=1`). Queue chip / navbar badge = waiting count; Delivered ka count
   apne tab par. Delivered rows par "Case dekhein" (slip upload nahi).
+- §W48: courier permission wala user list se hi slip upload karta hai (detail page
+  nahi): button → tasveer / PDF chunein → preview (crop, rotate). Kai slips chuni ja
+  sakti hain magar EK upload mein sirf ek jati hai — izafi preview mein (X) delete
+  karna lazmi, warna upload band. Doosri slip ke liye dobara "Aur slip add karein"
+  (Delivered page par bhi). Slip WAITING_FOR_COURIER(_ADDRESS) case ko DELIVERED
+  karti hai (pehle jaisa).
 - Courier queue ki har row: case # ke saath student
   ka naam aur Roll / Reg, aur pehle delivery address ki EK line (aur address hon to
   "+N"). Lamba address "poora" dikhata hai; address par click → poore address ka

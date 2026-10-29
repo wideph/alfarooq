@@ -23,6 +23,7 @@ import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
+import CourierSlipUploader from "@/components/office/case/CourierSlipUploader";
 import { caseDetailHref } from "@/lib/office/case-nav";
 
 // §W18 — department queues (?dept=filing|printing|attestation|courier). Cross-office
@@ -235,11 +236,14 @@ export default function DeptQueue({
   history = false,
   from,
   readControl,
+  canUploadSlip = false,
 }: {
   dept: DeptQueueKey;
   items: DeptQueueRow[];
   loading: boolean;
   history?: boolean;
+  // §W48: courier write permission — list se hi slip upload (WhatsApp jaisa preview).
+  canUploadSlip?: boolean;
   // §W34: ye queue (path + query) — detail page se wapsi isi tab par.
   from?: string;
   // §W35: super admin ka har row par Read button (cases page deta hai).
@@ -265,6 +269,19 @@ export default function DeptQueue({
   const [localPrinted, setLocalPrinted] = useState<Record<string, boolean>>({});
   // §W46: courier — poore address ka view (case pehchan ke saath).
   const [addressFor, setAddressFor] = useState<DeptQueueRow | null>(null);
+  // §W48: courier slip — button se seedha picker, chunte hi preview (crop).
+  const slipInput = useRef<HTMLInputElement>(null);
+  const slipTarget = useRef<DeptQueueRow | null>(null);
+  const [slipFor, setSlipFor] = useState<{ item: DeptQueueRow; files: File[] } | null>(null);
+  const [localSlip, setLocalSlip] = useState<Record<string, boolean>>({});
+
+  function pickSlip(item: DeptQueueRow) {
+    slipTarget.current = item;
+    const input = slipInput.current;
+    if (!input) return;
+    input.value = "";
+    input.click();
+  }
 
   async function copyAddress(text: string) {
     try {
@@ -491,12 +508,46 @@ export default function DeptQueue({
     );
   }
 
+  // §W48: courier — detail page ki bajaye yahin slip upload. Slip ke baad case
+  // Delivered page par chala jata hai; wahan "Aur slip add karein" (har slip
+  // ke liye dobara upload).
+  function courierActions(item: DeptQueueRow, fullWidth = false) {
+    const uploaded = Boolean(localSlip[item.id]);
+    const more = uploaded || history || item.status === "DELIVERED";
+    return (
+      <div
+        className={`flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[11rem]"}`}
+        onClick={stopRowClick}
+        onMouseEnter={stopRowClick}
+      >
+        {uploaded && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+            <BadgeCheck className="h-3.5 w-3.5" /> Slip upload ho gayi ✓
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => pickSlip(item)}
+          className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold ${
+            more
+              ? "border border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
+              : "bg-primary-600 text-white hover:bg-primary-700"
+          } ${fullWidth ? "w-full" : ""}`}
+        >
+          <Upload className="h-3.5 w-3.5" /> {more ? "Aur slip add karein" : "Courier slip upload karein"}
+        </button>
+      </div>
+    );
+  }
+
   function rowActions(item: DeptQueueRow, fullWidth = false) {
     const actions = filingMode
       ? filingActions(item, fullWidth)
       : dept === "printing" && !history
         ? printingActions(item, fullWidth)
-        : actionButton(item, fullWidth);
+        : dept === "courier" && canUploadSlip
+          ? courierActions(item, fullWidth)
+          : actionButton(item, fullWidth);
     if (!readControl) return actions;
     return (
       <div className={`flex flex-col gap-1.5 ${fullWidth ? "w-full" : "items-start"}`}>
@@ -690,6 +741,38 @@ export default function DeptQueue({
             </div>
           </div>
         </div>
+      )}
+
+      {/* §W48: courier slip picker (kai slips chuni ja sakti hain — preview mein
+          sirf ek rakhni hoti hai). sr-only: mobile Safari par bhi click() chale. */}
+      {dept === "courier" && canUploadSlip && (
+        <input
+          ref={slipInput}
+          type="file"
+          accept="image/*,application/pdf"
+          multiple
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            const item = slipTarget.current;
+            e.target.value = "";
+            if (item && files.length > 0) setSlipFor({ item, files });
+          }}
+        />
+      )}
+      {slipFor && (
+        <CourierSlipUploader
+          item={slipFor.item}
+          files={slipFor.files}
+          onClose={() => setSlipFor(null)}
+          onMessage={showToast}
+          onUploaded={() => {
+            setLocalSlip((prev) => ({ ...prev, [slipFor.item.id]: true }));
+            setSlipFor(null);
+          }}
+        />
       )}
 
       {/* §W46: poora delivery address — case number, naam, Roll / Reg ke saath */}

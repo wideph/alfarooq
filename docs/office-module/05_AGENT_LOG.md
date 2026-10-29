@@ -1932,3 +1932,33 @@ Investigation-first (live DB audit):
   History + sahi jumla, DEPT_COMMISSION row nahi, set double nahi, remarks warning
   1; 000022 fixed: tile + "company deti hai"; dept page ek complete button.
 - **Next step**: owner ki nayi requirement.
+
+## WAVE 48 (2026-10-29) — Courier slip: list se hi upload, WhatsApp jaisa preview + crop
+
+- **Owner request**: courier tab ki list mein slip upload ka button detail page par
+  le jane ki bajaye wahin upload kare. Tasveer chun kar upload karte hi WhatsApp ki
+  tarah khud preview, crop ka option. Ek dafa mein kai slips chuni ja saken magar
+  preview mein izafi delete karna zaroori; ek se zyada slips ke liye dobara upload
+  option.
+- **Naya** `components/office/case/CourierSlipUploader.tsx` (dark full-screen
+  dialog "Courier slip preview"): case # + naam / Roll / Reg; Crop (frame: 4 kone +
+  4 kinare + move, pointer capture, touch-none, teen hisson ki lakeerein, Reset /
+  Cancel / Done) aur Rotate 90°; thumbnails strip har slip par (X) delete; >1 slip
+  par amber hidayat + hara upload button band; sab delete → band. Upload: edit na ho
+  to asal file, warna canvas (rotation + crop, lambi taraf 2400, JPEG 0.9) →
+  `uploadCaseFiles({ department: "COURIER", files: [1] })` (wahi direct R2 /
+  server / chunked raasta, office:changed). PDF slip → card, crop nahi, as-is.
+- **DeptQueue**: `canUploadSlip` (cases page: `office:courier:write`) → courier rows
+  par `courierActions`: sr-only `<input type=file multiple accept=image/*,pdf>`
+  ka click (detail page nahi). Waiting row: "Courier slip upload karein"; upload
+  ke baad "Slip upload ho gayi ✓" + "Aur slip add karein"; Delivered page: "Aur
+  slip add karein". Bina permission (maslan cashier) pehle jaisa detail link.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser (desktop + mobile 390, upload
+  network mocked, courier list / auth asal JSON — local se Supabase baar baar
+  timeout) 43/43: picker multiple, detail page nahi, chunte hi preview, 3 / 2 slips
+  par upload band + hidayat, 1 par khula; crop frame (se + nw kheench) → JPEG
+  563x376 (~40%); crop mode mein upload band; sirf 1 file presign + register
+  COURIER; toast "… Delivered"; row ✓ + "Aur slip add karein"; rotate → 900x1366;
+  PDF as-is; aakhri delete → band; Delivered page buttons; 0 page errors, 0 DB
+  writes. Thumbnail X badge clip theek (pt / pr).
+- **Next step**: owner live par courier user se asal slip upload kar ke dekhe.
