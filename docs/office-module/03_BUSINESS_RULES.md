@@ -315,3 +315,10 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   (OfficeNav) mein yehi tabs pehle se hain. Dept tab mein heading usi department ka
   naam. Printing aur courier pages ki rows par status chip nahi (page ka naam hi
   status hai); filing / attestation mein chip rehta hai (status farq batata hai).
+- §W50: courier slip (COURIER file) case detail payload mein `courierSlips` (sirf
+  COURIER rows — FILING kabhi nahi; wahi /files/<id> links) → Overview mein sab se
+  upar "Courier slip" card (admin / booking office / cashier); dept worker ke
+  ek-page view mein nahi (Files section saath hai). Slip upload par case banane
+  wale + us booking office ke tamam active booking_office users ko notification
+  (`notifyCaseOffice`); pehli slip "Delivered — courier slip upload ho gayi",
+  baad wali "nayi courier slip upload hui". Case detail tabs mobile par 3x2 grid.

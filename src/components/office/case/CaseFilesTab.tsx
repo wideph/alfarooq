@@ -71,6 +71,8 @@ type Props = {
     filingFilesVisibleToBooking?: boolean;
     // §W39: printing se pehle department user ko complete button nahi.
     status?: string;
+    // §W50: detail ki live refresh mein nayi courier slip aaye to list bhi taaza.
+    courierSlips?: unknown[];
   };
   admin: AdminNavUser;
   onReload: () => Promise<void>;
@@ -116,9 +118,12 @@ export default function CaseFilesTab({ detail, admin, onReload, onMessage, depar
     }
   }, [detail.id]);
 
+  // §W50: tab khula ho aur courier slip aaye (detail 15s live refresh) to
+  // list bhi dobara — pehle sirf tab mount par load hoti thi.
+  const slipCount = detail.courierSlips?.length ?? 0;
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, slipCount]);
 
   // ATTA per-step upload ke liye selected set ke steps (stepKey + label).
   useEffect(() => {

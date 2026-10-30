@@ -3,7 +3,7 @@ import { hasPermission, type AdminSession } from "@/lib/auth";
 import { caseScope, deptPermissionsOf, isDeptWorker } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
 import { sum, toNumber } from "@/lib/office/money";
-import { getOfficeFileSignedUrl } from "@/lib/office/r2";
+import { getOfficeFileSignedUrl, originalFilenameFromKey } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 import {
   isFilingLimited,
@@ -231,7 +231,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   // (GET /api/office/cases/[id]/audit) — is loader mein nahi. Baqi lookups
   // parallel Promise.all se chalti hain.
   const remarkTarget = roleToRemarkTarget(session.role);
-  const [names, hasUnseenWarning, clientPictureUrl, deptCommissions] = await Promise.all([
+  const [names, hasUnseenWarning, clientPictureUrl, deptCommissions, courierFiles] = await Promise.all([
     adminNameMap([
       item.createdByAdminId,
       ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
@@ -251,6 +251,13 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     // sirf full detail payload par; dept-limited payload mein money data
     // restricted hai (loadDeptLimitedCaseDetail mein ye field NAHI jata).
     loadDeptCommissions(caseId),
+    // §W50: courier slip(s) — booking office / admin ko Overview mein seedha
+    // nazar aayen (pehle sirf Files tab ke aakhri section mein thi).
+    prisma.caseFile.findMany({
+      where: { caseId, department: "COURIER" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, fileKey: true, fileType: true, title: true, createdAt: true },
+    }),
   ]);
 
   const totals = computeTotals(item.payments, item.agreedAmount);
@@ -271,10 +278,11 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     ? item.attestations.find((a) => a.id === item.currentAttestationId)
     : null;
 
-  // §W11.6: is loader mein CaseFile rows kabhi include nahi hoti (files apne
-  // lazy route se aati hain jo booking role ka FILING filter khud lagata hai),
-  // is liye booking-office payload mein filing file entries kahin expose nahi
-  // hoti.
+  // §W11.6: is loader mein FILING CaseFile rows kabhi include nahi hoti (files
+  // apne lazy route se aati hain jo booking role ka FILING filter khud lagata
+  // hai), is liye booking-office payload mein filing file entries kahin expose
+  // nahi hoti. §W50: sirf COURIER slips (courierSlips) — wahi stable
+  // /files/<id> links jo files route deta hai.
 
   const payload = {
     profitStale,
@@ -293,6 +301,18 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
         }
       : null,
     createdByName: names[item.createdByAdminId] || null,
+    courierSlips: courierFiles.map((file) => {
+      const base = `/api/office/cases/${caseId}/files/${file.id}`;
+      return {
+        id: file.id,
+        title: file.title,
+        fileName: originalFilenameFromKey(file.fileKey),
+        fileType: file.fileType,
+        createdAt: file.createdAt,
+        url: base,
+        downloadUrl: `${base}?download=1`,
+      };
+    }),
     payments: item.payments.map((p) => ({
       ...p,
       submittedByName: names[p.submittedById] || null,

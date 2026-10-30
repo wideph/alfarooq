@@ -1981,3 +1981,34 @@ Investigation-first (live DB audit):
   0, admin ko chips + bina dohri ginti, Waiting 2 / Delivered 2 tabs, rows par
   "Waiting for courier slip" / "Delivered" chip nahi, 0 page errors, 0 writes.
 - **Next step**: owner ki nayi requirement.
+
+## WAVE 50 (2026-10-30) — Booking office ko courier slip nazar nahi aati thi
+
+- **Owner**: shikayat — booking office ko upload ki gayi courier slip show nahi
+  hoti; mobile par bhi check karo, jo fault ho theek karo.
+- **Jaanch** (live read-only + local server, AW-K token): live mein 2 slips
+  (000022, 000017 — AW-Knj). API / files route / access sab theek (AW-K ko slip
+  milti thi). Asal faults: (1) slip sirf Files tab ke aakhri (Courier) section
+  mein — Overview mein "Delivered" magar slip ka zikr nahi; (2) mobile par case
+  tabs horizontal scroll — Files / Remarks / History screen se bahar chhupe;
+  (3) slip upload par notification sirf admins ko (dono purani slips → sirf
+  Alfarooq Admin), booking office ko pata hi nahi chalta; (4) Files tab ki list
+  sirf mount par load — khuli ho to nayi slip nahi aati.
+- **Fix**: `case-detail.ts` payload mein `courierSlips` (COURIER rows, stable
+  links); `CaseOverviewTab` full variant mein sab se upar `CourierSlipsPanel`
+  (thumbnail, tareekh + courier #, Dekhein → CaseFileViewer, Download; HEIC /
+  pdf par icon); `cases/[id]/page.tsx` tab bar mobile par `grid-cols-3` (icon
+  upar, label neeche), sm+ par wrap; `notifications.ts` `notifyCaseOffice`
+  (creator + office ke active booking_office users) → files POST mein COURIER
+  upload par; `CaseFilesTab` slip count badalne par list dobara load.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser 34/34 (AW-K desktop 1366 +
+  mobile 390, admin, courier worker): API courierSlips 1/1/0; card Client info se
+  upar (mobile par pehli screen mein); thumbnail + viewer mein tasveer; Download
+  link; 6 tabs screen ke andar (mobile 3x2); Files tab Courier 1; 000017 par card;
+  bina slip case par card nahi; dept worker par card nahi (dohraav nahi); live:
+  slip aane par Files tab 13s mein khud taaza; asal file route 5/5 302 → R2;
+  0 errors, 0 DB writes. Notification recipients (read-only): 000022 → AW-K;
+  000010 → Fan, AW D.
+- **Note**: purani 2 slips ki notification booking office ko kabhi nahi gayi —
+  backfill nahi kiya (live write); ab card se seedha nazar aati hain.
+- **Next step**: owner ki nayi requirement.

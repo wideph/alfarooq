@@ -72,6 +72,28 @@ export async function notifyPermission(permission: string, n: NotificationInput)
 }
 
 /**
+ * §W50 — case ke booking office ko: case banane wala + us office ke tamam
+ * ACTIVE booking_office users (case admin ne banaya ho to bhi office ko pata
+ * chale). Kabhi throw nahi karta.
+ */
+export async function notifyCaseOffice(caseId: string, n: NotificationInput): Promise<void> {
+  try {
+    const item = await prisma.case.findUnique({
+      where: { id: caseId },
+      select: { createdByAdminId: true, bookingOfficeId: true },
+    });
+    if (!item) return;
+    const officeUsers = await prisma.admin.findMany({
+      where: { role: "booking_office", isActive: true, bookingOfficeId: item.bookingOfficeId },
+      select: { id: true },
+    });
+    await createMany([item.createdByAdminId, ...officeUsers.map((u) => u.id)], n);
+  } catch (error) {
+    console.error("[notify] notifyCaseOffice fail", error);
+  }
+}
+
+/**
  * §W30 — courier stage ki notification (advanceCourierStage ke baad):
  *   WAITING_FOR_COURIER_ADDRESS → case creator + admins: address add karein.
  *   WAITING_FOR_COURIER         → courier PERMISSION wale users (+ admins) —

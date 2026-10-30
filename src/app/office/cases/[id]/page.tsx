@@ -205,11 +205,14 @@ export default function CaseDetailPage({
                 ) : (
                 <>
 
-                {/* Tab bar — mobile par horizontally scrollable */}
+                {/* Tab bar — §W50: mobile par 3x2 grid (pehle horizontal scroll
+                    tha aur Files / Remarks / History screen se bahar chhupe rehte
+                    the — booking office ko courier slip wala Files tab milta hi
+                    nahi tha); sm+ par ek line (zarurat ho to wrap). */}
                 <div
                   role="tablist"
                   aria-label="Case sections"
-                  className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+                  className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-1"
                 >
                   {TABS.map((tab) => {
                     const active = tab.key === activeTab;
@@ -221,7 +224,7 @@ export default function CaseDetailPage({
                         role="tab"
                         aria-selected={active}
                         onClick={() => openTab(tab.key)}
-                        className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+                        className={`relative inline-flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-center text-[11px] font-semibold leading-tight transition sm:min-h-[44px] sm:shrink-0 sm:flex-row sm:gap-1.5 sm:whitespace-nowrap sm:px-3.5 sm:py-2 sm:text-sm ${
                           active
                             ? "bg-primary-600 text-white shadow-sm"
                             : "border border-slate-200 bg-white text-slate-600 hover:border-primary-300 hover:text-primary-700"

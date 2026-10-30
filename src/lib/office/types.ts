@@ -53,6 +53,16 @@ export type CaseDetail = {
   customLabelColor?: string | null;
   clientPictureUrl: string | null;
   clientPictureType: string | null;
+  // §W50: case ki courier slip(s) (COURIER files) — Overview card ke liye.
+  courierSlips?: Array<{
+    id: string;
+    title: string | null;
+    fileName: string | null;
+    fileType: "pdf" | "image" | "video" | "word";
+    createdAt: string;
+    url: string;
+    downloadUrl: string;
+  }>;
   contacts: Array<{ id: string; phone: string; label: string | null }>;
   addresses: Array<{ id: string; address: string; label: string | null }>;
   attestations: Array<{

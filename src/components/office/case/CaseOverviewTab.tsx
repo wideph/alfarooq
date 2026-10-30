@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import {
   BadgePercent,
   Coins,
+  Download,
   Edit,
+  Eye,
+  FileText,
   HandCoins,
   ImagePlus,
   Loader2,
@@ -13,6 +16,7 @@ import {
   PiggyBank,
   Save,
   Trash2,
+  Truck,
   User,
   Wallet,
 } from "lucide-react";
@@ -22,7 +26,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
-import { formatMoney, officeFetch } from "@/lib/office/client";
+import { formatDateTime, formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 import { announceOfficeChange } from "@/lib/office/live";
@@ -64,6 +68,7 @@ export default function CaseOverviewTab({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
+        <CourierSlipsPanel detail={detail} />
         <ClientInfoPanel detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
         <MoneySummary detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
       </div>
@@ -264,6 +269,100 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
         />
       )}
     </SectionCard>
+  );
+}
+
+/* ---------------- Courier slip (§W50) ---------------- */
+
+type CourierSlip = NonNullable<CaseDetail["courierSlips"]>[number];
+
+// §W50: booking office ki shikayat — courier slip "show nahi hoti": wo sirf
+// Files tab ke aakhri (Courier) section mein thi, aur mobile par Files tab
+// screen se bahar. Ab Overview (case khulte hi) mein sab se upar, thumbnail +
+// Dekhein / Download. Dept worker ke ek-page view mein Files section saath hi
+// hai, wahan ye card nahi (dohraav).
+function CourierSlipsPanel({ detail }: { detail: CaseDetail }) {
+  const [viewing, setViewing] = useState<{ slip: CourierSlip; label: string } | null>(null);
+  const slips = detail.courierSlips ?? [];
+  if (slips.length === 0) return null;
+  return (
+    <SectionCard icon={Truck} title="Courier slip" count={slips.length}>
+      <ul className="space-y-2">
+        {slips.map((slip, index) => {
+          const label = slips.length > 1 ? `Courier slip ${index + 1}` : "Courier slip";
+          return (
+            <li key={slip.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2">
+              <button
+                type="button"
+                onClick={() => setViewing({ slip, label })}
+                aria-label={`${label} dekhein`}
+                className="shrink-0 rounded-lg transition hover:opacity-80"
+              >
+                <SlipThumb slip={slip} label={label} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-800">{label}</p>
+                <p className="text-xs text-slate-500">
+                  {formatDateTime(slip.createdAt)}
+                  {detail.courierNumber ? ` · Courier # ${detail.courierNumber}` : ""}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewing({ slip, label })}
+                    className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Dekhein
+                  </button>
+                  <a
+                    href={slip.downloadUrl}
+                    download={slip.fileName || ""}
+                    aria-label={`${label} download karein`}
+                    className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:text-primary-700"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download
+                  </a>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {viewing && (
+        <CaseFileViewer
+          file={{
+            url: viewing.slip.url,
+            downloadUrl: viewing.slip.downloadUrl,
+            fileType: viewing.slip.fileType,
+            title: `${viewing.label} — ${detail.caseNumber}`,
+            fileName: viewing.slip.fileName,
+          }}
+          onClose={() => setViewing(null)}
+        />
+      )}
+    </SectionCard>
+  );
+}
+
+// Image ho to chhoti tasveer; pdf / video / browser na dikha sake (HEIC) to icon.
+function SlipThumb({ slip, label }: { slip: CourierSlip; label: string }) {
+  const [failed, setFailed] = useState(false);
+  if (slip.fileType === "image" && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={slip.url}
+        alt={label}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-16 w-16 rounded-lg border border-slate-200 bg-white object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400">
+      <FileText className="h-7 w-7" />
+    </span>
   );
 }
 

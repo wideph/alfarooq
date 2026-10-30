@@ -11,7 +11,7 @@ import {
   registerCaseFiles,
   type NewCaseFile,
 } from "@/lib/office/case-files";
-import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
+import { notifyAdmins, notifyCaseOffice, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import {
   deleteOfficeFile,
   departmentFileMaxBytes,
@@ -281,6 +281,19 @@ async function afterUpload(
       }
       // §W30: attestation complete + payment pehle se poori → courier stage.
       await notifyCourierStage(id, result.nextStatus);
+    }
+
+    // §W50: courier slip → case ke booking office ko (pehle sirf admins ko
+    // jati thi, office ko pata hi nahi chalta tha). Link case par — Overview
+    // mein upar "Courier slip" card.
+    if (department === "COURIER") {
+      await notifyCaseOffice(id, {
+        type: "file.upload",
+        title: result.delivered
+          ? `Case ${item.caseNumber}: Delivered — courier slip upload ho gayi`
+          : `Case ${item.caseNumber}: nayi courier slip upload hui`,
+        link: `/office/cases/${id}`,
+      });
     }
   });
 }
