@@ -485,12 +485,14 @@ export type DeptExpenseRow = {
   caseId?: string;
   caseNumber?: string;
   clientName?: string | null;
+  // §W55: hatane ke liye qism — COURIER / BYKEA (case expense), OTHER; null = yahan se nahi.
+  deleteKind?: string | null;
 };
 
 // §W52: user ka bheja hua kharcha jo admin ke review mein hai ya wapas hua.
 export type DeptExpenseReviewRow = {
   id: string;
-  kind: "COURIER" | "OTHER";
+  kind: "COURIER" | "BYKEA" | "OTHER";
   caseId: string | null;
   caseNumber: string | null;
   amount: number;
@@ -554,6 +556,7 @@ export function normalizeDeptExpenses(data: any): DeptExpensesPayload {
     caseId: raw?.caseId ? String(raw.caseId) : undefined,
     caseNumber: raw?.caseNumber ? String(raw.caseNumber) : undefined,
     clientName: raw?.clientName ? String(raw.clientName) : null,
+    deleteKind: raw?.deleteKind ? String(raw.deleteKind) : null,
   });
   return {
     totals: {
@@ -567,7 +570,7 @@ export function normalizeDeptExpenses(data: any): DeptExpensesPayload {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     reviews: (Array.isArray(data?.reviews) ? data.reviews : []).map((raw: any) => ({
       id: String(raw?.id ?? ""),
-      kind: raw?.kind === "COURIER" ? "COURIER" : "OTHER",
+      kind: raw?.kind === "COURIER" || raw?.kind === "BYKEA" ? raw.kind : "OTHER",
       caseId: raw?.caseId ? String(raw.caseId) : null,
       caseNumber: raw?.caseNumber ? String(raw.caseNumber) : null,
       amount: num(raw?.amount),

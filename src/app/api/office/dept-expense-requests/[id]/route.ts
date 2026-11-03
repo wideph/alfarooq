@@ -12,7 +12,11 @@ export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-const KIND_LABEL: Record<string, string> = { COURIER: "Courier kharcha", OTHER: "Other expenses" };
+const KIND_LABEL: Record<string, string> = {
+  COURIER: "Courier kharcha",
+  BYKEA: "Bykea kharcha",
+  OTHER: "Other expenses",
+};
 
 // §W52 — POST { action, amount?, note? }
 //   accept (super admin): asal kharcha banta hai (§W51 nizam) — admin raqam

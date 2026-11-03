@@ -9,7 +9,13 @@ import { syncProfitShare } from "@/lib/office/profit-share";
 import { cleanText, parseDateOnly, todayPakistan, toJson } from "@/lib/office/serializers";
 import { hasAnyDeptCommissionPermission } from "@/lib/office/dept-commission";
 import { commissionExpenseTag } from "@/lib/office/expense-deduction";
-import { COURIER_EXPENSE_KIND, deptExpenseTotals, emptyDeptExpenseTotals } from "@/lib/office/dept-expenses";
+import {
+  CASE_DEPT_EXPENSE_KINDS,
+  deptExpenseTotals,
+  emptyDeptExpenseTotals,
+  isCaseDeptExpenseKind,
+  reimbursementBucket,
+} from "@/lib/office/dept-expenses";
 import { createDeptExpenseRequest } from "@/lib/office/dept-expense-requests";
 
 export const preferredRegion = ["sin1"];
@@ -34,13 +40,15 @@ export async function GET(request: NextRequest) {
   }
   try {
     const canAdminDelete = hasPermission(session, "office:expenses:write");
-    const [courier, officeCourier, other, requests, reviews, totals] = await Promise.all([
+    const [caseRows, officeRows, other, requests, reviews, totals] = await Promise.all([
+      // §W55: COURIER → courier list; BYKEA → Other expenses list (case link ke saath).
       prisma.caseExpense.findMany({
-        where: { paidByAdminId: requested, kind: COURIER_EXPENSE_KIND },
+        where: { paidByAdminId: requested, kind: { in: [...CASE_DEPT_EXPENSE_KINDS] } },
         orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
-        take: 200,
+        take: 300,
         select: {
           id: true,
+          kind: true,
           amount: true,
           description: true,
           expenseDate: true,
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
         where: { paidByAdminId: requested },
         orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
         take: 200,
-        select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
+        select: { id: true, kind: true, amount: true, description: true, expenseDate: true, createdAt: true },
       }),
       prisma.companyExpense.findMany({
         where: { paidByAdminId: requested },
@@ -81,40 +89,66 @@ export async function GET(request: NextRequest) {
       : [];
     const names = Object.fromEntries(creators.map((admin) => [admin.id, admin.name]));
 
+    // Har row ke saath `deleteKind` — hatane ke liye kaun si qism (COURIER /
+    // BYKEA = case expense, OTHER = company expense); office wale yahan se nahi.
+    type Row = {
+      id: string;
+      amount: unknown;
+      description: string;
+      expenseDate: Date;
+      createdAt: Date;
+      caseId?: string;
+      caseNumber?: string;
+      clientName?: string | null;
+      canDelete: boolean;
+      deleteKind: string | null;
+    };
+    const lists: Record<"courier" | "other", Row[]> = { courier: [], other: [] };
+    for (const row of caseRows) {
+      lists[reimbursementBucket(row.kind)].push({
+        id: row.id,
+        amount: row.amount,
+        description: row.description,
+        expenseDate: row.expenseDate,
+        createdAt: row.createdAt,
+        caseId: row.case.id,
+        caseNumber: row.case.caseNumber,
+        clientName: row.case.clientName || null,
+        canDelete: canAdminDelete,
+        deleteKind: row.kind,
+      });
+    }
+    for (const row of officeRows) {
+      lists[reimbursementBucket(row.kind)].push({
+        id: row.id,
+        amount: row.amount,
+        description: row.description,
+        expenseDate: row.expenseDate,
+        createdAt: row.createdAt,
+        canDelete: false,
+        deleteKind: null,
+      });
+    }
+    for (const row of other) {
+      lists.other.push({
+        id: row.id,
+        amount: row.amount,
+        description: row.description,
+        expenseDate: row.expenseDate,
+        createdAt: row.createdAt,
+        canDelete: canAdminDelete,
+        deleteKind: "OTHER",
+      });
+    }
+    const newestFirst = (a: Row, b: Row) => b.expenseDate.getTime() - a.expenseDate.getTime();
+
     return NextResponse.json(
       toJson({
         ok: true,
         adminId: requested,
         totals: totals.get(requested) ?? emptyDeptExpenseTotals(),
-        courier: [
-          ...courier.map((row) => ({
-            id: row.id,
-            amount: row.amount,
-            description: row.description,
-            expenseDate: row.expenseDate,
-            createdAt: row.createdAt,
-            caseId: row.case.id,
-            caseNumber: row.case.caseNumber,
-            clientName: row.case.clientName || null,
-            canDelete: canAdminDelete,
-          })),
-          ...officeCourier.map((row) => ({
-            id: row.id,
-            amount: row.amount,
-            description: row.description,
-            expenseDate: row.expenseDate,
-            createdAt: row.createdAt,
-            canDelete: false,
-          })),
-        ].sort((a, b) => b.expenseDate.getTime() - a.expenseDate.getTime()),
-        other: other.map((row) => ({
-          id: row.id,
-          amount: row.amount,
-          description: row.description,
-          expenseDate: row.expenseDate,
-          createdAt: row.createdAt,
-          canDelete: canAdminDelete,
-        })),
+        courier: lists.courier.sort(newestFirst),
+        other: lists.other.sort(newestFirst),
         requests: requests.map((row) => ({
           id: row.id,
           kind: row.kind,
@@ -194,9 +228,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE ?kind=COURIER|OTHER&id= — MANZOOR shuda kharcha hatana: sirf admin /
-// cashier (office:expenses:write). (User apni review wali request cancel
-// karta hai — dept-expense-requests route.)
+// DELETE ?kind=COURIER|BYKEA|OTHER&id= — MANZOOR shuda kharcha hatana: sirf
+// admin / cashier (office:expenses:write). (User apni review wali request
+// cancel karta hai — dept-expense-requests route.)
 export async function DELETE(request: NextRequest) {
   const { session, denied } = await guardOffice("office:expenses:write");
   if (denied) return denied;
@@ -204,9 +238,9 @@ export async function DELETE(request: NextRequest) {
   const kind = (searchParams.get("kind") || "").toUpperCase();
   const id = searchParams.get("id") || "";
   try {
-    if (kind === "COURIER") {
+    if (isCaseDeptExpenseKind(kind)) {
       const expense = await prisma.caseExpense.findFirst({
-        where: { id, kind: COURIER_EXPENSE_KIND, paidByAdminId: { not: null } },
+        where: { id, kind, paidByAdminId: { not: null } },
       });
       if (!expense) return notFound("Kharcha nahi mila");
       await prisma.$transaction(async (tx) => {
@@ -217,7 +251,7 @@ export async function DELETE(request: NextRequest) {
       }, { maxWait: 10000, timeout: 30000 });
       after(async () => {
         await logOfficeAction(session, {
-          action: "case.expense.courier.remove",
+          action: kind === "BYKEA" ? "case.expense.bykea.remove" : "case.expense.courier.remove",
           entity: "Case",
           entityId: expense.caseId,
           before: expense,

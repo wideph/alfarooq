@@ -76,10 +76,13 @@ export function DeptExpenseList({
   const pathname = usePathname();
   const [removing, setRemoving] = useState<string | null>(null);
 
-  async function remove(id: string) {
+  async function remove(row: DeptExpenseRow) {
     if (!confirm("Ye kharcha hata dein?")) return;
+    const id = row.id;
+    // §W55: Other expenses list mein Bykea (case expense) bhi — row apni qism batati hai.
+    const deleteKind = row.deleteKind || kind;
     setRemoving(id);
-    const res = await officeFetch(`/api/office/dept-expenses?kind=${kind}&id=${encodeURIComponent(id)}`, {
+    const res = await officeFetch(`/api/office/dept-expenses?kind=${deleteKind}&id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
     setRemoving(null);
@@ -117,7 +120,7 @@ export function DeptExpenseList({
             {row.canDelete && (
               <button
                 type="button"
-                onClick={() => void remove(row.id)}
+                onClick={() => void remove(row)}
                 disabled={removing === row.id}
                 aria-label="Kharcha hatayein"
                 className="grid h-9 w-9 place-items-center rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50"

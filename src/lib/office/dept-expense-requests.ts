@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AdminSession } from "@/lib/auth";
 import { syncCommissionExpenseDeductions } from "@/lib/office/expense-deduction";
-import { COURIER_EXPENSE_KIND, DEPT_OTHER_EXPENSE_CATEGORY } from "@/lib/office/dept-expenses";
+import { DEPT_OTHER_EXPENSE_CATEGORY, isCaseDeptExpenseKind } from "@/lib/office/dept-expenses";
 
 // §W52 — department user ka kharcha pehle admin ke REVIEW mein
 // (DeptExpenseRequest PENDING) — us dauran system ke kisi hisaab mein nahi.
@@ -10,11 +10,13 @@ import { COURIER_EXPENSE_KIND, DEPT_OTHER_EXPENSE_CATEGORY } from "@/lib/office/
 //   COURIER → us case ka CaseExpense (kind COURIER, paidByAdminId = user) +
 //             commission office ka rule (syncCommissionExpenseDeductions);
 //             partner office ka pool caller after() mein syncProfitShare se.
+//   BYKEA   → §W55: COURIER jaisa (us case ka CaseExpense kind BYKEA) — sirf
+//             user ki wapsi "Other expenses" hisaab mein.
 //   OTHER   → CompanyExpense (DEPT_OTHER) — sirf admin ke profit se minus.
-// Case review ke dauran delete ho gaya ho to courier kharcha Other ban jata hai
-// (user ka paisa zaya nahi — case delete wala §W51 usool).
+// Case review ke dauran delete ho gaya ho to case wala kharcha Other expenses
+// ban jata hai (review card par admin ko pehle se likha nazar aata hai).
 
-export const DEPT_EXPENSE_REQUEST_KINDS = ["COURIER", "OTHER"] as const;
+export const DEPT_EXPENSE_REQUEST_KINDS = ["COURIER", "BYKEA", "OTHER"] as const;
 export type DeptExpenseRequestKind = (typeof DEPT_EXPENSE_REQUEST_KINDS)[number];
 
 export async function pendingDeptExpenseReviewCount() {
@@ -67,7 +69,7 @@ export async function acceptDeptExpenseRequest(
     let companyExpenseId: string | null = null;
     let caseId: string | null = null;
     const liveCase =
-      request.kind === "COURIER" && request.caseId
+      isCaseDeptExpenseKind(request.kind) && request.caseId
         ? await tx.case.findUnique({ where: { id: request.caseId }, select: { id: true } })
         : null;
 
@@ -78,7 +80,7 @@ export async function acceptDeptExpenseRequest(
           amount,
           description: request.description,
           expenseDate: request.expenseDate,
-          kind: COURIER_EXPENSE_KIND,
+          kind: request.kind,
           paidByAdminId: request.adminId,
           createdById: request.adminId,
         },
@@ -88,7 +90,7 @@ export async function acceptDeptExpenseRequest(
       caseId = liveCase.id;
     } else {
       const description =
-        request.kind === "COURIER"
+        isCaseDeptExpenseKind(request.kind)
           ? `Case ${request.caseNumber ?? ""} (delete ho chuka) — ${request.description}`
           : request.description;
       const expense = await tx.companyExpense.create({

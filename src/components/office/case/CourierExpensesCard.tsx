@@ -28,6 +28,8 @@ export default function CourierExpensesCard({
   onChanged: () => Promise<void> | void;
   onMessage: (message: string, kind?: ToastKind) => void;
 }) {
+  // §W55: Courier ya Bykea (Bykea ki wapsi Mera account mein Other expenses mein).
+  const [kind, setKind] = useState<"COURIER" | "BYKEA">("COURIER");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -37,20 +39,20 @@ export default function CourierExpensesCard({
 
   async function add() {
     if (!amount.trim() || Number(amount) <= 0) {
-      onMessage("Courier amount likhein (maslan 350)", "error");
+      onMessage(`${kind === "BYKEA" ? "Bykea" : "Courier"} amount likhein (maslan 350)`, "error");
       return;
     }
     setSaving(true);
     const res = await officeFetch<{ pending?: boolean }>(`/api/office/cases/${caseId}/dept-expenses`, {
       method: "POST",
-      json: { amount: amount.trim(), description: note.trim() || undefined },
+      json: { kind, amount: amount.trim(), description: note.trim() || undefined },
     });
     setSaving(false);
     if (!res.ok) {
       onMessage(res.error, "error");
       return;
     }
-    onMessage(res.data.pending ? "Admin ke review ke liye bhej diya — manzoori ke baad hisaab mein judega" : "Courier kharcha add ho gaya");
+    onMessage(res.data.pending ? "Admin ke review ke liye bhej diya — manzoori ke baad hisaab mein judega" : "Kharcha add ho gaya");
     setAmount("");
     setNote("");
     await onChanged();
@@ -75,7 +77,7 @@ export default function CourierExpensesCard({
   return (
     <SectionCard
       icon={Truck}
-      title="Courier kharcha (aap ka)"
+      title="Courier / Bykea kharcha (aap ka)"
       count={items.length || null}
       actions={
         items.length > 0 ? (
@@ -96,6 +98,13 @@ export default function CourierExpensesCard({
                   <span className="block truncate font-medium text-slate-800">{item.description}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
                     {formatDate(item.expenseDate)}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        item.kind === "BYKEA" ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"
+                      }`}
+                    >
+                      {item.kind === "BYKEA" ? "Bykea" : "Courier"}
+                    </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${chip.cls}`}>{chip.label}</span>
                   </span>
                   {item.status === "REJECTED" && item.decisionNote && (
@@ -124,6 +133,22 @@ export default function CourierExpensesCard({
           })}
         </ul>
       )}
+      <div className="mb-2 flex gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label="Kharche ki qism">
+        {(["COURIER", "BYKEA"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={kind === option}
+            onClick={() => setKind(option)}
+            className={`min-h-[36px] flex-1 rounded-lg px-3 text-sm font-semibold ${
+              kind === option ? "bg-white text-slate-900 shadow" : "text-slate-500"
+            }`}
+          >
+            {option === "COURIER" ? "Courier" : "Bykea"}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_1fr_auto]">
         <input
           className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
@@ -134,7 +159,7 @@ export default function CourierExpensesCard({
         />
         <input
           className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-          placeholder="Note (optional) — maslan TCS"
+          placeholder={kind === "BYKEA" ? "Note (optional) — maslan board office tak" : "Note (optional) — maslan TCS"}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -149,8 +174,9 @@ export default function CourierExpensesCard({
         </button>
       </div>
       <p className="mt-2 text-[11px] text-slate-400">
-        Jo courier kharcha aap ne apni jeb se diya — pehle admin ke review mein jata hai; manzoor hone par case ke expense
-        mein judta hai aur admin aap ko wapas dega (Finance → Mera account).
+        Jo courier / Bykea kharcha aap ne apni jeb se diya — pehle admin ke review mein jata hai; manzoor hone par case ke
+        expense mein judta hai aur admin aap ko wapas dega (Finance → Mera account: courier &quot;Courier kharcha&quot;
+        mein, Bykea &quot;Other expenses&quot; mein).
       </p>
     </SectionCard>
   );

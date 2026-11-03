@@ -498,6 +498,8 @@ model CaseExpense {
   // isi ke saath sync rehta hai (effective % > 0).
   commissionDeductPercent Decimal? @db.Decimal(5, 2)
   // §W51: COURIER = courier department ka kharcha (slip ke saath); null = aam.
+  // §W55: BYKEA = courier department ka Bykea kharcha (case ka expense, magar
+  // user ki wapsi "Other expenses" hisaab mein).
   kind        String?
   // §W51: department user jis ne apni jeb se diya — admin ne wapas dena hai
   // (DeptPayoutRequest COURIER_EXPENSE). null = company ne khud diya.
@@ -808,6 +810,9 @@ model OfficeExpense {
   // user ka courier kharcha office ka kharcha ban gaya; user ka wapsi ka haq
   // (admin se wasooli) isi se. null = aam office kharcha.
   paidByAdminId   String?
+  // §W55: us kharche ki qism — COURIER (user ka courier hisaab) | BYKEA (user ka
+  // Other expenses hisaab). null + paidByAdminId = purana (courier).
+  kind            String?
   createdById     String
   createdAt       DateTime @default(now())
 
@@ -913,7 +918,7 @@ model DeptPayoutRequest {
 model DeptExpenseRequest {
   id               String    @id @default(cuid())
   adminId          String
-  // COURIER | OTHER
+  // COURIER | BYKEA (dono case par) | OTHER (kisi case se nahi)
   kind             String
   caseId           String?
   // Case ki pehchan (case baad mein delete ho jaye tab bhi review mein nazar aaye).

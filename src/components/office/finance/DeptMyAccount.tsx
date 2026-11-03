@@ -208,7 +208,8 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
   // §W52: bheje hue kharche jo admin ke review mein hain / wapas hue (hisaab
   // mein nahi) — har qism ki apni detail list mein.
   const courierReviews = (expenses?.reviews ?? []).filter((review) => review.kind === "COURIER");
-  const otherReviews = (expenses?.reviews ?? []).filter((review) => review.kind === "OTHER");
+  // §W55: Bykea kharcha (case ka) user ke "Other expenses" hisaab mein.
+  const otherReviews = (expenses?.reviews ?? []).filter((review) => review.kind !== "COURIER");
   const reviewTotal = (rows: typeof courierReviews) =>
     rows.filter((review) => review.status === "PENDING").reduce((acc, review) => acc + review.amount, 0);
   const reviewNote = (rows: typeof courierReviews) =>
@@ -371,6 +372,11 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
                 title="Other expenses — detail"
                 count={expenses.other.length + otherReviews.length}
               />
+              {isCourier && (
+                <p className="text-xs text-slate-500">
+                  Courier tab ki list se daala hua Bykea kharcha (case ke number ke saath) bhi isi hisaab mein hai.
+                </p>
+              )}
               {otherReviews.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-xs font-bold uppercase tracking-wide text-amber-700">

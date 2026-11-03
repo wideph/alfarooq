@@ -15,13 +15,35 @@ import { dec, toNumber } from "@/lib/office/money";
 // Baqi = kul kharcha − accept ho chuki wapsi ("Admin se wasooli baqi").
 // §W54: admin kharchon ki wapsi ADVANCE mein bhi de sakta hai — baqi minus
 // (user ne admin ka itna dena hai / agle kharchon se barabar).
+// §W55: BYKEA kharcha — courier user har case par (courier jaisa) daalta hai:
+//   us case ka CaseExpense (kind BYKEA) → booking office ke formula (case
+//   expense) mein bilkul courier jaisa, MAGAR user ki wapsi "Other expenses"
+//   hisaab mein (courier mein nahi).
 
 export const DEPT_PAYOUT_KINDS = ["COMMISSION", "COURIER_EXPENSE", "OTHER_EXPENSE"] as const;
 export type DeptPayoutKind = (typeof DEPT_PAYOUT_KINDS)[number];
 export const DEPT_PAYOUT_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 
 export const COURIER_EXPENSE_KIND = "COURIER";
+export const BYKEA_EXPENSE_KIND = "BYKEA";
+// Case par lagne wale department kharche (dono case expense banate hain).
+export const CASE_DEPT_EXPENSE_KINDS = [COURIER_EXPENSE_KIND, BYKEA_EXPENSE_KIND] as const;
+export type CaseDeptExpenseKind = (typeof CASE_DEPT_EXPENSE_KINDS)[number];
+export const CASE_DEPT_EXPENSE_LABELS: Record<CaseDeptExpenseKind, string> = {
+  COURIER: "Courier charges",
+  BYKEA: "Bykea charges",
+};
 export const DEPT_OTHER_EXPENSE_CATEGORY = "DEPT_OTHER";
+
+export function isCaseDeptExpenseKind(value: unknown): value is CaseDeptExpenseKind {
+  return typeof value === "string" && (CASE_DEPT_EXPENSE_KINDS as readonly string[]).includes(value);
+}
+
+// User ki wapsi kis hisaab mein: BYKEA → Other expenses; COURIER (ya purana
+// null) → courier.
+export function reimbursementBucket(kind: string | null | undefined): "courier" | "other" {
+  return kind === BYKEA_EXPENSE_KIND ? "other" : "courier";
+}
 
 export function isDeptPayoutKind(value: unknown): value is DeptPayoutKind {
   return typeof value === "string" && (DEPT_PAYOUT_KINDS as readonly string[]).includes(value);
@@ -38,16 +60,16 @@ function emptyTotals() {
 // Har user ke kharche / wapsi / pending requests ka total (ek batch, koi N+1 nahi).
 export async function deptExpenseTotals(adminIds?: string[]): Promise<Map<string, DeptExpenseTotals>> {
   const paidBy = adminIds ? { in: adminIds } : { not: null };
-  const [courierRows, officeCourierRows, otherRows, requestRows] = await Promise.all([
+  const [caseRows, officeRows, otherRows, requestRows] = await Promise.all([
     prisma.caseExpense.groupBy({
-      by: ["paidByAdminId"],
-      where: { paidByAdminId: paidBy, kind: COURIER_EXPENSE_KIND },
+      by: ["paidByAdminId", "kind"],
+      where: { paidByAdminId: paidBy, kind: { in: [...CASE_DEPT_EXPENSE_KINDS] } },
       _sum: { amount: true },
     }),
-    // §W54: case delete par "usi office par rahe" — courier kharcha office ka
-    // kharcha ban gaya, user ki wapsi courier hisaab mein hi.
+    // §W54: case delete par "usi office par rahe" — kharcha office ka kharcha
+    // ban gaya; user ki wapsi apni qism ke hisaab mein hi (§W55 kind).
     prisma.officeExpense.groupBy({
-      by: ["paidByAdminId"],
+      by: ["paidByAdminId", "kind"],
       where: { paidByAdminId: paidBy },
       _sum: { amount: true },
     }),
@@ -72,13 +94,15 @@ export async function deptExpenseTotals(adminIds?: string[]): Promise<Map<string
     }
     return entry;
   };
-  for (const row of [...courierRows, ...officeCourierRows]) {
+  for (const row of [...caseRows, ...officeRows]) {
     if (!row.paidByAdminId) continue;
-    const entry = of(row.paidByAdminId);
-    entry.courier.total = entry.courier.total.plus(dec(row._sum.amount));
+    const bucket = of(row.paidByAdminId)[reimbursementBucket(row.kind)];
+    bucket.total = bucket.total.plus(dec(row._sum.amount));
   }
   for (const row of otherRows) {
-    if (row.paidByAdminId) of(row.paidByAdminId).other.total = dec(row._sum.amount);
+    if (!row.paidByAdminId) continue;
+    const bucket = of(row.paidByAdminId).other;
+    bucket.total = bucket.total.plus(dec(row._sum.amount));
   }
   for (const row of requestRows) {
     const entry = of(row.adminId);

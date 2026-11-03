@@ -8,15 +8,17 @@ import { notifyAdmins } from "@/lib/office/notifications";
 import { syncProfitShare } from "@/lib/office/profit-share";
 import { cleanText, parseDateOnly, todayPakistan, toJson } from "@/lib/office/serializers";
 import { syncCommissionExpenseDeductions } from "@/lib/office/expense-deduction";
-import { COURIER_EXPENSE_KIND } from "@/lib/office/dept-expenses";
+import { CASE_DEPT_EXPENSE_LABELS, isCaseDeptExpenseKind } from "@/lib/office/dept-expenses";
 import { createDeptExpenseRequest } from "@/lib/office/dept-expense-requests";
 
 export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// §W51 / §W52 — POST { amount, description?, expenseDate? } (courier permission):
-// courier ka kharcha is case par.
+// §W51 / §W52 — POST { kind?, amount, description?, expenseDate? } (courier
+// permission): courier ka kharcha is case par. §W55: kind BYKEA = Bykea kharcha —
+// case expense bilkul courier jaisa (booking office ka formula), magar user ki
+// wapsi "Other expenses" hisaab mein. kind na ho = COURIER.
 //   Department user → admin ka REVIEW (DeptExpenseRequest PENDING). Manzoori
 //     tak system ke kisi hisaab mein nahi; manzoor hone par us case ka
 //     CaseExpense (kind COURIER) → partner pool (% ke mutabiq), commission office
@@ -34,16 +36,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!item) return notFound("Case nahi mila");
 
     const body = await request.json().catch(() => ({}));
+    const kind = body.kind === undefined || body.kind === "" ? "COURIER" : String(body.kind).toUpperCase();
+    if (!isCaseDeptExpenseKind(kind)) return badRequest("Kharche ki qism sahi nahi hai");
+    const kindLabel = kind === "BYKEA" ? "Bykea" : "Courier";
     const amount = parseAmount(body.amount, { allowZero: false });
-    if (amount === null) return badRequest("Courier amount sahi nahi hai (0 se zyada, maslan 350)");
+    if (amount === null) return badRequest(`${kindLabel} amount sahi nahi hai (0 se zyada, maslan 350)`);
     const note = cleanText(body.description, 250);
-    const description = note ? `Courier charges — ${note}` : "Courier charges";
+    const description = note ? `${CASE_DEPT_EXPENSE_LABELS[kind]} — ${note}` : CASE_DEPT_EXPENSE_LABELS[kind];
     const expenseDate = parseDateOnly(body.expenseDate) ?? todayPakistan();
 
     if (session.role !== "admin") {
       const review = await createDeptExpenseRequest({
         adminId: session.adminId,
-        kind: "COURIER",
+        kind,
         caseId: item.id,
         caseNumber: item.caseNumber,
         amount,
@@ -55,11 +60,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           action: "dept.expense.request",
           entity: "DeptExpenseRequest",
           entityId: review.id,
-          after: { kind: "COURIER", caseId: id, caseNumber: item.caseNumber, amount, expenseDate },
+          after: { kind, caseId: id, caseNumber: item.caseNumber, amount, expenseDate },
         });
         await notifyAdmins({
           type: "dept.expense",
-          title: `Review: courier kharcha Rs ${toNumber(amount).toLocaleString("en-PK")} — Case ${item.caseNumber}`,
+          title: `Review: ${kindLabel.toLowerCase()} kharcha Rs ${toNumber(amount).toLocaleString("en-PK")} — Case ${item.caseNumber}`,
           body: `${session.name} ne bheja — manzoor / wapas karein`,
           link: "/office/payments?view=expenses",
         });
@@ -77,7 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           amount,
           description,
           expenseDate,
-          kind: COURIER_EXPENSE_KIND,
+          kind,
           paidByAdminId: null,
           createdById: session.adminId,
         },
@@ -89,10 +94,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     after(async () => {
       await logOfficeAction(session, {
-        action: "case.expense.courier",
+        action: kind === "BYKEA" ? "case.expense.bykea" : "case.expense.courier",
         entity: "Case",
         entityId: id,
-        after: { expenseId: expense.id, amount, expenseDate },
+        after: { expenseId: expense.id, kind, amount, expenseDate },
       });
       // Partner case ka pool dobara (shares % ke mutabiq minus).
       await syncProfitShare(id, session.adminId);

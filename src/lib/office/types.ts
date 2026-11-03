@@ -5,6 +5,8 @@
 // mein (user cancel kar sakta hai), REJECTED = wapas (decisionNote = wajah).
 export type DeptOwnExpense = {
   id: string;
+  // §W55: COURIER | BYKEA.
+  kind?: string | null;
   amount: number;
   description: string;
   expenseDate: string;

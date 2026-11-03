@@ -129,7 +129,8 @@ async function loadDeptCommissions(caseId: string) {
   }));
 }
 
-// §W51 / §W52 — courier user ke is case par apne kharche: MANZOOR shuda
+// §W51 / §W52 / §W55 — courier user ke is case par apne kharche (courier +
+// Bykea, `kind` ke saath): MANZOOR shuda
 // (CaseExpense) + admin ke review mein / wapas kiye gaye (DeptExpenseRequest).
 // Review wali request user khud cancel kar sakta hai; manzoor kharcha sirf admin.
 async function loadMyCourierItems(adminId: string, caseId: string) {
@@ -137,12 +138,12 @@ async function loadMyCourierItems(adminId: string, caseId: string) {
     prisma.caseExpense.findMany({
       where: { caseId, paidByAdminId: adminId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
+      select: { id: true, kind: true, amount: true, description: true, expenseDate: true, createdAt: true },
     }),
     prisma.deptExpenseRequest.findMany({
       where: { caseId, adminId, status: { in: ["PENDING", "REJECTED"] } },
       orderBy: { createdAt: "asc" },
-      select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true, status: true, decisionNote: true },
+      select: { id: true, kind: true, amount: true, description: true, expenseDate: true, createdAt: true, status: true, decisionNote: true },
     }),
   ]);
   return [

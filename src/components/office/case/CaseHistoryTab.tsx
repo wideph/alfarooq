@@ -173,10 +173,13 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
                   {formatDate(e.expenseDate)}
                   {e.createdByName ? ` · ${e.createdByName}` : ""}
                 </span>
-                {(e.kind === "COURIER" || e.paidByName) && (
+                {(e.kind === "COURIER" || e.kind === "BYKEA" || e.paidByName) && (
                   <span className="mt-1 flex flex-wrap gap-1.5">
                     {e.kind === "COURIER" && (
                       <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-700">Courier</span>
+                    )}
+                    {e.kind === "BYKEA" && (
+                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">Bykea</span>
                     )}
                     {e.paidByName && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">

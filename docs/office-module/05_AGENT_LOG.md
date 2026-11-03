@@ -2179,3 +2179,24 @@ Investigation-first (live DB audit):
 - **Next step**: owner live par: (a) kisi dept user ko baqi se zyada wapsi bhej kar accept
   → Mera account line "Advance mila (minus)"; (b) department kharche wala case delete
   kar ke teeno options ka sawal dekhe.
+
+## WAVE 55 (2026-11-07) — Bykea kharcha (case par, wapsi Other expenses mein)
+
+- **Owner**: courier list mein jaise courier kharcha, waise hi har case ke saath Bykea
+  kharcha; booking office ke users ke account se pehle wale formula se kate, magar
+  courier department ko Other expenses mein dikhe; admin review ke baad hi system mein.
+- **DB**: migration `20261107120000_office_wave55` — OfficeExpense.kind (additive).
+- **Server**: `dept-expenses.ts` BYKEA_EXPENSE_KIND, CASE_DEPT_EXPENSE_KINDS,
+  `reimbursementBucket` (BYKEA → other); totals CaseExpense / OfficeExpense
+  groupBy kind. Request kind BYKEA; accept → CaseExpense kind BYKEA (case na ho →
+  Other). POST /cases/[id]/dept-expenses `kind` (default COURIER, "Bykea charges").
+  dept-expenses GET: case expenses bucket ke mutabiq (Bykea → `other` case link ke
+  saath) + `deleteKind`; DELETE kind BYKEA. Courier list API `myBykeaExpense /
+  myBykeaPending`. Case delete OFFICE → OfficeExpense.kind. Case items + `kind`.
+- **UI**: DeptQueue slip ke neeche `expenseLine` × 2 (Courier teal, Bykea violet; har
+  line par "manzoor / review mein"); CourierExpensesCard Courier / Bykea toggle + chip;
+  review card "Bykea kharcha (user ki wapsi Other expenses mein)" + case info + asar;
+  Mera account Other reviews mein Bykea + note; admin case expenses "Bykea" chip;
+  DeptExpenseList row.deleteKind.
+- **Verify**: tsc 0, lint 0, build exit 0. Offline: accept BYKEA → CaseExpense kind
+  BYKEA / delete case → company; bucket BYKEA → other; purane 8 accept tests pass.

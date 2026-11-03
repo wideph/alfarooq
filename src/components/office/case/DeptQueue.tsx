@@ -75,7 +75,14 @@ export type DeptQueueRow = {
   // (admin ne manzoor kiya). §W52: myCourierPending = abhi admin ke review mein.
   myCourierExpense?: number;
   myCourierPending?: number;
+  // §W55: Bykea kharcha (manzoor / review mein).
+  myBykeaExpense?: number;
+  myBykeaPending?: number;
 };
+
+// §W55: courier list mein slip ke neeche kharchon ki do lines.
+type QueueExpenseKind = "COURIER" | "BYKEA";
+const QUEUE_EXPENSE_LABELS: Record<QueueExpenseKind, string> = { COURIER: "Courier", BYKEA: "Bykea" };
 
 const DEPT_CONFIG: Record<
   DeptQueueKey,
@@ -280,32 +287,35 @@ export default function DeptQueue({
   const [slipFor, setSlipFor] = useState<{ item: DeptQueueRow; files: File[] } | null>(null);
   const [localSlip, setLocalSlip] = useState<Record<string, boolean>>({});
   // §W51: courier kharcha list se hi (slip button ke neeche amount + Add).
-  const [courierAmount, setCourierAmount] = useState<Record<string, string>>({});
-  const [courierSaving, setCourierSaving] = useState<string | null>(null);
+  // §W55: Bykea kharcha bhi — alag line (key `<caseId>:<kind>`).
+  const [expenseAmount, setExpenseAmount] = useState<Record<string, string>>({});
+  const [expenseSaving, setExpenseSaving] = useState<string | null>(null);
 
-  async function addCourierExpense(item: DeptQueueRow) {
-    const amount = (courierAmount[item.id] || "").trim().replace(/,/g, "");
+  async function addDeptExpense(item: DeptQueueRow, kind: QueueExpenseKind) {
+    const key = `${item.id}:${kind}`;
+    const label = QUEUE_EXPENSE_LABELS[kind];
+    const amount = (expenseAmount[key] || "").trim().replace(/,/g, "");
     if (!amount || !(Number(amount) > 0)) {
-      showToast("Courier amount likhein (maslan 350)", "error");
+      showToast(`${label} amount likhein (maslan 350)`, "error");
       return;
     }
-    setCourierSaving(item.id);
+    setExpenseSaving(key);
     const res = await officeFetch<{ pending?: boolean }>(`/api/office/cases/${item.id}/dept-expenses`, {
       method: "POST",
-      json: { amount },
+      json: { kind, amount },
     });
-    setCourierSaving(null);
+    setExpenseSaving(null);
     if (!res.ok) {
       showToast(res.error, "error");
       return;
     }
     // office:changed → list khud taaza (row par naya total).
-    setCourierAmount((prev) => ({ ...prev, [item.id]: "" }));
+    setExpenseAmount((prev) => ({ ...prev, [key]: "" }));
     const rs = `Rs ${Number(amount).toLocaleString("en-PK")}`;
     showToast(
       res.data.pending
-        ? `${item.caseNumber}: courier kharcha ${rs} admin ke review ke liye bhej diya`
-        : `${item.caseNumber}: courier kharcha ${rs} add ho gaya`
+        ? `${item.caseNumber}: ${label.toLowerCase()} kharcha ${rs} admin ke review ke liye bhej diya`
+        : `${item.caseNumber}: ${label.toLowerCase()} kharcha ${rs} add ho gaya`
     );
   }
 
@@ -553,12 +563,61 @@ export default function DeptQueue({
   // ke liye dobara upload).
   // §W51: slip button ke neeche courier kharcha — amount likh kar Add (case ka
   // expense + admin se wasooli). Pehle daala hua total upar nazar aata hai.
+  // §W55: us ke neeche Bykea kharcha ki line (case ka expense, user ki wapsi
+  // "Other expenses" mein).
+  function expenseLine(item: DeptQueueRow, kind: QueueExpenseKind) {
+    const key = `${item.id}:${kind}`;
+    const saving = expenseSaving === key;
+    const label = QUEUE_EXPENSE_LABELS[kind];
+    const spent = (kind === "COURIER" ? item.myCourierExpense : item.myBykeaExpense) ?? 0;
+    const inReview = (kind === "COURIER" ? item.myCourierPending : item.myBykeaPending) ?? 0;
+    return (
+      <div className="space-y-0.5">
+        {(spent > 0 || inReview > 0) && (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold">
+            <span className="text-slate-500">{label}:</span>
+            {spent > 0 && (
+              <span className="inline-flex items-center gap-1 text-teal-700">
+                <BadgeCheck className="h-3.5 w-3.5" /> Rs {spent.toLocaleString("en-PK")} manzoor
+              </span>
+            )}
+            {inReview > 0 && <span className="text-amber-700">Rs {inReview.toLocaleString("en-PK")} review mein</span>}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5">
+          <input
+            value={expenseAmount[key] ?? ""}
+            onChange={(e) => setExpenseAmount((prev) => ({ ...prev, [key]: e.target.value }))}
+            onKeyDown={(e) => {
+              // Mobile card Enter par case khol deta hai — yahan sirf Add.
+              e.stopPropagation();
+              if (e.key === "Enter") void addDeptExpense(item, kind);
+            }}
+            disabled={saving}
+            inputMode="decimal"
+            placeholder={spent > 0 || inReview > 0 ? `Aur ${label.toLowerCase()} (Rs)` : `${label} amount (Rs)`}
+            aria-label={`${item.caseNumber} ${label.toLowerCase()} amount`}
+            className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={() => void addDeptExpense(item, kind)}
+            disabled={saving}
+            aria-label={`${label} kharcha add karein`}
+            className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-white disabled:opacity-60 ${
+              kind === "COURIER" ? "bg-teal-600 hover:bg-teal-700" : "bg-violet-600 hover:bg-violet-700"
+            }`}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function courierActions(item: DeptQueueRow, fullWidth = false) {
     const uploaded = Boolean(localSlip[item.id]);
     const more = uploaded || history || item.status === "DELIVERED";
-    const saving = courierSaving === item.id;
-    const spent = item.myCourierExpense ?? 0;
-    const inReview = item.myCourierPending ?? 0;
     return (
       <div
         className={`-mt-1 flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[13rem]"}`}
@@ -581,40 +640,8 @@ export default function DeptQueue({
         >
           <Upload className="h-3.5 w-3.5" /> {more ? "Aur slip add karein" : "Courier slip upload karein"}
         </button>
-        {(spent > 0 || inReview > 0) && (
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold">
-            {spent > 0 && (
-              <span className="inline-flex items-center gap-1 text-teal-700">
-                <BadgeCheck className="h-3.5 w-3.5" /> Rs {spent.toLocaleString("en-PK")} manzoor
-              </span>
-            )}
-            {inReview > 0 && <span className="text-amber-700">Rs {inReview.toLocaleString("en-PK")} review mein</span>}
-          </span>
-        )}
-        <div className="flex items-center gap-1.5">
-          <input
-            value={courierAmount[item.id] ?? ""}
-            onChange={(e) => setCourierAmount((prev) => ({ ...prev, [item.id]: e.target.value }))}
-            onKeyDown={(e) => {
-              // Mobile card Enter par case khol deta hai — yahan sirf Add.
-              e.stopPropagation();
-              if (e.key === "Enter") void addCourierExpense(item);
-            }}
-            disabled={saving}
-            inputMode="decimal"
-            placeholder={spent > 0 || inReview > 0 ? "Aur amount (Rs)" : "Courier amount (Rs)"}
-            aria-label={`${item.caseNumber} courier amount`}
-            className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
-          />
-          <button
-            type="button"
-            onClick={() => void addCourierExpense(item)}
-            disabled={saving}
-            className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl bg-teal-600 px-3 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add
-          </button>
-        </div>
+        {expenseLine(item, "COURIER")}
+        {expenseLine(item, "BYKEA")}
       </div>
     );
   }

@@ -7,7 +7,7 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, canSeeOffice, isDeptWorker } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount, toNumber } from "@/lib/office/money";
-import { COURIER_EXPENSE_KIND } from "@/lib/office/dept-expenses";
+import { CASE_DEPT_EXPENSE_KINDS } from "@/lib/office/dept-expenses";
 import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
 import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
@@ -207,22 +207,22 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(null),
     courierOwnExpense && items.length > 0
       ? prisma.caseExpense.groupBy({
-          by: ["caseId"],
+          by: ["caseId", "kind"],
           where: {
             caseId: { in: items.map((item) => item.id) },
-            kind: COURIER_EXPENSE_KIND,
+            kind: { in: [...CASE_DEPT_EXPENSE_KINDS] },
             createdById: session.adminId,
           },
           _sum: { amount: true },
         })
       : Promise.resolve(null),
-    // §W52: user ke wo courier kharche jo abhi admin ke review mein hain.
+    // §W52 / §W55: user ke wo courier / Bykea kharche jo abhi admin ke review mein hain.
     courierOwnExpense && items.length > 0
       ? prisma.deptExpenseRequest.groupBy({
-          by: ["caseId"],
+          by: ["caseId", "kind"],
           where: {
             caseId: { in: items.map((item) => item.id) },
-            kind: "COURIER",
+            kind: { in: [...CASE_DEPT_EXPENSE_KINDS] },
             status: "PENDING",
             adminId: session.adminId,
           },
@@ -234,10 +234,18 @@ export async function GET(request: NextRequest) {
     (addressRows || [])
       .filter((row) => row.caseId === caseId)
       .map((row) => ({ id: row.id, address: row.address, label: row.label }));
-  const myCourierExpenseOf = (caseId: string) =>
-    toNumber(courierExpenseRows?.find((row) => row.caseId === caseId)?._sum.amount ?? 0);
-  const myCourierPendingOf = (caseId: string) =>
-    toNumber(courierPendingRows?.find((row) => row.caseId === caseId)?._sum.amount ?? 0);
+  const sumOf = (
+    rows: Array<{ caseId: string | null; kind: string | null; _sum: { amount: Prisma.Decimal | null } }> | null,
+    caseId: string,
+    kind: string
+  ) => toNumber(rows?.find((row) => row.caseId === caseId && row.kind === kind)?._sum.amount ?? 0);
+  // §W55: row par manzoor (Expense) + review mein (Pending) — courier aur Bykea alag.
+  const myExpenseFields = (caseId: string) => ({
+    myCourierExpense: sumOf(courierExpenseRows, caseId, "COURIER"),
+    myCourierPending: sumOf(courierPendingRows, caseId, "COURIER"),
+    myBykeaExpense: sumOf(courierExpenseRows, caseId, "BYKEA"),
+    myBykeaPending: sumOf(courierPendingRows, caseId, "BYKEA"),
+  });
 
   const rows = await Promise.all(
     items.map(async (item) => {
@@ -247,8 +255,7 @@ export async function GET(request: NextRequest) {
         const slim = (await serializeDeptQueueCase(item)) as Record<string, unknown>;
         if (unreadIds) slim.unread = unreadIds.has(item.id);
         if (addressRows) slim.addresses = addressesOf(item.id);
-        if (courierExpenseRows) slim.myCourierExpense = myCourierExpenseOf(item.id);
-        if (courierPendingRows) slim.myCourierPending = myCourierPendingOf(item.id);
+        if (courierExpenseRows) Object.assign(slim, myExpenseFields(item.id));
         return slim;
       }
       const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
@@ -264,8 +271,7 @@ export async function GET(request: NextRequest) {
       row.limited = false;
       if (unreadIds) row.unread = unreadIds.has(item.id);
       if (addressRows) row.addresses = addressesOf(item.id);
-      if (courierExpenseRows) row.myCourierExpense = myCourierExpenseOf(item.id);
-      if (courierPendingRows) row.myCourierPending = myCourierPendingOf(item.id);
+      if (courierExpenseRows) Object.assign(row, myExpenseFields(item.id));
       if (deptWorker) {
         const safe = stripCaseMoney(row);
         delete safe.payments;

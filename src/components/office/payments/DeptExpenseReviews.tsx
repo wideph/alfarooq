@@ -19,7 +19,8 @@ type ReviewStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
 type ReviewRow = {
   id: string;
-  kind: "COURIER" | "OTHER";
+  // §W55: BYKEA = case ka Bykea kharcha (case expense; user ki wapsi Other expenses mein).
+  kind: "COURIER" | "BYKEA" | "OTHER";
   amount: number;
   requestedAmount: number | null;
   description: string;
@@ -50,11 +51,19 @@ const STATUS_TABS: Array<{ key: ReviewStatus; label: string; empty: string }> = 
   { key: "REJECTED", label: "Wapas kiye", empty: "Koi kharcha wapas nahi kiya gaya" },
 ];
 
+const KIND_CHIP: Record<ReviewRow["kind"], { label: string; cls: string }> = {
+  COURIER: { label: "Courier kharcha", cls: "bg-teal-100 text-teal-700" },
+  BYKEA: { label: "Bykea kharcha", cls: "bg-violet-100 text-violet-700" },
+  OTHER: { label: "Other expenses", cls: "bg-violet-100 text-violet-700" },
+};
+
 // Manzoori ka asar — admin ko saaf pata ho ke "Manzoor" se kya hoga.
 function effectText(row: ReviewRow) {
   const who = row.userName || "user";
+  // Bykea ki wapsi user ke "Other expenses" hisaab mein.
+  const wasooli = row.kind === "BYKEA" ? `${who} ki "Other expenses" wasooli` : `${who} ki "Admin se wasooli"`;
   if (row.kind === "OTHER" || row.caseDeleted || !row.case) {
-    return `Admin ke profit se minus hoga (kisi office ke share / commission se nahi) aur ${who} ki "Admin se wasooli" mein judega.`;
+    return `Admin ke profit se minus hoga (kisi office ke share / commission se nahi) aur ${wasooli} mein judega.`;
   }
   const office =
     row.case.officeType === "PROFIT_SHARE"
@@ -64,7 +73,7 @@ function effectText(row: ReviewRow) {
           ? `commission office — case ke rule se ${row.case.expenseDeductPercent}% commission se minus`
           : "commission office — commission se kuch nahi katega (case ka rule 0%)"
         : "salary office — company ka kharcha";
-  return `Case ${row.caseNumber} ka expense banega (${office}) aur ${who} ki "Admin se wasooli" mein judega.`;
+  return `Case ${row.caseNumber} ka expense banega (${office}) aur ${wasooli} mein judega.`;
 }
 
 export default function DeptExpenseReviews({
@@ -185,7 +194,8 @@ export default function DeptExpenseReviews({
       ) : (
         <div className="space-y-3">
           {rows.map((row) => {
-            const KindIcon = row.kind === "COURIER" ? Truck : Receipt;
+            const KindIcon = row.kind === "OTHER" ? Receipt : Truck;
+            const kindChip = KIND_CHIP[row.kind] ?? KIND_CHIP.OTHER;
             const amountValue = amounts[row.id] ?? String(row.amount);
             const isBusy = busy === row.id;
             return (
@@ -201,16 +211,17 @@ export default function DeptExpenseReviews({
                         </span>
                       )}
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                          row.kind === "COURIER" ? "bg-teal-100 text-teal-700" : "bg-violet-100 text-violet-700"
-                        }`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${kindChip.cls}`}
                       >
                         <KindIcon className="h-3 w-3" />
-                        {row.kind === "COURIER" ? "Courier kharcha" : "Other expenses"}
+                        {kindChip.label}
                       </span>
+                      {row.kind === "BYKEA" && (
+                        <span className="text-[11px] text-slate-500">(user ki wapsi Other expenses mein)</span>
+                      )}
                     </p>
-                    {/* Courier: kis case ka */}
-                    {row.kind === "COURIER" && (
+                    {/* Courier / Bykea: kis case ka */}
+                    {row.kind !== "OTHER" && (
                       <div className="text-sm">
                         {row.caseId && !row.caseDeleted ? (
                           <Link href={caseDetailHref(row.caseId, from)} className="font-semibold text-primary-700 hover:underline">

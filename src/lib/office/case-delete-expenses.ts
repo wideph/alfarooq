@@ -43,7 +43,7 @@ export async function loadCaseDeptExpenses(caseId: string) {
       },
       expenses: {
         where: { paidByAdminId: { not: null } },
-        select: { id: true, amount: true, description: true, expenseDate: true, paidByAdminId: true, createdById: true },
+        select: { id: true, amount: true, description: true, expenseDate: true, paidByAdminId: true, createdById: true, kind: true },
       },
     },
   });
@@ -147,6 +147,8 @@ export function deptExpenseDeleteOps(
       // reversal row nahi, tagged rows hatti hain).
       deductFromCommission: office.type === "FIXED_COMMISSION",
       paidByAdminId: expense.paidByAdminId,
+      // §W55: user ki wapsi apni qism (courier / Bykea → Other expenses) mein rahe.
+      kind: expense.kind,
       createdById: expense.createdById,
     });
     const debit = (memberId: string | null, amount: Prisma.Decimal, tag: string) => {

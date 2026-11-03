@@ -424,3 +424,17 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
     courier hisaab minus.
   Review mein pade kharche is faisle mein nahi (Payments → Department kharche mein;
   manzoori par Other expenses). Faisla audit: entity "CaseDelete".
+
+## BR23. Bykea kharcha — §W55
+
+- Courier permission wala user courier tab ki list mein har case par slip button ke
+  neeche do lines: **Courier amount + Add** aur **Bykea amount + Add** (case page ke
+  "Courier / Bykea kharcha" card mein bhi Courier / Bykea chun kar).
+- Bykea kharcha bhi pehle admin ke review mein (DeptExpenseRequest kind BYKEA);
+  manzoori par us case ka CaseExpense (kind BYKEA, paidByAdminId = user) — booking
+  office ke users par bilkul courier / case expense wala formula (partner pool % ke
+  mutabiq, commission office ka rule, admin profit).
+- Farq sirf user ki wapsi mein: Bykea kharcha courier department user ke **"Other
+  expenses"** hisaab mein (Mera account line + detail list case number ke saath; payment
+  request OTHER_EXPENSE), courier wala "Courier kharcha" mein. Case delete par "usi
+  office par rahe" wala OfficeExpense `kind` yaad rakhta hai (BYKEA → Other expenses).
