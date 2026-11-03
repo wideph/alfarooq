@@ -21,10 +21,6 @@ export const DEPT_PAYOUT_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const
 export const COURIER_EXPENSE_KIND = "COURIER";
 export const DEPT_OTHER_EXPENSE_CATEGORY = "DEPT_OTHER";
 
-// User apna kharcha (ghalti ho to) 24 ghante tak khud hata sakta hai; us ke
-// baad sirf admin / cashier (office:expenses:write).
-export const DEPT_EXPENSE_SELF_DELETE_MS = 24 * 60 * 60 * 1000;
-
 export function isDeptPayoutKind(value: unknown): value is DeptPayoutKind {
   return typeof value === "string" && (DEPT_PAYOUT_KINDS as readonly string[]).includes(value);
 }

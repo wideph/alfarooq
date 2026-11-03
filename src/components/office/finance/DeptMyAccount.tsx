@@ -8,7 +8,7 @@ import { formatDate, formatMoney, officeFetch, todayInputDate } from "@/lib/offi
 import { DEPT_COMMISSION_KIND_LABELS, DEPT_COMMISSION_KIND_STYLES, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import { EmptyState, SectionHeader, StatCard, TableSkeleton, inputCls, primaryBtnCls } from "./ui";
-import { DeptExpenseList, DeptRequestList } from "./DeptExpenseLists";
+import { DeptExpenseList, DeptRequestList, DeptReviewList } from "./DeptExpenseLists";
 import {
   normalizeDeptEntries,
   normalizeDeptExpenses,
@@ -144,7 +144,7 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
       showToast(res.error, "error");
       return;
     }
-    showToast("Other kharcha add ho gaya — admin se wasooli mein shamil");
+    showToast("Admin ke review ke liye bhej diya — manzoori ke baad wasooli mein judega");
     setOtherForm({ amount: "", description: "", expenseDate: todayInputDate() });
     await load();
   }
@@ -161,7 +161,13 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
     pending: row?.pending ?? 0,
     remaining: row?.remaining ?? 0,
   };
-  const showCourier = isCourier || (expenses?.totals.courier.total ?? 0) > 0;
+  // §W52: bheje hue kharche jo admin ke review mein hain / wapas hue (hisaab
+  // mein nahi) — har qism ke apne hisse mein.
+  const courierReviews = (expenses?.reviews ?? []).filter((review) => review.kind === "COURIER");
+  const otherReviews = (expenses?.reviews ?? []).filter((review) => review.kind === "OTHER");
+  const reviewTotal = (rows: typeof courierReviews) =>
+    rows.filter((review) => review.status === "PENDING").reduce((acc, review) => acc + review.amount, 0);
+  const showCourier = isCourier || (expenses?.totals.courier.total ?? 0) > 0 || courierReviews.length > 0;
 
   return (
     <div className="space-y-6">
@@ -279,10 +285,20 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
                 title="Courier kharcha"
                 count={expenses.courier.length}
               />
-              <MoneyCards money={expenses.totals.courier} totalLabel="Kul courier kharcha" />
+              <MoneyCards money={expenses.totals.courier} totalLabel="Kul courier kharcha (manzoor)" />
               <p className="text-xs text-slate-500">
-                Courier slip upload karte waqt amount likhein, ya case page par &quot;Courier kharcha&quot; se add karein.
+                Courier tab ki list mein slip button ke neeche amount likh kar &quot;Add&quot; karein (ya case page par
+                &quot;Courier kharcha&quot;). Pehle admin ke review mein jata hai; manzoor ho to yahan hisaab mein.
               </p>
+              {courierReviews.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                    Admin ke review mein{reviewTotal(courierReviews) > 0 ? ` — ${formatMoney(reviewTotal(courierReviews))}` : ""}
+                  </p>
+                  <DeptReviewList rows={courierReviews} onChanged={load} onToast={showToast} />
+                </div>
+              )}
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Manzoor shuda</p>
               <DeptExpenseList
                 kind="COURIER"
                 rows={expenses.courier}
@@ -301,7 +317,7 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
                 title="Other kharcha"
                 count={expenses.other.length}
               />
-              <MoneyCards money={expenses.totals.other} totalLabel="Kul other kharcha" />
+              <MoneyCards money={expenses.totals.other} totalLabel="Kul other kharcha (manzoor)" />
               <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
                 <p className="text-sm font-semibold text-slate-800">Naya other kharcha</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_10rem_1fr_auto]">
@@ -330,9 +346,19 @@ export default function DeptMyAccount({ admin }: { admin: AdminNavUser }) {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Jo kharcha aap ne kaam ke liye apni jeb se kiya (kisi case ka nahi). Admin wapas dega.
+                  Jo kharcha aap ne kaam ke liye apni jeb se kiya (kisi case ka nahi). Pehle admin ke review mein jata hai;
+                  manzoor hone par admin wapas dega.
                 </p>
               </div>
+              {otherReviews.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wide text-amber-700">
+                    Admin ke review mein{reviewTotal(otherReviews) > 0 ? ` — ${formatMoney(reviewTotal(otherReviews))}` : ""}
+                  </p>
+                  <DeptReviewList rows={otherReviews} onChanged={load} onToast={showToast} />
+                </div>
+              )}
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Manzoor shuda</p>
               <DeptExpenseList
                 kind="OTHER"
                 rows={expenses.other}

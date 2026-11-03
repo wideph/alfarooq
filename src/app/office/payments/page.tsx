@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, FileSearch, Loader2, Save } from "lucide-react";
+import { Check, ExternalLink, FileSearch, Loader2, Receipt, Save, Wallet } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import DeptExpenseReviews from "@/components/office/payments/DeptExpenseReviews";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
@@ -64,7 +65,59 @@ type VerifyResult = { needsExtraDecision: number | null; received: number; remai
 const input =
   "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100";
 
+// §W52: super admin ke liye Payments tab ke do hisse — "Payments" (pehle jaisa)
+// aur "Department kharche" (courier / printing / attestation ke bheje kharchon
+// ka review). URL ?view=expenses (notification link yahin aata hai).
+type PageView = "payments" | "expenses";
+
+function pageUrl(view: PageView, tab: "PENDING" | "ALL") {
+  if (view === "expenses") return "/office/payments?view=expenses";
+  return tab === "ALL" ? "/office/payments?tab=all" : "/office/payments";
+}
+
+// Sirf super admin ke liye render hota hai — "Department kharche" ka badge
+// (review baqi) live (office:changed / polling).
+function ViewSwitch({ view, onChange }: { view: PageView; onChange: (view: PageView) => void }) {
+  const [reviewCount, setReviewCount] = useState(0);
+  const loadReviewCount = useCallback(async () => {
+    const res = await officeFetch<{ counts: { PENDING: number } }>("/api/office/dept-expense-requests?countOnly=1");
+    if (res.ok) setReviewCount(res.data.counts.PENDING);
+  }, []);
+  useLiveRefresh(loadReviewCount, { immediate: true });
+
+  const button = (key: PageView, label: string, Icon: typeof Wallet, count?: number) => (
+    <button
+      type="button"
+      onClick={() => onChange(key)}
+      aria-pressed={view === key}
+      className={`inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold sm:flex-none ${
+        view === key ? "bg-primary-600 text-white shadow" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+      {count !== undefined && count > 0 && (
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+            view === key ? "bg-white text-primary-700" : "bg-amber-500 text-white"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+
+  return (
+    <div className="flex gap-2">
+      {button("payments", "Payments", Wallet)}
+      {button("expenses", "Department kharche", Receipt, reviewCount)}
+    </div>
+  );
+}
+
 export default function OfficePaymentsPage() {
+  const [view, setView] = useState<PageView>("payments");
   const [tab, setTab] = useState<"PENDING" | "ALL">("PENDING");
   const [items, setItems] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,15 +133,17 @@ export default function OfficePaymentsPage() {
   // useSearchParams ki bajaye window.location (Suspense ki zaroorat nahi).
   const [tabReady, setTabReady] = useState(false);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") === "all") setTab("ALL");
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "all") setTab("ALL");
+    if (params.get("view") === "expenses") setView("expenses");
     setTabReady(true);
   }, []);
   useEffect(() => {
     if (!tabReady) return;
-    const url = tab === "ALL" ? "/office/payments?tab=all" : "/office/payments";
+    const url = pageUrl(view, tab);
     if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
-  }, [tab, tabReady]);
-  const fromHere = tab === "ALL" ? "/office/payments?tab=all" : "/office/payments";
+  }, [tab, view, tabReady]);
+  const fromHere = pageUrl(view, tab);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -143,8 +198,20 @@ export default function OfficePaymentsPage() {
     <OfficePageFrame requiredAny={["office:payments:verify", "office:payments:submit"]}>
       {(admin) => {
         const canVerify = adminCanAny(admin, ["office:payments:verify"]);
+        const isSuperAdmin = admin.role === "admin";
+        if (isSuperAdmin && view === "expenses") {
+          return (
+            <div className="space-y-4">
+              <ViewSwitch view={view} onChange={setView} />
+              <h2 className="text-xl font-bold text-slate-900">Department kharche — review</h2>
+              <Toast toast={toast} onClose={() => setToast(null)} />
+              <DeptExpenseReviews from={fromHere} onToast={setMessage} />
+            </div>
+          );
+        }
         return (
           <div className="space-y-4">
+            {isSuperAdmin && <ViewSwitch view={view} onChange={setView} />}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-slate-900">Payments</h2>
               <div className="flex gap-1 rounded-xl bg-slate-100 p-1">

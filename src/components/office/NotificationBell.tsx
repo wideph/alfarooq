@@ -31,7 +31,11 @@ type NotificationsResponse = { items: NotificationItem[]; unread: number };
 // (bubbles chhup jate hain, page kharab nahi hota).
 export type OfficeNavCounts = {
   cases: number;
+  // §W52: super admin ke liye = pending payments + review wale department
+  // kharche (dono Payments tab mein); alag alag bhi.
   payments: number;
+  pendingPayments?: number;
+  deptExpenseReviews?: number;
   requests: number;
   unreadNotifications: number;
   // §W19: department tabs (Filing/Printing/Attestation/Courier) ke pending

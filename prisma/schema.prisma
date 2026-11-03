@@ -897,3 +897,37 @@ model DeptPayoutRequest {
   @@index([adminId, status])
   @@index([status])
 }
+
+// §W52 — department user (printing / attestation / courier) ka bheja hua kharcha:
+// admin ka REVIEW. PENDING ke dauran system mein kahin shumar nahi (na case
+// expense, na shares / commission, na admin profit, na "admin se wasooli").
+// Admin manzoor (ACCEPTED) kare to tab asal kharcha banta hai:
+//   COURIER → us case ka CaseExpense (kind COURIER, paidByAdminId = user)
+//   OTHER   → CompanyExpense (DEPT_OTHER, paidByAdminId = user)
+// aur aage §W51 wala poora nizam. REJECTED = kuch nahi (wajah user ko).
+model DeptExpenseRequest {
+  id               String    @id @default(cuid())
+  adminId          String
+  // COURIER | OTHER
+  kind             String
+  caseId           String?
+  // Case ki pehchan (case baad mein delete ho jaye tab bhi review mein nazar aaye).
+  caseNumber       String?
+  amount           Decimal   @db.Decimal(12, 2)
+  description      String
+  expenseDate      DateTime
+  // PENDING | ACCEPTED | REJECTED
+  status           String    @default("PENDING")
+  // Admin ne manzoori par raqam badli ho to asal bheji hui raqam yahan.
+  requestedAmount  Decimal?  @db.Decimal(12, 2)
+  decisionNote     String?
+  decidedById      String?
+  decidedAt        DateTime?
+  caseExpenseId    String?
+  companyExpenseId String?
+  createdAt        DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([adminId, status])
+  @@index([caseId])
+}

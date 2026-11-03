@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { HandCoins, Receipt } from "lucide-react";
 import { formatMoney, officeFetch } from "@/lib/office/client";
 import { ROLE_LABELS } from "@/lib/office/permissions";
@@ -48,9 +49,16 @@ export default function DeptExpenses({
   const [detailTarget, setDetailTarget] = useState<DeptCommissionSummaryUser | null>(null);
   const [pending, setPending] = useState<DeptPayoutRequestRow[] | null>(null);
 
+  // §W52: kharche jo abhi admin ke review mein hain (yahan ke totals mein nahi).
+  const [reviewCount, setReviewCount] = useState(0);
+
   const loadPending = useCallback(async () => {
-    const res = await officeFetch("/api/office/dept-payouts?status=PENDING");
-    if (res.ok) setPending(normalizeDeptPayouts(res.data));
+    const [payouts, reviews] = await Promise.all([
+      officeFetch("/api/office/dept-payouts?status=PENDING"),
+      officeFetch<{ counts: { PENDING: number } }>("/api/office/dept-expense-requests?countOnly=1"),
+    ]);
+    if (payouts.ok) setPending(normalizeDeptPayouts(payouts.data));
+    setReviewCount(reviews.ok ? reviews.data.counts.PENDING : 0);
   }, []);
   useLiveRefresh(loadPending, { immediate: true });
 
@@ -75,6 +83,17 @@ export default function DeptExpenses({
         title="Department kharche (Courier / Other) — admin se wasooli"
         count={users ? rows.length : undefined}
       />
+      {reviewCount > 0 && (
+        <Link
+          href="/office/payments?view=expenses"
+          className="flex items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+        >
+          <span>
+            {reviewCount} naye kharche aap ke review ke intezar mein — manzoori ke baad hi yahan judte hain
+          </span>
+          <span className="shrink-0 underline">Review karein →</span>
+        </Link>
+      )}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {users === null ? (
           <TableSkeleton rows={2} />

@@ -71,8 +71,10 @@ export type DeptQueueRow = {
   customLabelColor?: string | null;
   // §W46: courier queue — delivery address(es), purane pehle.
   addresses?: Array<{ id: string; address: string; label: string | null }>;
-  // §W51: courier queue — is case par user ka apna daala hua courier kharcha.
+  // §W51: courier queue — is case par user ka apna daala hua courier kharcha
+  // (admin ne manzoor kiya). §W52: myCourierPending = abhi admin ke review mein.
   myCourierExpense?: number;
+  myCourierPending?: number;
 };
 
 const DEPT_CONFIG: Record<
@@ -288,7 +290,7 @@ export default function DeptQueue({
       return;
     }
     setCourierSaving(item.id);
-    const res = await officeFetch(`/api/office/cases/${item.id}/dept-expenses`, {
+    const res = await officeFetch<{ pending?: boolean }>(`/api/office/cases/${item.id}/dept-expenses`, {
       method: "POST",
       json: { amount },
     });
@@ -299,7 +301,12 @@ export default function DeptQueue({
     }
     // office:changed → list khud taaza (row par naya total).
     setCourierAmount((prev) => ({ ...prev, [item.id]: "" }));
-    showToast(`${item.caseNumber}: courier kharcha Rs ${Number(amount).toLocaleString("en-PK")} add ho gaya`);
+    const rs = `Rs ${Number(amount).toLocaleString("en-PK")}`;
+    showToast(
+      res.data.pending
+        ? `${item.caseNumber}: courier kharcha ${rs} admin ke review ke liye bhej diya`
+        : `${item.caseNumber}: courier kharcha ${rs} add ho gaya`
+    );
   }
 
   function pickSlip(item: DeptQueueRow) {
@@ -551,6 +558,7 @@ export default function DeptQueue({
     const more = uploaded || history || item.status === "DELIVERED";
     const saving = courierSaving === item.id;
     const spent = item.myCourierExpense ?? 0;
+    const inReview = item.myCourierPending ?? 0;
     return (
       <div
         className={`-mt-1 flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[13rem]"}`}
@@ -573,9 +581,14 @@ export default function DeptQueue({
         >
           <Upload className="h-3.5 w-3.5" /> {more ? "Aur slip add karein" : "Courier slip upload karein"}
         </button>
-        {spent > 0 && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700">
-            <BadgeCheck className="h-3.5 w-3.5" /> Courier kharcha Rs {spent.toLocaleString("en-PK")} ✓
+        {(spent > 0 || inReview > 0) && (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold">
+            {spent > 0 && (
+              <span className="inline-flex items-center gap-1 text-teal-700">
+                <BadgeCheck className="h-3.5 w-3.5" /> Rs {spent.toLocaleString("en-PK")} manzoor
+              </span>
+            )}
+            {inReview > 0 && <span className="text-amber-700">Rs {inReview.toLocaleString("en-PK")} review mein</span>}
           </span>
         )}
         <div className="flex items-center gap-1.5">
@@ -589,7 +602,7 @@ export default function DeptQueue({
             }}
             disabled={saving}
             inputMode="decimal"
-            placeholder={spent > 0 ? "Aur amount (Rs)" : "Courier amount (Rs)"}
+            placeholder={spent > 0 || inReview > 0 ? "Aur amount (Rs)" : "Courier amount (Rs)"}
             aria-label={`${item.caseNumber} courier amount`}
             className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
           />

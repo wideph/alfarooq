@@ -1,13 +1,17 @@
 // Client-side shape of /api/office/cases/[id] (see lib/office/case-detail.ts).
 
-// §W51: department user ka apna kharcha (case page "Courier kharcha").
+// §W51 / §W52: department user ka apna kharcha (case page "Courier kharcha") —
+// ACCEPTED = admin ne manzoor kiya (hisaab mein), PENDING = admin ke review
+// mein (user cancel kar sakta hai), REJECTED = wapas (decisionNote = wajah).
 export type DeptOwnExpense = {
   id: string;
   amount: number;
   description: string;
   expenseDate: string;
   createdAt: string;
-  canDelete: boolean;
+  status: "ACCEPTED" | "PENDING" | "REJECTED";
+  decisionNote: string | null;
+  canCancel: boolean;
 };
 
 export type CaseDetail = {

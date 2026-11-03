@@ -487,11 +487,27 @@ export type DeptExpenseRow = {
   clientName?: string | null;
 };
 
+// §W52: user ka bheja hua kharcha jo admin ke review mein hai ya wapas hua.
+export type DeptExpenseReviewRow = {
+  id: string;
+  kind: "COURIER" | "OTHER";
+  caseId: string | null;
+  caseNumber: string | null;
+  amount: number;
+  description: string;
+  expenseDate: string;
+  status: "PENDING" | "REJECTED";
+  decisionNote: string | null;
+  createdAt: string;
+  canCancel: boolean;
+};
+
 export type DeptExpensesPayload = {
   totals: { courier: DeptMoney; other: DeptMoney; commissionPending: number };
   courier: DeptExpenseRow[];
   other: DeptExpenseRow[];
   requests: DeptPayoutRequestRow[];
+  reviews: DeptExpenseReviewRow[];
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -548,6 +564,20 @@ export function normalizeDeptExpenses(data: any): DeptExpensesPayload {
     courier: (Array.isArray(data?.courier) ? data.courier : []).map(row),
     other: (Array.isArray(data?.other) ? data.other : []).map(row),
     requests: (Array.isArray(data?.requests) ? data.requests : []).map(deptPayoutRow),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    reviews: (Array.isArray(data?.reviews) ? data.reviews : []).map((raw: any) => ({
+      id: String(raw?.id ?? ""),
+      kind: raw?.kind === "COURIER" ? "COURIER" : "OTHER",
+      caseId: raw?.caseId ? String(raw.caseId) : null,
+      caseNumber: raw?.caseNumber ? String(raw.caseNumber) : null,
+      amount: num(raw?.amount),
+      description: String(raw?.description ?? ""),
+      expenseDate: String(raw?.expenseDate ?? ""),
+      status: raw?.status === "REJECTED" ? "REJECTED" : "PENDING",
+      decisionNote: raw?.decisionNote ? String(raw.decisionNote) : null,
+      createdAt: String(raw?.createdAt ?? ""),
+      canCancel: Boolean(raw?.canCancel),
+    })),
   };
 }
 

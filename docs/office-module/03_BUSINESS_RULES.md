@@ -363,3 +363,27 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 - Admin Finance: KPI "Payable expenses" (tamam users ka courier + other baqi),
   "Department kharche" section (Pay courier / Pay other / Details) + pending
   department payment requests (Cancel). Cashier view mein bhi.
+
+## BR20. Department kharche pehle admin ke review mein — §W52
+
+- Courier / printing / attestation user ka har naya kharcha (courier: list ya case
+  page se, kisi case par; Other: Mera account se, comment lazmi) pehle
+  `DeptExpenseRequest` PENDING banta hai. Is dauran system ke KISI hisaab mein nahi:
+  na case expense, na partner shares / commission rule, na admin profit, na user ki
+  "Admin se wasooli baqi", na payment request ki had.
+- Super admin (sirf role admin) Payments tab → "Department kharche" (badge = review
+  baqi; navbar Payments badge = pending payments + review baqi) mein har kharcha
+  dekhta hai: kis ne, kis case par (student, Roll / Reg, office), comment, tareekh,
+  aur "Manzoor karne par" kya hoga. Raqam theek kar ke **Manzoor** (asal raqam
+  `requestedAmount` mein yaad) ya **Wapas** (wajah user ko). Teen hisse: Review baqi
+  (purane pehle) / Manzoor shuda / Wapas kiye.
+- Manzoori (`acceptDeptExpenseRequest`, ek transaction) par BR19 wala nizam: COURIER →
+  us case ka CaseExpense (kind COURIER, paidByAdminId = createdById = user) + commission
+  office ka rule, phir partner pool (syncProfitShare); OTHER → CompanyExpense
+  (DEPT_OTHER). Case review ke dauran delete ho gaya ho → Other kharcha.
+- User apna review wala kharcha khud wapas le sakta hai (cancel); manzoor kharcha
+  sirf admin / cashier (`office:expenses:write`) hata sakta hai (pehle ka 24 ghante
+  wala self-delete khatam). Super admin ka apna courier kharcha seedha lagta hai
+  (review nahi). Notifications: naya kharcha → super admins; faisla → user.
+- Courier list row: "Rs X manzoor" (user ka manzoor shuda, `myCourierExpense`) aur
+  "Rs Y review mein" (`myCourierPending`) — sirf user ka apna.

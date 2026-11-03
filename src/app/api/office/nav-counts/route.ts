@@ -5,6 +5,7 @@ import { guardOffice, serverError } from "@/lib/office/guard";
 import { caseScope } from "@/lib/office/case-access";
 import { remarkInboxCount } from "@/lib/office/remark-inbox";
 import { unreadCaseCount } from "@/lib/office/case-read";
+import { pendingDeptExpenseReviewCount } from "@/lib/office/dept-expense-requests";
 
 export const preferredRegion = ["sin1"];
 
@@ -121,15 +122,22 @@ export async function GET() {
           })
         : Promise.resolve([]);
 
-    const [cases, payments, requests, unreadNotifications, deptStatusRows, remarks] = await Promise.all([
-      casesQuery,
-      paymentsQuery,
-      requestsQuery,
-      unreadQuery,
-      deptCountsQuery,
-      // §W32: Remarks tab badge — is user ke liye bheje gaye, abhi Done nahi.
-      remarkInboxCount(session),
-    ]);
+    // §W52: super admin — department kharche jo review ke intezar mein hain
+    // (Payments tab ka sub-tab "Department kharche"; Payments badge mein jud kar).
+    const deptExpenseReviewsQuery = role === "admin" ? pendingDeptExpenseReviewCount() : Promise.resolve(0);
+
+    const [cases, pendingPayments, requests, unreadNotifications, deptStatusRows, remarks, deptExpenseReviews] =
+      await Promise.all([
+        casesQuery,
+        paymentsQuery,
+        requestsQuery,
+        unreadQuery,
+        deptCountsQuery,
+        // §W32: Remarks tab badge — is user ke liye bheje gaye, abhi Done nahi.
+        remarkInboxCount(session),
+        deptExpenseReviewsQuery,
+      ]);
+    const payments = pendingPayments + deptExpenseReviews;
 
     const deptCounts: Record<DeptCountKey, number> = { filing: 0, printing: 0, attestation: 0, courier: 0 };
     for (const row of deptStatusRows) {
@@ -137,7 +145,16 @@ export async function GET() {
       if (dept && permittedDepts.includes(dept)) deptCounts[dept] += row._count._all;
     }
 
-    return NextResponse.json({ cases, payments, requests, unreadNotifications, deptCounts, remarks });
+    return NextResponse.json({
+      cases,
+      payments,
+      pendingPayments,
+      deptExpenseReviews,
+      requests,
+      unreadNotifications,
+      deptCounts,
+      remarks,
+    });
   } catch (error) {
     return serverError(error);
   }

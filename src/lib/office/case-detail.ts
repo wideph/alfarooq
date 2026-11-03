@@ -13,7 +13,6 @@ import {
 } from "@/lib/office/workflow";
 import { DEPT_COMMISSION_TYPE, parseDeptCommissionKind } from "@/lib/office/dept-commission";
 import { commissionExpenseTag, effectiveDeductPercent } from "@/lib/office/expense-deduction";
-import { DEPT_EXPENSE_SELF_DELETE_MS } from "@/lib/office/dept-expenses";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
@@ -130,6 +129,28 @@ async function loadDeptCommissions(caseId: string) {
   }));
 }
 
+// §W51 / §W52 — courier user ke is case par apne kharche: MANZOOR shuda
+// (CaseExpense) + admin ke review mein / wapas kiye gaye (DeptExpenseRequest).
+// Review wali request user khud cancel kar sakta hai; manzoor kharcha sirf admin.
+async function loadMyCourierItems(adminId: string, caseId: string) {
+  const [accepted, reviews] = await Promise.all([
+    prisma.caseExpense.findMany({
+      where: { caseId, paidByAdminId: adminId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
+    }),
+    prisma.deptExpenseRequest.findMany({
+      where: { caseId, adminId, status: { in: ["PENDING", "REJECTED"] } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true, status: true, decisionNote: true },
+    }),
+  ]);
+  return [
+    ...accepted.map((row) => ({ ...row, status: "ACCEPTED", decisionNote: null, canCancel: false })),
+    ...reviews.map((row) => ({ ...row, canCancel: row.status === "PENDING" })),
+  ];
+}
+
 // §W18: cross-office limited detail for department workers. Jab caseScope
 // case ko block kare (maslan booking office ka user doosre office ka case)
 // magar session ke paas kisi department ki write permission ho, to slim
@@ -159,24 +180,16 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
     },
   });
   if (!item) return null;
-  // §W51: apne courier kharche (cross-office courier user bhi dekhe / hataye).
-  const myDeptExpenses = depts.includes("COURIER")
-    ? await prisma.caseExpense.findMany({
-        where: { caseId, paidByAdminId: session.adminId },
-        orderBy: { expenseDate: "asc" },
-        select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
-      })
-    : [];
+  // §W51 / §W52: apne courier kharche (cross-office courier user bhi) —
+  // manzoor + review mein + wapas.
+  const myDeptExpenses = depts.includes("COURIER") ? await loadMyCourierItems(session.adminId, caseId) : [];
 
   return toJson({
     ok: true,
     limited: true,
     depts,
     detail: {
-      myDeptExpenses: myDeptExpenses.map((e) => ({
-        ...e,
-        canDelete: Date.now() - e.createdAt.getTime() < DEPT_EXPENSE_SELF_DELETE_MS,
-      })),
+      myDeptExpenses,
       id: item.id,
       caseNumber: item.caseNumber,
       status: item.status,
@@ -372,22 +385,14 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   // apni; office ka commission type nahi; contacts / delivery addresses sirf
   // courier ke kaam ke liye.
   const courier = hasPermission(session, "office:courier:write");
+  const myDeptExpenses = courier ? await loadMyCourierItems(session.adminId, caseId) : [];
   return toJson({
     ...stripCaseMoney(payload),
     deptWorker: true,
     bookingOffice: { id: item.bookingOffice.id, name: item.bookingOffice.name, type: null },
     deptCommissions: deptCommissions.filter((row) => row.adminId === session.adminId),
-    // §W51: sirf apne courier kharche (case ki baqi raqam nahi).
-    myDeptExpenses: item.expenses
-      .filter((e) => e.paidByAdminId === session.adminId)
-      .map((e) => ({
-        id: e.id,
-        amount: e.amount,
-        description: e.description,
-        expenseDate: e.expenseDate,
-        createdAt: e.createdAt,
-        canDelete: Date.now() - e.createdAt.getTime() < DEPT_EXPENSE_SELF_DELETE_MS,
-      })),
+    // §W51 / §W52: sirf apne courier kharche (case ki baqi raqam nahi).
+    myDeptExpenses,
     contacts: courier ? item.contacts : [],
     addresses: courier ? item.addresses : [],
   });

@@ -2094,3 +2094,35 @@ Investigation-first (live DB audit):
 - **Verify**: tsc 0, lint 0, build exit 0. Browser check NAHI — live DB se user data
   parhne ki ijazat nahi mili (auto-mode ne roka); owner live par dekhe.
 - **Next step**: owner courier tab par amount add kar ke dekhe (desktop + mobile).
+
+## WAVE 52 (2026-11-05) — Department kharche admin ke review ke baad hi system mein
+
+- **Owner request**: courier / attestation / printing ka koi bhi kharcha (case ka
+  courier ya general) pehle admin ke paas review request; jab tak admin accept na
+  kare system mein apni jagah add na ho; accept par W51 wala nizam. Admin ke liye
+  Payments tab mein sub-tab, pending ki ginti, purane accepted bhi nazar aayen; UI
+  asaan. (Saath mein W51.1 ke "Rs 350 ✓" ka matlab example se samjhaya.)
+- **DB**: migration `20261105120000_office_wave52` — naya table DeptExpenseRequest
+  (additive, idempotent; koi purana table nahi badla).
+- **Design**: pending kharcha ALAG table mein — CaseExpense / CompanyExpense ko status
+  column dene ki bajaye (warna har formula / report ko filter karna parta, ghalti ka
+  khatra). Manzoori par hi asal row → W51 formulas bilkul wahi.
+- **API**: POST /cases/[id]/dept-expenses aur POST /dept-expenses ab request banate
+  hain (super admin ka apna courier kharcha seedha); GET /dept-expense-requests
+  (?status, ?countOnly=1; admin sab, user apne), POST /dept-expense-requests/[id]
+  {accept (amount?) | reject (note) | cancel (user, PENDING)}; dept-expenses GET +
+  `reviews`, DELETE sirf office:expenses:write; nav-counts `payments` (admin) =
+  pending payments + review baqi (+ `pendingPayments`, `deptExpenseReviews`); courier
+  list `myCourierPending`; case detail `myDeptExpenses` = manzoor + review + wapas.
+- **UI**: Payments page (super admin) upar "Payments" / "Department kharche (N)"
+  (`?view=expenses`, notification link); `components/office/payments/DeptExpenseReviews`
+  (info patti, Review baqi / Manzoor shuda / Wapas kiye + counts, card: user + role +
+  qism, case link + student / Roll / Reg / office, comment, tareekh, "Manzoor karne
+  par: …" asar, raqam input + Manzoor / Wapas (wajah)). Finance "Department kharche"
+  par amber patti "N kharche review mein → Review karein". User: courier list "Rs X
+  manzoor · Rs Y review mein", case card status chips + wapas lein, Mera account mein
+  "Admin ke review mein" (cancel) + wapas (wajah) + "Manzoor shuda".
+- **Verify**: tsc 0, lint 0, build (neeche). Offline test (fake tx) accept 8/8:
+  courier → CaseExpense (paidBy / createdBy user), rule 0 → koi debit nahi, ACCEPTED +
+  link, dobara accept band, raqam 300 (bheja 350), 50% rule → 150 member par, delete
+  case → Other, OTHER → DEPT_OTHER.

@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE }, { headers: NO_STORE });
   }
 
-  const [unseen, unreadIds, addressRows, courierExpenseRows] = await Promise.all([
+  const [unseen, unreadIds, addressRows, courierExpenseRows, courierPendingRows] = await Promise.all([
     unseenWarningCaseIds(
       session,
       items.map((item) => item.id)
@@ -216,6 +216,19 @@ export async function GET(request: NextRequest) {
           _sum: { amount: true },
         })
       : Promise.resolve(null),
+    // §W52: user ke wo courier kharche jo abhi admin ke review mein hain.
+    courierOwnExpense && items.length > 0
+      ? prisma.deptExpenseRequest.groupBy({
+          by: ["caseId"],
+          where: {
+            caseId: { in: items.map((item) => item.id) },
+            kind: "COURIER",
+            status: "PENDING",
+            adminId: session.adminId,
+          },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
   ]);
   const addressesOf = (caseId: string) =>
     (addressRows || [])
@@ -223,6 +236,8 @@ export async function GET(request: NextRequest) {
       .map((row) => ({ id: row.id, address: row.address, label: row.label }));
   const myCourierExpenseOf = (caseId: string) =>
     toNumber(courierExpenseRows?.find((row) => row.caseId === caseId)?._sum.amount ?? 0);
+  const myCourierPendingOf = (caseId: string) =>
+    toNumber(courierPendingRows?.find((row) => row.caseId === caseId)?._sum.amount ?? 0);
 
   const rows = await Promise.all(
     items.map(async (item) => {
@@ -233,6 +248,7 @@ export async function GET(request: NextRequest) {
         if (unreadIds) slim.unread = unreadIds.has(item.id);
         if (addressRows) slim.addresses = addressesOf(item.id);
         if (courierExpenseRows) slim.myCourierExpense = myCourierExpenseOf(item.id);
+        if (courierPendingRows) slim.myCourierPending = myCourierPendingOf(item.id);
         return slim;
       }
       const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
@@ -249,6 +265,7 @@ export async function GET(request: NextRequest) {
       if (unreadIds) row.unread = unreadIds.has(item.id);
       if (addressRows) row.addresses = addressesOf(item.id);
       if (courierExpenseRows) row.myCourierExpense = myCourierExpenseOf(item.id);
+      if (courierPendingRows) row.myCourierPending = myCourierPendingOf(item.id);
       if (deptWorker) {
         const safe = stripCaseMoney(row);
         delete safe.payments;

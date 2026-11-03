@@ -9,7 +9,7 @@ import { caseDetailHref } from "@/lib/office/case-nav";
 import { DEPT_PAYOUT_KIND_LABELS, DEPT_PAYOUT_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import type { ToastKind } from "@/components/Toast";
 import { dueToneClass } from "./ui";
-import type { DeptExpenseRow, DeptMoney, DeptPayoutRequestRow } from "./types";
+import type { DeptExpenseReviewRow, DeptExpenseRow, DeptMoney, DeptPayoutRequestRow } from "./types";
 
 // §W51 — department kharchon / payment requests ki lists (admin drawer + dept
 // user ka "Mera account" — ek hi shakal).
@@ -123,6 +123,89 @@ export function DeptExpenseList({
                 className="grid h-9 w-9 place-items-center rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50"
               >
                 {removing === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              </button>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// §W52 — user ke bheje hue kharche jo admin ke review mein hain (wapas le sakta
+// hai) ya admin ne wapas kiye (wajah ke saath). Ye hisaab mein shumar nahi.
+export function DeptReviewList({
+  rows,
+  onChanged,
+  onToast,
+}: {
+  rows: DeptExpenseReviewRow[];
+  onChanged: () => Promise<void> | void;
+  onToast: (message: string, kind: ToastKind) => void;
+}) {
+  const pathname = usePathname();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function cancel(id: string) {
+    if (!confirm("Ye kharcha wapas le lein (admin ko review ke liye nahi jayega)?")) return;
+    setBusy(id);
+    const res = await officeFetch(`/api/office/dept-expense-requests/${encodeURIComponent(id)}`, {
+      method: "POST",
+      json: { action: "cancel" },
+    });
+    setBusy(null);
+    if (!res.ok) {
+      onToast(res.error, "error");
+      return;
+    }
+    onToast("Kharcha wapas le liya", "success");
+    await onChanged();
+  }
+
+  if (rows.length === 0) return null;
+  return (
+    <ul className="divide-y divide-slate-100 rounded-xl border border-amber-200 bg-amber-50/40">
+      {rows.map((row) => (
+        <li key={row.id} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
+          <div className="min-w-0">
+            <p className="break-words font-semibold text-slate-800">
+              {row.caseId ? (
+                <Link href={caseDetailHref(row.caseId, pathname)} className="mr-1.5 text-primary-700 hover:underline">
+                  {row.caseNumber}
+                </Link>
+              ) : row.caseNumber ? (
+                <span className="mr-1.5">{row.caseNumber}</span>
+              ) : null}
+              {row.description}
+            </p>
+            <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+              {formatDate(row.expenseDate)}
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  row.status === "PENDING" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {row.status === "PENDING" ? "Admin ke review mein" : "Wapas (manzoor nahi)"}
+              </span>
+            </p>
+            {row.status === "REJECTED" && row.decisionNote && (
+              <p className="text-xs text-slate-500">Wajah: {row.decisionNote}</p>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className={`font-semibold ${row.status === "REJECTED" ? "text-slate-400 line-through" : "text-slate-800"}`}>
+              {formatMoney(row.amount)}
+            </span>
+            {row.canCancel && (
+              <button
+                type="button"
+                onClick={() => void cancel(row.id)}
+                disabled={busy === row.id}
+                aria-label="Kharcha wapas lein"
+                title="Wapas lein"
+                className="grid h-9 w-9 place-items-center rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50"
+              >
+                {busy === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
               </button>
             )}
           </span>
