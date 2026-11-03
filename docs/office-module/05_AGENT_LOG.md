@@ -2073,3 +2073,8 @@ Investigation-first (live DB audit):
   phir push; live par: courier user slip + amount → case expense + Mera account baqi;
   Other kharcha; admin Pay (request) → user "Mil gaya"; commission office ka case:
   expense % dropdown; `node scripts/office-finance-audit.cjs` 0 issues.
+- **Live (2026-11-04, owner ki ijazat se)**: `prisma migrate deploy` → wave51 applied;
+  read-only check: 6 case expenses, kisi par flag / % nahi, kisi office / case par
+  rule 0 ke ilawa nahi, Commission expense rows 0 — purana hisaab bilkul wahi.
+  `office-finance-audit.cjs` TOTAL ISSUES 0. Phir push (61a552b; pehli koshish
+  `wideph6` account par 403 — owner ne sahi account lagaya).
