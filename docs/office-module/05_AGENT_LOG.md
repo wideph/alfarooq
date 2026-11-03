@@ -2200,3 +2200,8 @@ Investigation-first (live DB audit):
   DeptExpenseList row.deleteKind.
 - **Verify**: tsc 0, lint 0, build exit 0. Offline: accept BYKEA → CaseExpense kind
   BYKEA / delete case → company; bucket BYKEA → other; purane 8 accept tests pass.
+- **Live (2026-11-07, owner ki ijazat se)**: `prisma migrate deploy` → wave55 applied;
+  push b57deaf. Browser check nahi (live data ki ijazat nahi).
+- **Next step**: owner live par courier user se kisi case par Bykea amount Add → admin
+  Payments → Department kharche → Manzoor → courier user ke Mera account mein "Other
+  expenses" mein; case ke History → Case expenses mein "Bykea" chip.
