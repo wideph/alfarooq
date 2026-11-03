@@ -7,6 +7,7 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { caseScope, canSeeOffice, isDeptWorker } from "@/lib/office/case-access";
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount, toNumber } from "@/lib/office/money";
+import { COURIER_EXPENSE_KIND } from "@/lib/office/dept-expenses";
 import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
 import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
 import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
@@ -155,6 +156,9 @@ export async function GET(request: NextRequest) {
   // kaam). Dept worker ko sirf courier permission ke saath (detail payload
   // jaisa); admin / cashier / booking (apna office) ko hamesha.
   const courierAddresses = dept === "courier" && (!deptWorker || hasPermission(session, "office:courier:write"));
+  // §W51: courier queue — courier permission wale ka har case par APNA daala
+  // hua courier kharcha (list se hi amount add hota hai; dobara na daale).
+  const courierOwnExpense = dept === "courier" && hasPermission(session, "office:courier:write");
   const tracksReads = tracksCaseReads(session);
   const [items, total, counts, unread] = await Promise.all([
     prisma.case.findMany({
@@ -188,7 +192,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: rows, total, page, pageSize: PAGE_SIZE }, { headers: NO_STORE });
   }
 
-  const [unseen, unreadIds, addressRows] = await Promise.all([
+  const [unseen, unreadIds, addressRows, courierExpenseRows] = await Promise.all([
     unseenWarningCaseIds(
       session,
       items.map((item) => item.id)
@@ -201,11 +205,24 @@ export async function GET(request: NextRequest) {
           select: { id: true, caseId: true, address: true, label: true },
         })
       : Promise.resolve(null),
+    courierOwnExpense && items.length > 0
+      ? prisma.caseExpense.groupBy({
+          by: ["caseId"],
+          where: {
+            caseId: { in: items.map((item) => item.id) },
+            kind: COURIER_EXPENSE_KIND,
+            createdById: session.adminId,
+          },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
   ]);
   const addressesOf = (caseId: string) =>
     (addressRows || [])
       .filter((row) => row.caseId === caseId)
       .map((row) => ({ id: row.id, address: row.address, label: row.label }));
+  const myCourierExpenseOf = (caseId: string) =>
+    toNumber(courierExpenseRows?.find((row) => row.caseId === caseId)?._sum.amount ?? 0);
 
   const rows = await Promise.all(
     items.map(async (item) => {
@@ -215,6 +232,7 @@ export async function GET(request: NextRequest) {
         const slim = (await serializeDeptQueueCase(item)) as Record<string, unknown>;
         if (unreadIds) slim.unread = unreadIds.has(item.id);
         if (addressRows) slim.addresses = addressesOf(item.id);
+        if (courierExpenseRows) slim.myCourierExpense = myCourierExpenseOf(item.id);
         return slim;
       }
       const row = serializeCaseRow(item, { hasUnseenWarning: unseen.has(item.id) }) as Record<string, unknown>;
@@ -230,6 +248,7 @@ export async function GET(request: NextRequest) {
       row.limited = false;
       if (unreadIds) row.unread = unreadIds.has(item.id);
       if (addressRows) row.addresses = addressesOf(item.id);
+      if (courierExpenseRows) row.myCourierExpense = myCourierExpenseOf(item.id);
       if (deptWorker) {
         const safe = stripCaseMoney(row);
         delete safe.payments;

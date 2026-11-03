@@ -14,11 +14,12 @@ import {
   ImagePlus,
   Loader2,
   MapPin,
+  Plus,
   Upload,
   X,
 } from "lucide-react";
 import FileUploadBox from "@/components/office/case/FileUploadBox";
-import { formatDate } from "@/lib/office/client";
+import { formatDate, officeFetch } from "@/lib/office/client";
 import { caseStatusLabel, caseStatusStyle } from "@/lib/office/labels";
 import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
@@ -70,6 +71,8 @@ export type DeptQueueRow = {
   customLabelColor?: string | null;
   // §W46: courier queue — delivery address(es), purane pehle.
   addresses?: Array<{ id: string; address: string; label: string | null }>;
+  // §W51: courier queue — is case par user ka apna daala hua courier kharcha.
+  myCourierExpense?: number;
 };
 
 const DEPT_CONFIG: Record<
@@ -274,6 +277,30 @@ export default function DeptQueue({
   const slipTarget = useRef<DeptQueueRow | null>(null);
   const [slipFor, setSlipFor] = useState<{ item: DeptQueueRow; files: File[] } | null>(null);
   const [localSlip, setLocalSlip] = useState<Record<string, boolean>>({});
+  // §W51: courier kharcha list se hi (slip button ke neeche amount + Add).
+  const [courierAmount, setCourierAmount] = useState<Record<string, string>>({});
+  const [courierSaving, setCourierSaving] = useState<string | null>(null);
+
+  async function addCourierExpense(item: DeptQueueRow) {
+    const amount = (courierAmount[item.id] || "").trim().replace(/,/g, "");
+    if (!amount || !(Number(amount) > 0)) {
+      showToast("Courier amount likhein (maslan 350)", "error");
+      return;
+    }
+    setCourierSaving(item.id);
+    const res = await officeFetch(`/api/office/cases/${item.id}/dept-expenses`, {
+      method: "POST",
+      json: { amount },
+    });
+    setCourierSaving(null);
+    if (!res.ok) {
+      showToast(res.error, "error");
+      return;
+    }
+    // office:changed → list khud taaza (row par naya total).
+    setCourierAmount((prev) => ({ ...prev, [item.id]: "" }));
+    showToast(`${item.caseNumber}: courier kharcha Rs ${Number(amount).toLocaleString("en-PK")} add ho gaya`);
+  }
 
   function pickSlip(item: DeptQueueRow) {
     slipTarget.current = item;
@@ -517,12 +544,16 @@ export default function DeptQueue({
   // §W48: courier — detail page ki bajaye yahin slip upload. Slip ke baad case
   // Delivered page par chala jata hai; wahan "Aur slip add karein" (har slip
   // ke liye dobara upload).
+  // §W51: slip button ke neeche courier kharcha — amount likh kar Add (case ka
+  // expense + admin se wasooli). Pehle daala hua total upar nazar aata hai.
   function courierActions(item: DeptQueueRow, fullWidth = false) {
     const uploaded = Boolean(localSlip[item.id]);
     const more = uploaded || history || item.status === "DELIVERED";
+    const saving = courierSaving === item.id;
+    const spent = item.myCourierExpense ?? 0;
     return (
       <div
-        className={`flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[11rem]"}`}
+        className={`-mt-1 flex flex-col gap-1.5 ${fullWidth ? "w-full" : "min-w-[13rem]"}`}
         onClick={stopRowClick}
         onMouseEnter={stopRowClick}
       >
@@ -534,7 +565,7 @@ export default function DeptQueue({
         <button
           type="button"
           onClick={() => pickSlip(item)}
-          className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold ${
+          className={`inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold ${
             more
               ? "border border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
               : "bg-primary-600 text-white hover:bg-primary-700"
@@ -542,6 +573,35 @@ export default function DeptQueue({
         >
           <Upload className="h-3.5 w-3.5" /> {more ? "Aur slip add karein" : "Courier slip upload karein"}
         </button>
+        {spent > 0 && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700">
+            <BadgeCheck className="h-3.5 w-3.5" /> Courier kharcha Rs {spent.toLocaleString("en-PK")} ✓
+          </span>
+        )}
+        <div className="flex items-center gap-1.5">
+          <input
+            value={courierAmount[item.id] ?? ""}
+            onChange={(e) => setCourierAmount((prev) => ({ ...prev, [item.id]: e.target.value }))}
+            onKeyDown={(e) => {
+              // Mobile card Enter par case khol deta hai — yahan sirf Add.
+              e.stopPropagation();
+              if (e.key === "Enter") void addCourierExpense(item);
+            }}
+            disabled={saving}
+            inputMode="decimal"
+            placeholder={spent > 0 ? "Aur amount (Rs)" : "Courier amount (Rs)"}
+            aria-label={`${item.caseNumber} courier amount`}
+            className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={() => void addCourierExpense(item)}
+            disabled={saving}
+            className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl bg-teal-600 px-3 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add
+          </button>
+        </div>
       </div>
     );
   }

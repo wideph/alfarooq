@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Check, Crop, FileText, Loader2, RotateCw, Send, Undo2, X } from "lucide-react";
 import { uploadCaseFiles, validateCaseFiles, type UploadResult } from "@/lib/office/upload-files";
-import { officeFetch } from "@/lib/office/client";
 import type { ToastKind } from "@/components/Toast";
 
 // §W48 — courier queue se hi slip upload (detail page par jaye baghair),
@@ -145,9 +144,6 @@ export default function CourierSlipUploader({
   const [working, setWorking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
-  // §W51: slip ke saath courier ka kharcha (optional) — case ka expense +
-  // admin se wasooli.
-  const [charges, setCharges] = useState("");
   const wrapRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: DragMode; startX: number; startY: number; start: Rect } | null>(null);
 
@@ -258,11 +254,6 @@ export default function CourierSlipUploader({
 
   async function upload() {
     if (!oneLeft || !current || busy || cropping) return;
-    const chargesText = charges.trim().replace(/,/g, "");
-    if (chargesText && !(Number(chargesText) > 0)) {
-      onMessage("Courier amount sahi likhein (maslan 350) ya khali chhor dein", "error");
-      return;
-    }
     setBusy(true);
     setProgress(0);
     try {
@@ -286,22 +277,10 @@ export default function CourierSlipUploader({
         },
       });
       if (result.saved > 0) {
-        const done =
-          result.status === "DELIVERED" ? `Slip upload ho gayi — ${item.caseNumber} Delivered` : "Slip upload ho gayi";
-        if (chargesText) {
-          const saved = await officeFetch(`/api/office/cases/${item.id}/dept-expenses`, {
-            method: "POST",
-            json: { amount: chargesText },
-          });
-          onMessage(
-            saved.ok
-              ? `${done} · courier kharcha Rs ${Number(chargesText).toLocaleString("en-PK")} add`
-              : `${done} — magar courier amount save nahi hua (${saved.error}). Case page se dobara add karein.`,
-            saved.ok ? "success" : "error"
-          );
-        } else {
-          onMessage(done, "success");
-        }
+        onMessage(
+          result.status === "DELIVERED" ? `Slip upload ho gayi — ${item.caseNumber} Delivered` : "Slip upload ho gayi",
+          "success"
+        );
         onUploaded(result);
       } else {
         onMessage(result.error || "Slip upload nahi ho saki", "error");
@@ -492,18 +471,6 @@ export default function CourierSlipUploader({
               </div>
             ))}
           </div>
-          <label className="flex w-28 shrink-0 flex-col gap-1 sm:w-36">
-            <span className="text-[11px] font-semibold text-white/60">Courier amount (Rs)</span>
-            <input
-              value={charges}
-              onChange={(e) => setCharges(e.target.value)}
-              disabled={busy}
-              inputMode="decimal"
-              placeholder="optional"
-              aria-label="Courier amount (Rs)"
-              className="h-11 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-semibold text-white outline-none placeholder:text-white/35 focus:border-emerald-400 disabled:opacity-50"
-            />
-          </label>
           <button
             type="button"
             onClick={() => void upload()}
@@ -522,7 +489,7 @@ export default function CourierSlipUploader({
         <p className="text-[11px] text-white/45">
           {cropping
             ? "Frame ke kone / kinare kheench kar slip ka hissa chunein, phir Done."
-            : "Crop / Rotate se slip theek karein, courier amount (agar aap ne diya) likhein, phir hara button. Slip ke baad case Delivered ho jata hai; amount admin se wapas milega."}
+            : "Crop / Rotate se slip theek karein, phir hara button. Slip ke baad case Delivered ho jata hai."}
         </p>
       </div>
     </div>

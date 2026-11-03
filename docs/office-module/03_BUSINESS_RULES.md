@@ -325,9 +325,10 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 
 ## BR19. Department kharche, wapsi aur expense rule — §W51
 
-- **Courier kharcha**: courier permission wala user slip upload karte waqt (preview
-  mein "Courier amount", optional) ya case page ke "Courier kharcha (aap ka)" card se
-  amount daalta hai → us case ka `CaseExpense` (kind COURIER, `paidByAdminId` = user;
+- **Courier kharcha**: courier permission wala user courier queue ki list mein har
+  row par "Courier slip upload karein" ke neeche amount likh kar "Add" (row par apna
+  ab tak ka total "Courier kharcha Rs X ✓") ya case page ke "Courier kharcha (aap ka)"
+  card se amount daalta hai (slip preview mein amount ka khana nahi — ek hi jagah) → us case ka `CaseExpense` (kind COURIER, `paidByAdminId` = user;
   super admin khud daale to null — company ka kharcha, wapsi nahi). Ye case expense
   har formula mein pehle jaisa: partner office pool (received − case expenses − dept
   commission) → har shareholder apne % se, admin baqi %; commission office ka rule

@@ -2078,3 +2078,19 @@ Investigation-first (live DB audit):
   rule 0 ke ilawa nahi, Commission expense rows 0 — purana hisaab bilkul wahi.
   `office-finance-audit.cjs` TOTAL ISSUES 0. Phir push (61a552b; pehli koshish
   `wideph6` account par 403 — owner ne sahi account lagaya).
+
+## WAVE 51.1 (2026-11-04) — Courier kharcha list se hi
+
+- **Owner**: courier kharcha add karne ka option list par hi "Courier slip upload
+  karein" button ke neeche ho — amount likh kar aage "Add" button; slip button thora
+  upar taake jagah bane.
+- **UI** (`DeptQueue` courierActions): slip button ke neeche input (Courier amount Rs)
+  + teal "Add" (POST /cases/[id]/dept-expenses; Enter se bhi; mobile card par Enter
+  case nahi kholta); row par apna total "Courier kharcha Rs X ✓"; block `-mt-1`,
+  button min-h 36px. Slip preview (CourierSlipUploader) ka amount khana hataya —
+  ek hi jagah (W48 jaisa wapas).
+- **API** (cases GET `dept=courier`, courier permission): har row par
+  `myCourierExpense` = is user ke daale hue COURIER expenses ka total (sirf apna).
+- **Verify**: tsc 0, lint 0, build exit 0. Browser check NAHI — live DB se user data
+  parhne ki ijazat nahi mili (auto-mode ne roka); owner live par dekhe.
+- **Next step**: owner courier tab par amount add kar ke dekhe (desktop + mobile).
