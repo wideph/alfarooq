@@ -23,7 +23,8 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
     const cases = await p.case.findMany({
       where: { bookingOfficeId: o.id },
       select: { id: true, caseNumber: true, status: true, agreedAmount: true, commissionAmount: true, extraSharePercent: true, commissionHalfCreditedAt: true, commissionFullCreditedAt: true, profitShareSnapshot: true,
-        payments: { select: { amount: true, status: true } }, expenses: { select: { id: true, amount: true, deductFromCommission: true } } },
+        createdByAdminId: true, commissionMemberId: true, expenseDeductPercent: true,
+        payments: { select: { amount: true, status: true } }, expenses: { select: { id: true, amount: true, deductFromCommission: true, commissionDeductPercent: true } } },
     });
     console.log(`\n=== ${o.name} [${o.type}] cases=${cases.length}`);
     for (const c of cases) {
@@ -41,10 +42,20 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
           if (Math.abs(exCur - exTarget) > 0.005) issue(`${o.name} ${c.caseNumber}: extra share ledger ${exCur} ≠ target ${exTarget} (extra ${extra} × ${n(c.extraSharePercent)}%)`);
         } else if (exCur !== 0) issue(`${o.name} ${c.caseNumber}: extra share ${exCur} hai magar percent null`);
         if (extra > 0 && c.extraSharePercent === null) console.log(`  note ${c.caseNumber}: extra ${extra} ka faisla baqi (percent null)`);
-        // case expense with flag → "Commission expense [expenseId]" debit
-        for (const e of c.expenses.filter((e) => e.deductFromCommission)) {
+        // §W51: case expense → "Commission expense [expenseId]" debit = amount ×
+        // (admin ka % ?? case ka rule %) ÷ 100 — sirf jab case ki commission
+        // kisi member ke account mein ho (warna sync kuch nahi badalta).
+        const commissionMember = c.commissionMemberId || (o.members.find((m) => m.adminId === c.createdByAdminId) || {}).id || null;
+        for (const e of c.expenses) {
+          const pct = e.commissionDeductPercent !== null ? n(e.commissionDeductPercent) : n(c.expenseDeductPercent);
           const d = allLedger.filter((l) => l.type === "EXPENSE" && (l.remarks || "").startsWith(`Commission expense [${e.id}]`));
-          if (r2(d.reduce((t, l) => t - signed(l), 0)) !== n(e.amount)) issue(`${o.name} ${c.caseNumber}: case expense ${n(e.amount)} (flag) ka debit ${JSON.stringify(d.map((x) => n(x.amount)))}`);
+          const cur = r2(d.reduce((t, l) => t - signed(l), 0));
+          const target = r2(n(e.amount) * pct / 100);
+          if (!commissionMember) {
+            if (pct > 0) console.log(`  note ${c.caseNumber}: expense ${n(e.amount)} ${pct}% — commission member nahi (debit ${cur})`);
+            continue;
+          }
+          if (Math.abs(cur - target) > 0.005) issue(`${o.name} ${c.caseNumber}: case expense ${n(e.amount)} × ${pct}% ka debit ${cur} ≠ ${target}`);
         }
       } else if (o.type === "PROFIT_SHARE") {
         const exp = c.expenses.reduce((t, e) => t + n(e.amount), 0);

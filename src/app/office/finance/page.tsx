@@ -12,6 +12,8 @@ import AdminProfitStrip from "@/components/office/finance/AdminProfitStrip";
 import ProfitBreakdownModal from "@/components/office/finance/ProfitBreakdownModal";
 import OfficesGrid, { type OfficeCardData } from "@/components/office/finance/OfficesGrid";
 import DeptCommissions from "@/components/office/finance/DeptCommissions";
+import DeptExpenses from "@/components/office/finance/DeptExpenses";
+import { payableDeptExpenses, useDeptSummary } from "@/components/office/finance/useDeptSummary";
 import UsersAccounts from "@/components/office/finance/UsersAccounts";
 import UserDrawer from "@/components/office/finance/UserDrawer";
 import PayModal from "@/components/office/finance/PayModal";
@@ -51,7 +53,15 @@ export default function OfficeFinancePage() {
     >
       {(admin) =>
         admin.role === "booking_office" ? (
-          <MemberFinanceView admin={admin} />
+          <div className="space-y-8">
+            <MemberFinanceView admin={admin} />
+            {/* §W51: booking user ke paas department (printing / attestation /
+                courier) permission bhi ho to apna commission / kharche /
+                payment requests bhi yahin. */}
+            {adminCanAny(admin, ["office:printing:write", "office:attestation-dept:write", "office:courier:write"]) && (
+              <DeptMyAccount admin={admin} />
+            )}
+          </div>
         ) : adminCanAny(admin, ["office:finance:read"]) ? (
           <FinanceDashboard isSuperAdmin={admin.role === "admin"} canWriteExpenses={adminCanAny(admin, ["office:expenses:write"])} />
         ) : adminCanAny(admin, ["office:ledger:read"]) ? (
@@ -75,14 +85,17 @@ export default function OfficeFinancePage() {
 /* ------------------------- Admin / privileged dashboard ------------------------- */
 
 // §W21: cashier slim view — sirf department commissions (admin/cashier scope).
+// §W51: + department kharche (cashier bhi wapsi ki request bhejta hai).
 function CashierDeptView() {
   const [toast, setToast] = useState<ToastData | null>(null);
   const setMessage = (m: string, kind: ToastKind = "success") => setToast(m ? { message: m, kind } : null);
+  const deptUsers = useDeptSummary();
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-slate-900">Finance</h2>
       <Toast toast={toast} onClose={() => setToast(null)} />
-      <DeptCommissions onToast={setMessage} />
+      <DeptCommissions users={deptUsers} onToast={setMessage} />
+      <DeptExpenses users={deptUsers} onToast={setMessage} />
     </div>
   );
 }
@@ -111,6 +124,8 @@ function FinanceDashboard({
 
   const [toast, setToast] = useState<ToastData | null>(null);
   const setMessage = (m: string, kind: ToastKind = "success") => setToast(m ? { message: m, kind } : null);
+  // §W51: department users (commission + kharche) — KPI + do sections.
+  const deptUsers = useDeptSummary();
 
   const loadUsers = useCallback(async (silent = false) => {
     if (!silent) setUsersLoading(true);
@@ -230,6 +245,7 @@ function FinanceDashboard({
         expenses={totalExpenses}
         wasool={users?.totals.wasool ?? 0}
         due={users?.totals.due ?? 0}
+        payableExpenses={payableDeptExpenses(deptUsers)}
       />
 
       {/* 1b. §W21 Admin profit strip (period selector + breakdown modal) */}
@@ -238,8 +254,11 @@ function FinanceDashboard({
       {/* 2. Offices (Remaining + per-office Profit) */}
       <OfficesGrid offices={officeCards} onProfit={setProfitOffice} />
 
-      {/* 2b. §W21 Department commissions (Printing / Attestation) */}
-      <DeptCommissions onToast={setMessage} />
+      {/* 2b. §W21 Department commissions (Printing / Attestation / Courier) */}
+      <DeptCommissions users={deptUsers} onToast={setMessage} />
+
+      {/* 2c. §W51 Department kharche (courier / other) — admin se wasooli */}
+      <DeptExpenses users={deptUsers} onToast={setMessage} />
 
       {/* 3. Users' accounts (grouped by office) */}
       <UsersAccounts

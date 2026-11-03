@@ -8,6 +8,7 @@ import {
   deptCommissionKindsOf,
   hasAnyDeptCommissionPermission,
 } from "@/lib/office/dept-commission";
+import { deptExpenseTotals, emptyDeptExpenseTotals } from "@/lib/office/dept-expenses";
 
 export const preferredRegion = ["sin1"];
 
@@ -18,6 +19,9 @@ export const preferredRegion = ["sin1"];
 // Listed: earned > 0 OR paid > 0 OR any rule OR (§W30) koi bhi dept user.
 // §F22.3: office:ledger:read NA ho magar printing / attestation-dept write ho
 // to dept user SIRF apni row dekh sakta hai (self-scoped response).
+// §W51: har row par `pending` (commission ki payment request jo user ne abhi
+// accept nahi ki) + `courier` / `other` kharchon ka hisaab (total / paid /
+// pending / remaining = admin se wasooli baqi). Kharche wala user bhi list mein.
 export async function GET() {
   const { session, denied } = await guardOffice("office:cases:read");
   if (denied) return denied;
@@ -27,7 +31,7 @@ export async function GET() {
   if (!fullAccess && !selfOnly) return forbidden();
 
   try {
-    const [ledgerRows, ruleRows, courierRows, deptAdmins] = await Promise.all([
+    const [ledgerRows, ruleRows, courierRows, deptAdmins, expenseTotals] = await Promise.all([
       prisma.ledgerEntry.findMany({
         where: {
           adminId: { not: null },
@@ -45,6 +49,7 @@ export async function GET() {
         where: { role: { not: "admin" } },
         select: { id: true, role: true, permissions: true },
       }),
+      deptExpenseTotals(selfOnly ? [session.adminId] : undefined),
     ]);
 
     const earnedBy = new Map<string, ReturnType<typeof dec>>();
@@ -55,7 +60,7 @@ export async function GET() {
         .filter((admin) => deptCommissionKindsOf(admin.role, parsePermissions(admin.permissions)).length > 0)
         .map((admin) => admin.id)
     );
-    const adminIds = new Set<string>([...ruleAdminIds, ...deptUserIds]);
+    const adminIds = new Set<string>([...ruleAdminIds, ...deptUserIds, ...expenseTotals.keys()]);
 
     for (const row of ledgerRows) {
       if (!row.adminId) continue;
@@ -82,7 +87,8 @@ export async function GET() {
           row.earned.greaterThan(0) ||
           row.paid.greaterThan(0) ||
           ruleAdminIds.has(row.adminId) ||
-          deptUserIds.has(row.adminId)
+          deptUserIds.has(row.adminId) ||
+          expenseTotals.has(row.adminId)
       );
 
     const admins = totals.length
@@ -94,14 +100,20 @@ export async function GET() {
     const adminById = new Map(admins.map((admin) => [admin.id, admin]));
 
     const users = totals
-      .map((row) => ({
-        adminId: row.adminId,
-        name: adminById.get(row.adminId)?.name ?? null,
-        role: adminById.get(row.adminId)?.role ?? null,
-        earned: toNumber(row.earned),
-        paid: toNumber(row.paid),
-        remaining: toNumber(row.remaining),
-      }))
+      .map((row) => {
+        const expenses = expenseTotals.get(row.adminId) ?? emptyDeptExpenseTotals();
+        return {
+          adminId: row.adminId,
+          name: adminById.get(row.adminId)?.name ?? null,
+          role: adminById.get(row.adminId)?.role ?? null,
+          earned: toNumber(row.earned),
+          paid: toNumber(row.paid),
+          remaining: toNumber(row.remaining),
+          pending: expenses.commissionPending,
+          courier: expenses.courier,
+          other: expenses.other,
+        };
+      })
       .sort((a, b) => b.remaining - a.remaining);
 
     // §F22.3: self-scoped dept user ko sirf apni row (empty array agar koi

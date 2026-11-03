@@ -58,6 +58,8 @@ type Office = {
   members: Member[];
   users: OfficeUser[];
   commissions: Array<{ categoryId: string; amount: number; category: { id: string; name: string } }>;
+  // §W51: commission office — expenses ka kitna % commission se minus (naye cases).
+  expenseDeductPercent?: number | string;
   _count: { cases: number; users: number };
 };
 
@@ -764,6 +766,9 @@ export function BookingOfficesPanel({ onMessage }: { onMessage: (message: string
               {selected.type === "FIXED_COMMISSION" && (
                 <CommissionGrid office={selected} categories={categories} onChanged={load} onMessage={onMessage} />
               )}
+              {selected.type === "FIXED_COMMISSION" && (
+                <ExpenseRuleEditor office={selected} onChanged={load} onMessage={onMessage} />
+              )}
             </>
           )}
         </div>
@@ -1241,6 +1246,82 @@ function MembersEditor({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// §W51 — commission office ka rule: case expenses (admin ke, courier ke — sab)
+// ka kitna % commission member ke account se minus. Default 0 (koi nahi).
+// Case bante waqt case par likha jata hai — badalne se sirf NAYE cases par asar.
+// Kisi khas expense ka % case page (History / Finance → Case expenses) se.
+function ExpenseRuleEditor({
+  office,
+  onChanged,
+  onMessage,
+}: {
+  office: Office;
+  onChanged: () => Promise<void>;
+  onMessage: (message: string, kind?: ToastKind) => void;
+}) {
+  const saved = Number(office.expenseDeductPercent ?? 0) || 0;
+  const [value, setValue] = useState(String(saved));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(String(saved));
+  }, [office.id, saved]);
+
+  async function save() {
+    setSaving(true);
+    const res = await officeFetch(`/api/office/setup/booking-offices/${office.id}/expense-rule`, {
+      method: "PUT",
+      json: { percent: value.trim() || "0" },
+    });
+    onMessage(
+      res.ok ? "Expense rule save ho gaya — sirf naye cases par lagega" : res.error,
+      res.ok ? "success" : "error"
+    );
+    if (res.ok) await onChanged();
+    setSaving(false);
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+      <p className="font-semibold text-slate-800">Expenses commission se minus — {office.name}</p>
+      <p className="text-xs text-slate-500">
+        Case ke expenses (admin ke, courier ke — sab) ka kitna % is office ke commission member ke account se minus ho.
+        0 = koi expense commission se nahi katta (default). Rule badalne se sirf <b>naye cases</b> par asar — purane
+        cases waise hi. Kisi khas expense ka % case page (History / Finance) se badla ja sakta hai.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {["0", "50", "100"].map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setValue(preset)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+              value.trim() === preset ? "bg-primary-600 text-white" : "border border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {preset}%
+          </button>
+        ))}
+        <label className="flex items-center gap-1.5 text-sm text-slate-600">
+          <input
+            className={`${input} max-w-[6rem]`}
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            aria-label="Expenses ka % commission se minus"
+          />
+          %
+        </label>
+        <button className={primaryBtn} disabled={saving || value.trim() === String(saved)} onClick={save}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save rule
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">Abhi ka rule: {saved}%</p>
     </div>
   );
 }

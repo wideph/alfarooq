@@ -2012,3 +2012,64 @@ Investigation-first (live DB audit):
 - **Note**: purani 2 slips ki notification booking office ko kabhi nahi gayi —
   backfill nahi kiya (live write); ab card se seedha nazar aati hain.
 - **Next step**: owner ki nayi requirement.
+
+## WAVE 51 (2026-11-04) — Department kharche, wapsi ki request, commission office ka expense rule
+
+- **Owner request**: courier permission wala user slip upload ke saath courier amount
+  bhi daale → us case ka expense (partner office: shareholders se pehle ki tarah %
+  ke mutabiq minus; commission office: default commission se NAHI katta, magar admin
+  office ka overall % rule (0–100) set kar sake aur kisi bhi case ke expense par khud
+  % laga sake). Courier / attestation / printing user "Other expense" (comment lazmi)
+  bhi daale. Dono ka total + "Admin se wasooli baqi" user ko; admin pay kare to
+  request (alag alag). Admin ke "members ka due" ke saath "payable expenses".
+- **Owner ke jawab (AskUserQuestion)**: (1) Other expense kisi case se nahi — sirf
+  admin ke profit se minus. (2) Partner office: pehle jaisa % ke mutabiq. (3) Office
+  ka % rule (aur commission amount) sirf NAYE cases par; kisi khas expense par admin
+  ka % mojooda commission se minus. (4) Department commission ki payment bhi request
+  + accept se.
+- **DB**: migration `20261104120000_office_wave51` (additive + idempotent):
+  BookingOffice.expenseDeductPercent, Case.expenseDeductPercent (default 0),
+  CaseExpense.commissionDeductPercent / kind / paidByAdminId,
+  CompanyExpense.paidByAdminId, naya table DeptPayoutRequest. Backfill: purane
+  `deductFromCommission = true` expenses → commissionDeductPercent 100 (ledger rows
+  wahi rehti hain). **Live par abhi apply NAHI** — owner ki ijazat ke baad
+  `prisma migrate deploy`, phir push (naya Prisma client naye columns select karta hai).
+- **Hisaab** (BR19): `lib/office/expense-deduction.ts` `syncCommissionExpenseDeductions`
+  (FIXED office: har expense amount × (admin % ?? case rule %) → EXPENSE DEBIT case ke
+  commission member par, remarks `Commission expense [<id>]:`; idempotent, farq na ho
+  to purani row nahi chhedi; member na ho to kuch nahi). Case expense POST ab isi se
+  (pehle creator member — ab §W45 commission member). PATCH /cases/[id]/expenses
+  (super admin) % badalta hai. `lib/office/dept-expenses.ts` totals (kul / paid =
+  accepted / pending / baqi). Courier kharcha = CaseExpense (kind COURIER) →
+  syncProfitShare (partner pool) + rule; Other = CompanyExpense (DEPT_OTHER) → sirf
+  companyExpenses. Wapsi ledger mein nahi (profit par asar nahi). Commission request
+  accept → wahi PAYOUT DEBIT (adminId) — purana `dept-commissions/payout` route hata.
+  Case delete par user ka courier kharcha Other kharcha ban kar rehta hai.
+- **API**: POST /cases/[id]/dept-expenses (courier), GET/POST/DELETE /dept-expenses
+  (user apna 24 ghante tak hata sakta hai), GET/POST /dept-payouts, POST
+  /dept-payouts/[id] {accept|reject}, PUT /setup/booking-offices/[id]/expense-rule,
+  summary route + pending / courier / other; finance member drawer "Case expense
+  (commission se): …".
+- **UI**: CourierSlipUploader mein "Courier amount (Rs)" (optional, upload ke baad
+  save; fail par saaf paigham); case page (dept worker + cross-office) "Courier kharcha
+  (aap ka)" card; DeptMyAccount: payment requests "Mil gaya / Nahi mila", commission,
+  Courier kharcha (kul / wapas / Admin se wasooli baqi), Other kharcha (add form,
+  comment lazmi), history; admin Finance: KPI "Payable expenses", "Department kharche"
+  section (Pay courier / other alag, Details drawer, pending requests Cancel),
+  commission Pay = request; cashier view mein bhi; booking user ke paas dept permission
+  ho to us ke Finance par bhi; case History → Case expenses: Courier / "X ne diya —
+  admin se wapsi" chips + commission office par "Commission se minus: X% · Rs" + admin
+  dropdown (case ka rule / 0 / 25 / 50 / 100 / apni %); Setup → commission office →
+  "Expenses commission se minus" (0 / 50 / 100 / custom, sirf naye cases).
+- **Audit script** `office-finance-audit.cjs`: case expense debit = amount × effective %.
+- **Verify**: tsc 0, lint 0, build exit 0. Offline test (fake db, scratchpad)
+  `syncCommissionExpenseDeductions` 9/9: rule 0 → koi row nahi; case rule 50% → 250
+  member par; idempotent; admin 100% → 500 (ek row); admin 0% → row hat gayi; partner
+  office par kuch nahi; member na ho → purani row waisi; purani W21 row (barabar
+  target, doosra member) nahi chhedi; 33.33% → 33.33 W45 member par. Browser check
+  NAHI hua — local server live DB par chalta hai aur migration abhi live par nahi
+  (naye columns ke baghair case queries fail hoti).
+- **Next step**: owner ki ijazat se live par `npx prisma migrate deploy` (additive),
+  phir push; live par: courier user slip + amount → case expense + Mera account baqi;
+  Other kharcha; admin Pay (request) → user "Mil gaya"; commission office ka case:
+  expense % dropdown; `node scripts/office-finance-audit.cjs` 0 issues.

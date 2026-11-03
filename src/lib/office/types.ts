@@ -1,5 +1,15 @@
 // Client-side shape of /api/office/cases/[id] (see lib/office/case-detail.ts).
 
+// §W51: department user ka apna kharcha (case page "Courier kharcha").
+export type DeptOwnExpense = {
+  id: string;
+  amount: number;
+  description: string;
+  expenseDate: string;
+  createdAt: string;
+  canDelete: boolean;
+};
+
 export type CaseDetail = {
   id: string;
   caseNumber: string;
@@ -88,7 +98,28 @@ export type CaseDetail = {
     verifiedAt: string | null;
     createdAt: string;
   }>;
-  expenses: Array<{ id: string; amount: number; description: string; expenseDate: string; deductFromCommission: boolean; createdByName: string | null }>;
+  expenses: Array<{
+    id: string;
+    amount: number;
+    description: string;
+    expenseDate: string;
+    deductFromCommission: boolean;
+    createdByName: string | null;
+    // §W51: COURIER = courier department ka kharcha; paidBy = jis user ne jeb
+    // se diya (admin ne wapas dena hai).
+    kind?: string | null;
+    paidByAdminId?: string | null;
+    paidByName?: string | null;
+    // §W51: commission office — admin ka faisla (null = case ka rule), asal %
+    // aur kitni raqam commission member se minus hui.
+    commissionDeductPercent?: number | null;
+    effectiveDeductPercent?: number;
+    commissionDeducted?: number;
+  }>;
+  // §W51: case bante waqt office ka expense rule (% commission se minus).
+  expenseDeductPercent?: number;
+  // §W51: department user (courier) ke is case par apne kharche.
+  myDeptExpenses?: DeptOwnExpense[];
   // §F22.6: case ke sath attached dept commission rows (read-only display;
   // REAL CaseExpense NAHI — expenses array se alag, pool/member formulas
   // unaffected). Ledger DEPT_COMMISSION entries se banti hain.

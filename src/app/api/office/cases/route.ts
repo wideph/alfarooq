@@ -334,12 +334,19 @@ export async function POST(request: NextRequest) {
       .filter((a: { address: string | null }) => a.address) as Array<{ address: string; label: string | null }>;
 
     // BR3.1: type-1 commission snapshot from the office's grid.
+    // §W51: office ka expense rule (kitna % expenses commission se minus)
+    // bhi isi waqt case par — rule baad mein badle to sirf naye cases par.
     let commissionAmount = new Prisma.Decimal(0);
+    let expenseDeductPercent = new Prisma.Decimal(0);
     if (office.type === "FIXED_COMMISSION" && categoryId) {
-      const grid = await prisma.bookingOfficeCommission.findUnique({
-        where: { bookingOfficeId_categoryId: { bookingOfficeId, categoryId } },
-      });
+      const [grid, rule] = await Promise.all([
+        prisma.bookingOfficeCommission.findUnique({
+          where: { bookingOfficeId_categoryId: { bookingOfficeId, categoryId } },
+        }),
+        prisma.bookingOffice.findUnique({ where: { id: bookingOfficeId }, select: { expenseDeductPercent: true } }),
+      ]);
       if (grid) commissionAmount = grid.amount;
+      if (rule) expenseDeductPercent = rule.expenseDeductPercent;
     }
 
     // §W45 (BR3.1a): commission office ka case us office ka member khud
@@ -436,6 +443,7 @@ export async function POST(request: NextRequest) {
           commissionAmount,
           commissionMode,
           commissionMemberId,
+          expenseDeductPercent,
           notes: cleanText(body.notes, 2000),
           contacts: { create: contacts },
           addresses: { create: addresses },

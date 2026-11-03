@@ -208,6 +208,10 @@ model BookingOffice {
   type        String
   phone       String?
   notes       String?
+  // §W51: FIXED_COMMISSION office ka rule — case expenses ka kitna % commission
+  // member ke account se minus (default 0 = koi nahi). Case bante waqt
+  // Case.expenseDeductPercent mein likh diya jata hai (sirf naye cases par asar).
+  expenseDeductPercent Decimal @default(0) @db.Decimal(5, 2)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -379,6 +383,9 @@ model Case {
   // grid ka poora commission) aur commission kis member ke account mein jaye.
   commissionMode           String?
   commissionMemberId       String?
+  // §W51: case bante waqt office ka expense rule (BookingOffice.expenseDeductPercent)
+  // — is case ke expenses ka kitna % commission se minus. Purane cases 0.
+  expenseDeductPercent     Decimal   @default(0) @db.Decimal(5, 2)
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -486,12 +493,22 @@ model CaseExpense {
   // Wave 21 (F3): FIXED_COMMISSION office ho aur flag on ho to expense ka
   // DEBIT case ke commission member ke ledger se kat-ta hai (EXPENSE entry).
   deductFromCommission Boolean @default(false)
+  // §W51: admin ka is expense par faisla — kitna % commission se minus
+  // (null = case ka rule, Case.expenseDeductPercent). deductFromCommission
+  // isi ke saath sync rehta hai (effective % > 0).
+  commissionDeductPercent Decimal? @db.Decimal(5, 2)
+  // §W51: COURIER = courier department ka kharcha (slip ke saath); null = aam.
+  kind        String?
+  // §W51: department user jis ne apni jeb se diya — admin ne wapas dena hai
+  // (DeptPayoutRequest COURIER_EXPENSE). null = company ne khud diya.
+  paidByAdminId String?
   createdById String
   createdAt   DateTime @default(now())
   case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
   @@index([caseId])
   @@index([expenseDate])
+  @@index([paidByAdminId])
 }
 
 model LedgerEntry {
@@ -554,10 +571,15 @@ model CompanyExpense {
   description String
   category    String?
   expenseDate DateTime
+  // §W51: department user ka "Other expense" (kisi case se nahi — sirf admin ke
+  // profit se minus). Jis ne jeb se diya; admin ne wapas dena hai
+  // (DeptPayoutRequest OTHER_EXPENSE). null = company ka aam kharcha.
+  paidByAdminId String?
   createdById String
   createdAt   DateTime @default(now())
 
   @@index([expenseDate])
+  @@index([paidByAdminId])
 }
 
 model WorkingDayCache {
@@ -846,4 +868,32 @@ model PayoutRequest {
 
   @@index([memberId, status])
   @@index([bookingOfficeId, status])
+}
+
+// §W51 — department user (printing / attestation / courier) ko admin ki payment
+// REQUEST: user accept kare tab paid. kind:
+//   COMMISSION      — department commission (accept par PAYOUT DEBIT ledger row,
+//                     adminId = user — pehle wala hisaab wahi)
+//   COURIER_EXPENSE — courier kharche ki wapsi (CaseExpense.paidByAdminId)
+//   OTHER_EXPENSE   — other kharche ki wapsi (CompanyExpense.paidByAdminId)
+// Teeno alag alag pay hote hain; kharchon ki wapsi ledger mein nahi (expense
+// pehle hi profit se minus hai — wapsi sirf qarz ada karti hai).
+model DeptPayoutRequest {
+  id            String    @id @default(cuid())
+  adminId       String
+  kind          String
+  amount        Decimal   @db.Decimal(12, 2)
+  method        String    @default("CASH")
+  entryDate     DateTime
+  remarks       String?
+  // PENDING | ACCEPTED | REJECTED
+  status        String    @default("PENDING")
+  ledgerEntryId String?
+  createdById   String
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([adminId, status])
+  @@index([status])
 }

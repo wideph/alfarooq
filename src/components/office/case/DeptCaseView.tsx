@@ -21,6 +21,8 @@ import CompleteAttestationButton from "@/components/office/case/CompleteAttestat
 import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
+import CourierExpensesCard from "@/components/office/case/CourierExpensesCard";
+import type { DeptOwnExpense } from "@/lib/office/types";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
 import { originLabel } from "@/lib/office/case-nav";
 import {
@@ -63,6 +65,8 @@ export type DeptLimitedDetail = {
   // §W44: admin ka custom label.
   customLabel?: string | null;
   customLabelColor?: string | null;
+  // §W51: courier user ke is case par apne kharche.
+  myDeptExpenses?: DeptOwnExpense[];
 };
 
 export type DeptLimitedResponse = {
@@ -469,6 +473,16 @@ export default function DeptCaseView({
           </div>
         )}
       </SectionCard>
+
+      {/* §W51: courier user ka is case par apna kharcha. */}
+      {depts.includes("COURIER") && (
+        <CourierExpensesCard
+          caseId={id}
+          items={detail.myDeptExpenses ?? []}
+          onChanged={onReload}
+          onMessage={setMessage}
+        />
+      )}
 
       {viewer && <CaseFileViewer file={viewer} onClose={() => setViewer(null)} />}
     </div>

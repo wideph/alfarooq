@@ -12,6 +12,8 @@ import {
   setMissingWarning,
 } from "@/lib/office/workflow";
 import { DEPT_COMMISSION_TYPE, parseDeptCommissionKind } from "@/lib/office/dept-commission";
+import { commissionExpenseTag, effectiveDeductPercent } from "@/lib/office/expense-deduction";
+import { DEPT_EXPENSE_SELF_DELETE_MS } from "@/lib/office/dept-expenses";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
@@ -46,6 +48,7 @@ export function stripCaseMoney<T extends Record<string, unknown>>(row: T): T {
     profitFinalizedAt: null,
     profitShareSnapshot: null,
     profitStale: false,
+    expenseDeductPercent: 0,
     agreedAmountRemarks: null,
     totals: ZERO_TOTALS,
     expenseSummary: { count: 0, total: 0, reasons: [] },
@@ -156,12 +159,24 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
     },
   });
   if (!item) return null;
+  // §W51: apne courier kharche (cross-office courier user bhi dekhe / hataye).
+  const myDeptExpenses = depts.includes("COURIER")
+    ? await prisma.caseExpense.findMany({
+        where: { caseId, paidByAdminId: session.adminId },
+        orderBy: { expenseDate: "asc" },
+        select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
+      })
+    : [];
 
   return toJson({
     ok: true,
     limited: true,
     depts,
     detail: {
+      myDeptExpenses: myDeptExpenses.map((e) => ({
+        ...e,
+        canDelete: Date.now() - e.createdAt.getTime() < DEPT_EXPENSE_SELF_DELETE_MS,
+      })),
       id: item.id,
       caseNumber: item.caseNumber,
       status: item.status,
@@ -235,7 +250,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     adminNameMap([
       item.createdByAdminId,
       ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
-      ...item.expenses.map((e) => e.createdById),
+      ...item.expenses.flatMap((e) => [e.createdById, e.paidByAdminId]),
       ...item.ledger.map((l) => l.createdById),
     ]),
     remarkTarget
@@ -320,7 +335,24 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       hasSlip: Boolean(p.slipKey),
       slipKey: undefined,
     })),
-    expenses: item.expenses.map((e) => ({ ...e, createdByName: names[e.createdById] || null })),
+    // §W51: har expense par — kis ne jeb se diya (wapsi baqi), aur commission
+    // office par kitna % / kitni raqam commission member se minus hui (tagged
+    // EXPENSE ledger rows). effectivePercent = admin ka faisla ya case ka rule.
+    expenses: item.expenses.map((e) => {
+      const tag = commissionExpenseTag(e.id);
+      const deducted = sum(
+        item.ledger
+          .filter((l) => l.type === "EXPENSE" && l.remarks?.startsWith(tag))
+          .map((l) => (l.direction === "DEBIT" ? l.amount : l.amount.neg()))
+      );
+      return {
+        ...e,
+        createdByName: names[e.createdById] || null,
+        paidByName: e.paidByAdminId ? names[e.paidByAdminId] || null : null,
+        effectiveDeductPercent: effectiveDeductPercent(e, item.expenseDeductPercent),
+        commissionDeducted: deducted,
+      };
+    }),
     // §F22.6: dept commission rows — `expenses` array ke BAHAR (alag field).
     deptCommissions,
     ledger: canSeeLedger
@@ -345,6 +377,17 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     deptWorker: true,
     bookingOffice: { id: item.bookingOffice.id, name: item.bookingOffice.name, type: null },
     deptCommissions: deptCommissions.filter((row) => row.adminId === session.adminId),
+    // §W51: sirf apne courier kharche (case ki baqi raqam nahi).
+    myDeptExpenses: item.expenses
+      .filter((e) => e.paidByAdminId === session.adminId)
+      .map((e) => ({
+        id: e.id,
+        amount: e.amount,
+        description: e.description,
+        expenseDate: e.expenseDate,
+        createdAt: e.createdAt,
+        canDelete: Date.now() - e.createdAt.getTime() < DEPT_EXPENSE_SELF_DELETE_MS,
+      })),
     contacts: courier ? item.contacts : [],
     addresses: courier ? item.addresses : [],
   });

@@ -26,10 +26,13 @@ const EARNING_TYPES = [
 // EXPENSE debit remarks ko display description tak strip karta hai:
 //   "Office expense share [<expenseId>]: <desc>" → "<desc>"
 //   "Office expense: <desc>"                    → "<desc>"
+//   §W51 "Commission expense [<expenseId>]: <desc>" → "Case expense (commission se): <desc>"
 function expenseDescription(remarks: string | null): string {
   if (!remarks) return "";
   const tagged = /^Office expense share \[[^\]]+\]:\s*/.exec(remarks);
   if (tagged) return remarks.slice(tagged[0].length);
+  const caseTagged = /^Commission expense \[[^\]]+\]:\s*/.exec(remarks);
+  if (caseTagged) return `Case expense (commission se): ${remarks.slice(caseTagged[0].length)}`;
   const plain = /^Office expense:\s*/.exec(remarks);
   if (plain) return remarks.slice(plain[0].length);
   return remarks;

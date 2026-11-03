@@ -136,6 +136,10 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
   if (!canSeeExpenses) return null;
 
   const expenseTotal = detail.expenses.reduce((acc, e) => acc + e.amount, 0);
+  // §W51: commission office — expense ka kitna % commission member se minus.
+  const isFixed = detail.bookingOffice.type === "FIXED_COMMISSION";
+  const caseRule = detail.expenseDeductPercent ?? 0;
+  const deductedTotal = detail.expenses.reduce((acc, e) => acc + (e.commissionDeducted ?? 0), 0);
 
   return (
     <SectionCard
@@ -145,6 +149,18 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
       count={detail.expenses.length}
       actions={<span className="text-sm font-semibold text-slate-500">Total {formatMoney(expenseTotal)}</span>}
     >
+      {isFixed && (
+        <p className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Is case ka rule: expenses ka <b>{caseRule}%</b> commission se minus (case bante waqt office ka rule).
+          {deductedTotal > 0 && (
+            <>
+              {" "}
+              Ab tak commission se minus: <b className="text-red-600">{formatMoney(deductedTotal)}</b>
+              {detail.commissionMember?.name ? ` (${detail.commissionMember.name})` : ""}.
+            </>
+          )}
+        </p>
+      )}
       {detail.expenses.length === 0 ? (
         <EmptyState icon={Receipt} hint="Koi expense nahi — board fee, courier waghera yahan add karein" />
       ) : (
@@ -157,6 +173,28 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
                   {formatDate(e.expenseDate)}
                   {e.createdByName ? ` · ${e.createdByName}` : ""}
                 </span>
+                {(e.kind === "COURIER" || e.paidByName) && (
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    {e.kind === "COURIER" && (
+                      <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-700">Courier</span>
+                    )}
+                    {e.paidByName && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                        {e.paidByName} ne diya — admin se wapsi
+                      </span>
+                    )}
+                  </span>
+                )}
+                {isFixed && (
+                  <CommissionDeductControl
+                    caseId={detail.id}
+                    expense={e}
+                    caseRule={caseRule}
+                    canEdit={admin.role === "admin"}
+                    onUpdated={onUpdated}
+                    onMessage={onMessage}
+                  />
+                )}
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 <span className="font-semibold">{formatMoney(e.amount)}</span>
@@ -205,6 +243,111 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
         </div>
       )}
     </SectionCard>
+  );
+}
+
+// §W51 — commission office ke case par har expense: kitna % commission member
+// se minus hua; admin (super) yahin badal sakta hai — "Case ka rule" (null),
+// 0 / 50 / 100% ya apni %. Faisla mojooda commission ke hisaab se foran.
+const DEDUCT_PRESETS = ["0", "25", "50", "100"];
+
+function CommissionDeductControl({
+  caseId,
+  expense,
+  caseRule,
+  canEdit,
+  onUpdated,
+  onMessage,
+}: {
+  caseId: string;
+  expense: CaseDetail["expenses"][number];
+  caseRule: number;
+  canEdit: boolean;
+  onUpdated: (next: CaseDetail) => void;
+  onMessage: (message: string, kind?: ToastKind) => void;
+}) {
+  const own = expense.commissionDeductPercent ?? null;
+  const percent = expense.effectiveDeductPercent ?? own ?? caseRule;
+  const current = own === null ? "" : DEDUCT_PRESETS.includes(String(own)) ? String(own) : "custom";
+  const [custom, setCustom] = useState(own !== null && current === "custom" ? String(own) : "");
+  const [choice, setChoice] = useState(current);
+  const [busy, setBusy] = useState(false);
+
+  // Live refresh / doosre admin ke badlaav ke baad dropdown asal faisle par.
+  useEffect(() => {
+    setChoice(current);
+  }, [current]);
+
+  async function save(value: string | null) {
+    setBusy(true);
+    const res = await officeFetch<CaseDetail>(`/api/office/cases/${caseId}/expenses`, {
+      method: "PATCH",
+      json: { expenseId: expense.id, commissionDeductPercent: value },
+    });
+    setBusy(false);
+    if (res.ok) {
+      onUpdated(res.data);
+      onMessage(value === null ? "Expense par case ka rule laga diya" : `Expense ka ${value}% commission se minus`);
+    } else {
+      onMessage(res.error, "error");
+      setChoice(current);
+    }
+  }
+
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+      <BadgePercent className="h-3.5 w-3.5 text-slate-400" />
+      Commission se minus:{" "}
+      <b className={percent > 0 ? "text-red-600" : "text-slate-700"}>
+        {percent}% · {formatMoney(expense.commissionDeducted ?? 0)}
+      </b>
+      {own === null && <span className="text-slate-400">(case ka rule)</span>}
+      {canEdit && (
+        <>
+          <select
+            aria-label="Commission se kitna % minus"
+            value={choice}
+            disabled={busy}
+            onChange={(event) => {
+              const next = event.target.value;
+              setChoice(next);
+              if (next === "custom") return;
+              void save(next === "" ? null : next);
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+          >
+            <option value="">Case ka rule ({caseRule}%)</option>
+            {DEDUCT_PRESETS.map((value) => (
+              <option key={value} value={value}>
+                {value}%
+              </option>
+            ))}
+            <option value="custom">Apni % …</option>
+          </select>
+          {choice === "custom" && (
+            <>
+              <input
+                aria-label="Apni %"
+                inputMode="decimal"
+                value={custom}
+                onChange={(event) => setCustom(event.target.value)}
+                placeholder="%"
+                className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                disabled={busy || custom.trim() === ""}
+                onClick={() => void save(custom.trim())}
+                className="rounded-lg bg-primary-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                Save
+              </button>
+            </>
+          )}
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        </>
+      )}
+    </span>
   );
 }
 

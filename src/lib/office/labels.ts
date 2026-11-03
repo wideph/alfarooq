@@ -122,6 +122,19 @@ export const DEPT_COMMISSION_KIND_STYLES: Record<string, string> = {
   COURIER: "bg-teal-100 text-teal-700",
 };
 
+// §W51 — department user ko admin ki payment request ki qism (teeno alag pay).
+export const DEPT_PAYOUT_KIND_LABELS: Record<string, string> = {
+  COMMISSION: "Commission",
+  COURIER_EXPENSE: "Courier kharcha",
+  OTHER_EXPENSE: "Other kharcha",
+};
+
+export const DEPT_PAYOUT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Aap ki tasdeeq baqi",
+  ACCEPTED: "Mil gaya",
+  REJECTED: "Wapas / cancel",
+};
+
 // §W44 — admin custom label ke rang (case page + list par saaf nazar aane wale).
 export const CUSTOM_LABEL_STYLES: Record<string, string> = {
   red: "bg-red-600 text-white",

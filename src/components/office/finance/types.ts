@@ -442,6 +442,10 @@ export type DeptCommissionRule = {
   attestationAmount: number;
 };
 
+// §W51: kharchon ka hisaab (total / paid = accept ho chuki wapsi / pending
+// request / remaining = admin se wasooli baqi).
+export type DeptMoney = { total: number; paid: number; pending: number; remaining: number };
+
 export type DeptCommissionSummaryUser = {
   adminId: string;
   name: string;
@@ -449,7 +453,103 @@ export type DeptCommissionSummaryUser = {
   earned: number;
   paid: number;
   remaining: number;
+  // §W51: commission ki payment request jo user ne abhi accept nahi ki.
+  pending: number;
+  courier: DeptMoney;
+  other: DeptMoney;
 };
+
+export type DeptPayoutKind = "COMMISSION" | "COURIER_EXPENSE" | "OTHER_EXPENSE";
+
+export type DeptPayoutRequestRow = {
+  id: string;
+  adminId?: string;
+  userName?: string | null;
+  kind: DeptPayoutKind;
+  amount: number;
+  method: string | null;
+  entryDate: string;
+  remarks: string | null;
+  status: "PENDING" | "ACCEPTED" | "REJECTED";
+  createdAt: string;
+  createdByName: string | null;
+};
+
+export type DeptExpenseRow = {
+  id: string;
+  amount: number;
+  description: string;
+  expenseDate: string;
+  createdAt: string;
+  canDelete: boolean;
+  caseId?: string;
+  caseNumber?: string;
+  clientName?: string | null;
+};
+
+export type DeptExpensesPayload = {
+  totals: { courier: DeptMoney; other: DeptMoney; commissionPending: number };
+  courier: DeptExpenseRow[];
+  other: DeptExpenseRow[];
+  requests: DeptPayoutRequestRow[];
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deptMoney(raw: any): DeptMoney {
+  const total = num(raw?.total);
+  const paid = num(raw?.paid);
+  return { total, paid, pending: num(raw?.pending), remaining: num(raw?.remaining ?? total - paid) };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deptPayoutRow(raw: any): DeptPayoutRequestRow {
+  const kind = raw?.kind === "COURIER_EXPENSE" || raw?.kind === "OTHER_EXPENSE" ? raw.kind : "COMMISSION";
+  const status = raw?.status === "ACCEPTED" || raw?.status === "REJECTED" ? raw.status : "PENDING";
+  return {
+    id: String(raw?.id ?? ""),
+    adminId: raw?.adminId ? String(raw.adminId) : undefined,
+    userName: raw?.userName ? String(raw.userName) : null,
+    kind,
+    amount: num(raw?.amount),
+    method: raw?.method ? String(raw.method) : null,
+    entryDate: String(raw?.entryDate ?? ""),
+    remarks: raw?.remarks ? String(raw.remarks) : null,
+    status,
+    createdAt: String(raw?.createdAt ?? ""),
+    createdByName: raw?.createdByName ? String(raw.createdByName) : null,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeDeptPayouts(data: any): DeptPayoutRequestRow[] {
+  return (Array.isArray(data) ? data : []).map(deptPayoutRow).filter((row) => row.id);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function normalizeDeptExpenses(data: any): DeptExpensesPayload {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row = (raw: any): DeptExpenseRow => ({
+    id: String(raw?.id ?? ""),
+    amount: num(raw?.amount),
+    description: String(raw?.description ?? ""),
+    expenseDate: String(raw?.expenseDate ?? ""),
+    createdAt: String(raw?.createdAt ?? ""),
+    canDelete: Boolean(raw?.canDelete),
+    caseId: raw?.caseId ? String(raw.caseId) : undefined,
+    caseNumber: raw?.caseNumber ? String(raw.caseNumber) : undefined,
+    clientName: raw?.clientName ? String(raw.clientName) : null,
+  });
+  return {
+    totals: {
+      courier: deptMoney(data?.totals?.courier),
+      other: deptMoney(data?.totals?.other),
+      commissionPending: num(data?.totals?.commissionPending),
+    },
+    courier: (Array.isArray(data?.courier) ? data.courier : []).map(row),
+    other: (Array.isArray(data?.other) ? data.other : []).map(row),
+    requests: (Array.isArray(data?.requests) ? data.requests : []).map(deptPayoutRow),
+  };
+}
 
 export type DeptCommissionEntry = {
   id: string;
@@ -481,6 +581,9 @@ export function normalizeDeptSummary(data: any): DeptCommissionSummaryUser[] {
     earned: num(raw?.earned),
     paid: num(raw?.paid),
     remaining: num(raw?.remaining ?? num(raw?.earned) - num(raw?.paid)),
+    pending: num(raw?.pending),
+    courier: deptMoney(raw?.courier),
+    other: deptMoney(raw?.other),
   })).filter((row) => row.adminId);
 }
 

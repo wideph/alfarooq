@@ -3,25 +3,36 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { formatMoney, officeFetch, todayInputDate } from "@/lib/office/client";
-import { PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
+import { DEPT_PAYOUT_KIND_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/office/labels";
 import { PAYMENT_METHODS, ROLE_LABELS } from "@/lib/office/permissions";
 import type { ToastKind } from "@/components/Toast";
 import { inputCls, primaryBtnCls } from "./ui";
-import type { DeptCommissionSummaryUser } from "./types";
+import type { DeptCommissionSummaryUser, DeptPayoutKind } from "./types";
 
-// §W21 — Dept commission payout modal (Printing/Attestation user ko wasool).
-// POST /api/office/dept-commissions/payout — direct payout (request flow nahi).
+// §W21 / §W51 — department user ko payment: commission, courier kharcha ya
+// other kharcha (teeno alag). POST /api/office/dept-payouts — sirf REQUEST
+// banti hai; user accept kare tab paid shumar hoti hai.
+export function deptPayable(user: DeptCommissionSummaryUser, kind: DeptPayoutKind) {
+  if (kind === "COMMISSION") return Math.max(0, user.remaining - user.pending);
+  const bucket = kind === "COURIER_EXPENSE" ? user.courier : user.other;
+  return Math.max(0, bucket.remaining - bucket.pending);
+}
+
 export default function DeptPayModal({
   user,
+  kind,
   onClose,
   onToast,
 }: {
   user: DeptCommissionSummaryUser;
+  kind: DeptPayoutKind;
   onClose: () => void;
   onToast: (message: string, kind: ToastKind) => void;
 }) {
+  const payable = deptPayable(user, kind);
+  const label = DEPT_PAYOUT_KIND_LABELS[kind];
   const [form, setForm] = useState({
-    amount: user.remaining > 0 ? String(Math.round(user.remaining * 100) / 100) : "",
+    amount: payable > 0 ? String(Math.round(payable * 100) / 100) : "",
     method: "CASH",
     entryDate: todayInputDate(),
     remarks: "",
@@ -34,11 +45,12 @@ export default function DeptPayModal({
       return;
     }
     setSaving(true);
-    const res = await officeFetch("/api/office/dept-commissions/payout", {
+    const res = await officeFetch("/api/office/dept-payouts", {
       method: "POST",
       json: {
         adminId: user.adminId,
-        amount: Number(form.amount),
+        kind,
+        amount: form.amount.trim(),
         method: form.method,
         entryDate: form.entryDate || undefined,
         remarks: form.remarks.trim() || undefined,
@@ -47,7 +59,7 @@ export default function DeptPayModal({
     setSaving(false);
     if (res.ok) {
       // office:changed event → summary section silent reload ho jayega.
-      onToast("Commission payout save ho gaya", "success");
+      onToast(`${label} ki payment request bhej di — ${user.name} accept karega`, "success");
       onClose();
     } else {
       onToast(res.error, "error");
@@ -62,9 +74,11 @@ export default function DeptPayModal({
       <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Pay commission — {user.name}</h3>
+            <h3 className="text-lg font-bold text-slate-900">
+              Pay {label.toLowerCase()} — {user.name}
+            </h3>
             <p className="text-xs text-slate-500">
-              {ROLE_LABELS[user.role] || user.role} · Remaining: {formatMoney(user.remaining)}
+              {ROLE_LABELS[user.role] || user.role} · Baqi: {formatMoney(payable)}
             </p>
           </div>
           <button
@@ -76,6 +90,9 @@ export default function DeptPayModal({
             <X className="h-4 w-4" />
           </button>
         </div>
+        <p className="rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          Request {user.name} ko jayegi — jab wo &quot;Mil gaya&quot; (accept) karega tab paid shumar hogi.
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs text-slate-500">Amount (Rs) *</label>
@@ -131,7 +148,7 @@ export default function DeptPayModal({
           </button>
           <button type="button" disabled={saving} onClick={() => void submit()} className={primaryBtnCls}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Pay karein
+            Request bhejein
           </button>
         </div>
       </div>

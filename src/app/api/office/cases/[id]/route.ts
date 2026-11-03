@@ -14,6 +14,7 @@ import { CUSTOM_LABEL_COLORS } from "@/lib/office/labels";
 import { getOfficeCategories } from "@/lib/office/setup-cache";
 import { advanceCourierStage, parseCaseInput } from "@/lib/office/workflow";
 import { notifyCourierStage } from "@/lib/office/notifications";
+import { DEPT_OTHER_EXPENSE_CATEGORY } from "@/lib/office/dept-expenses";
 
 export const preferredRegion = ["sin1"];
 
@@ -200,12 +201,27 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         payments: { select: { id: true, slipKey: true } },
         files: { select: { fileKey: true } },
         remarks: { select: { id: true } },
+        // §W51: department user ka apni jeb se diya kharcha (courier).
+        expenses: {
+          where: { paidByAdminId: { not: null } },
+          select: { amount: true, description: true, expenseDate: true, paidByAdminId: true, createdById: true },
+        },
       },
     });
     if (!existing) return notFound("Case nahi mila");
 
     const paymentIds = existing.payments.map((payment) => payment.id);
     const remarkIds = existing.remarks.map((remark) => remark.id);
+    // §W51: case jaye magar user ka diya paisa (admin se wasooli baqi) na jaye —
+    // wo kharcha company expense (Other) ban kar user ke hisaab mein rehta hai.
+    const keptDeptExpenses = existing.expenses.map((expense) => ({
+      amount: expense.amount,
+      description: `Case ${existing.caseNumber} (delete ho chuka) — ${expense.description}`.slice(0, 300),
+      category: DEPT_OTHER_EXPENSE_CATEGORY,
+      expenseDate: expense.expenseDate,
+      paidByAdminId: expense.paidByAdminId,
+      createdById: expense.createdById,
+    }));
 
     // Dependency order: children first, case row last. §W20-R5 (review #4):
     // interactive tx ke 12 sequential round-trips (cross-region par ~2-4s) ki
@@ -214,6 +230,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       prisma.ledgerEntry.deleteMany({
         where: { OR: [{ caseId: id }, { paymentId: { in: paymentIds } }] },
       }),
+      ...(keptDeptExpenses.length ? [prisma.companyExpense.createMany({ data: keptDeptExpenses })] : []),
       prisma.caseExpense.deleteMany({ where: { caseId: id } }),
       prisma.caseAttestation.deleteMany({ where: { caseId: id } }),
       ...(remarkIds.length

@@ -322,3 +322,43 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   wale + us booking office ke tamam active booking_office users ko notification
   (`notifyCaseOffice`); pehli slip "Delivered — courier slip upload ho gayi",
   baad wali "nayi courier slip upload hui". Case detail tabs mobile par 3x2 grid.
+
+## BR19. Department kharche, wapsi aur expense rule — §W51
+
+- **Courier kharcha**: courier permission wala user slip upload karte waqt (preview
+  mein "Courier amount", optional) ya case page ke "Courier kharcha (aap ka)" card se
+  amount daalta hai → us case ka `CaseExpense` (kind COURIER, `paidByAdminId` = user;
+  super admin khud daale to null — company ka kharcha, wapsi nahi). Ye case expense
+  har formula mein pehle jaisa: partner office pool (received − case expenses − dept
+  commission) → har shareholder apne % se, admin baqi %; commission office ka rule
+  (neeche); admin profit (`caseExpenses` bucket).
+- **Other kharcha**: printing / attestation / courier user Finance → Mera account se
+  (amount + date + comment LAZMI) → `CompanyExpense` (category DEPT_OTHER,
+  `paidByAdminId`). Kisi case / office se nahi — sirf admin ke profit se minus
+  (`companyExpenses`). Super admin ke liye ye option nahi.
+- Kharche ka hisaab per user: kul − accept ho chuki wapsi = **"Admin se wasooli
+  baqi"** (courier aur other alag). User apna kharcha 24 ghante tak khud hata sakta
+  hai; baad mein sirf `office:expenses:write`. Case delete ho to user ka diya courier
+  kharcha Other kharcha ban kar rehta hai (wasooli zaya nahi).
+- **Payment request** (`DeptPayoutRequest`, `office:ledger:write`): kind COMMISSION /
+  COURIER_EXPENSE / OTHER_EXPENSE — teeno alag Pay. PENDING request user ko notify;
+  user "Mil gaya" (accept) kare tab paid. COMMISSION accept par wahi PAYOUT DEBIT
+  ledger row (adminId) jo pehle direct payout likhta tha (earned / paid / remaining
+  pehle jaisa); kharchon ki wapsi ledger mein nahi (expense pehle hi profit se minus —
+  wapsi sirf qarz ada karti hai, profit par asar nahi). Kharchon ki request baqi −
+  pending se zyada nahi; commission par pehle jaisa had nahi. User "Nahi mila" ya
+  admin / cashier "Cancel" → REJECTED. Purana direct dept payout route hata diya.
+- **Commission office expense rule**: `BookingOffice.expenseDeductPercent` (default
+  0 = koi expense commission se nahi katta), Setup → office → "Expenses commission
+  se minus". Case bante waqt `Case.expenseDeductPercent` mein likha jata hai — rule
+  (aur commission grid) badalne se sirf NAYE cases par asar. Har case expense (admin
+  ka, courier ka — sab) par admin (super) case page (History / Finance → Case
+  expenses) se apna % rakh sakta hai (`CaseExpense.commissionDeductPercent`, null =
+  case ka rule). Minus hissa = amount × % ÷ 100 → EXPENSE DEBIT case ke commission
+  member par (§W45 `caseCommissionMemberId`), remarks `Commission expense [<id>]:`
+  (finance isi se member-borne hissa admin profit se alag karta hai). Case ki
+  commission kisi member par na ho to kuch nahi katta (admin ko 400). Purana W21
+  `deductFromCommission: true` = 100%. Partner / salary office par ye rule nahi.
+- Admin Finance: KPI "Payable expenses" (tamam users ka courier + other baqi),
+  "Department kharche" section (Pay courier / Pay other / Details) + pending
+  department payment requests (Cancel). Cashier view mein bhi.

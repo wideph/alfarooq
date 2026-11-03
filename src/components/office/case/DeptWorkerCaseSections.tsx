@@ -1,13 +1,14 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import type { AdminNavUser } from "@/components/admin/AdminNav";
+import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import type { ToastKind } from "@/components/Toast";
 import CaseOverviewTab from "@/components/office/case/CaseOverviewTab";
 import CaseAttestationsTab from "@/components/office/case/CaseAttestationsTab";
 import CaseFilesTab from "@/components/office/case/CaseFilesTab";
 import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import DeptCommissionsAttached from "@/components/office/case/DeptCommissionsAttached";
+import CourierExpensesCard from "@/components/office/case/CourierExpensesCard";
 import type { CaseDetail } from "@/lib/office/types";
 
 // §W36 — printing / attestation / courier worker ka case detail: tabs ki
@@ -59,6 +60,17 @@ export default function DeptWorkerCaseSections({
       <section id="case-section-files" className="scroll-mt-40">
         <CaseFilesTab detail={detail} admin={admin} onReload={onReload} onMessage={onMessage} />
       </section>
+      {/* §W51: courier user ka is case par apna kharcha. */}
+      {adminCanAny(admin, ["office:courier:write"]) && (
+        <section id="case-section-courier-expense" className="scroll-mt-40">
+          <CourierExpensesCard
+            caseId={detail.id}
+            items={detail.myDeptExpenses ?? []}
+            onChanged={onReload}
+            onMessage={onMessage}
+          />
+        </section>
+      )}
       <section id="case-section-remarks" className="scroll-mt-40">
         <CaseRemarksTab caseId={detail.id} admin={admin} onMessage={onMessage} onChanged={onReload} />
       </section>

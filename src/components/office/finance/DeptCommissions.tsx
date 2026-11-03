@@ -1,41 +1,35 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { HandCoins, Printer } from "lucide-react";
-import { formatMoney, officeFetch } from "@/lib/office/client";
+import { formatMoney } from "@/lib/office/client";
 import { ROLE_LABELS } from "@/lib/office/permissions";
-import { useLiveRefresh } from "@/hooks/useLiveRefresh";
 import type { ToastKind } from "@/components/Toast";
 import { EmptyState, SectionHeader, TableSkeleton, dueToneClass } from "./ui";
-import DeptPayModal from "./DeptPayModal";
+import DeptPayModal, { deptPayable } from "./DeptPayModal";
 import DeptDetailsDrawer from "./DeptDetailsDrawer";
-import { normalizeDeptSummary, type DeptCommissionSummaryUser } from "./types";
+import type { DeptCommissionSummaryUser } from "./types";
 
-// §W21 — Department commissions (Printing / Attestation). Summary per dept
-// user: Earned | Paid (Wasool) | Remaining + Pay / Details actions.
+// §W21 — Department commissions (Printing / Attestation / Courier). Summary per
+// dept user: Earned | Paid (Wasool) | Remaining + Pay / Details actions.
 // Sirf admin/cashier (finance:read / ledger:read) view mein mount hota hai.
+// §W51: Pay = request (user accept kare tab paid); pending request remaining
+// ke neeche. Summary parent (useDeptSummary) se aati hai.
 export default function DeptCommissions({
+  users,
   onToast,
 }: {
+  users: DeptCommissionSummaryUser[] | null;
   onToast: (message: string, kind: ToastKind) => void;
 }) {
-  const [users, setUsers] = useState<DeptCommissionSummaryUser[] | null>(null);
   const [payTarget, setPayTarget] = useState<DeptCommissionSummaryUser | null>(null);
   const [detailTarget, setDetailTarget] = useState<DeptCommissionSummaryUser | null>(null);
-
-  const load = useCallback(async () => {
-    const res = await officeFetch<{ ok: boolean; users: unknown[] }>("/api/office/dept-commissions/summary");
-    if (res.ok) setUsers(normalizeDeptSummary(res.data));
-  }, []);
-
-  // Mount fetch + office:changed/polling live refresh (silent).
-  useLiveRefresh(load, { immediate: true });
 
   return (
     <section className="space-y-2">
       <SectionHeader
         icon={<Printer className="h-4 w-4 text-primary-600" />}
-        title="Department commissions (Printing / Attestation)"
+        title="Department commissions (Printing / Attestation / Courier)"
         count={users?.length}
       />
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -74,13 +68,18 @@ export default function DeptCommissions({
                     </td>
                     <td className={`px-3 py-2.5 text-right font-bold ${dueToneClass(user.remaining)}`}>
                       {formatMoney(user.remaining)}
+                      {user.pending > 0 && (
+                        <span className="block text-[11px] font-semibold text-sky-600">
+                          {formatMoney(user.pending)} request pending
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setPayTarget(user)}
-                          disabled={user.remaining <= 0}
+                          disabled={deptPayable(user, "COMMISSION") <= 0}
                           className="inline-flex items-center gap-1 rounded-xl bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
                         >
                           <HandCoins className="h-3.5 w-3.5" /> Pay
@@ -103,7 +102,7 @@ export default function DeptCommissions({
       </div>
 
       {payTarget && (
-        <DeptPayModal user={payTarget} onClose={() => setPayTarget(null)} onToast={onToast} />
+        <DeptPayModal user={payTarget} kind="COMMISSION" onClose={() => setPayTarget(null)} onToast={onToast} />
       )}
       {detailTarget && (
         <DeptDetailsDrawer user={detailTarget} onClose={() => setDetailTarget(null)} />
