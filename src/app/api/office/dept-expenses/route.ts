@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       });
       await notifyAdmins({
         type: "dept.expense",
-        title: `Review: other kharcha Rs ${toNumber(amount).toLocaleString("en-PK")} — ${session.name}`,
+        title: `Review: other expenses Rs ${toNumber(amount).toLocaleString("en-PK")} — ${session.name}`,
         body: description,
         link: "/office/payments?view=expenses",
       });

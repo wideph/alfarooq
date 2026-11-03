@@ -2133,3 +2133,18 @@ Investigation-first (live DB audit):
   → Details mein dekh / hata sakta hai.
 - **Next step**: owner live par: courier user list se amount Add → admin Payments →
   "Department kharche" → Manzoor / Wapas; user ke Mera account mein status.
+
+## WAVE 53 (2026-11-05) — "Other expenses" naam + Mera account ki tarteeb
+
+- **Owner request**: departments mein "Other kharcha" ka naam "Other expenses", add par
+  "New other expenses". Mera account: commission total line ke foran baad courier
+  expense line, phir other expense line; phir commission detail, courier detail, other
+  detail; phir baqi. Admin teeno mein se jo bhi pay kare us ki line usi ke neeche.
+- **UI**: `DeptMyAccount` dobara: `SummaryLine` (naam | kul | wapas mila | admin se
+  wasooli baqi; review mein raqam ka note) × 3, har line ke neeche `paymentsUnder(kind)`
+  (PENDING DeptPayoutRequest, Mil gaya / Nahi mila); detail sections; New other
+  expenses form; Payment history (commission wasool + decided requests). Labels:
+  `DEPT_PAYOUT_KIND_LABELS.OTHER_EXPENSE`, admin DeptExpenses / drawer, review card,
+  review notifications → "Other expenses". Koi API / hisaab / DB change nahi.
+- **Verify**: tsc 0, lint 0, build exit 0. Browser check nahi (live data ki ijazat nahi).
+- **Next step**: owner department user se Mera account (desktop + mobile) dekhe.

@@ -206,7 +206,7 @@ export default function DeptExpenseReviews({
                         }`}
                       >
                         <KindIcon className="h-3 w-3" />
-                        {row.kind === "COURIER" ? "Courier kharcha" : "Other kharcha"}
+                        {row.kind === "COURIER" ? "Courier kharcha" : "Other expenses"}
                       </span>
                     </p>
                     {/* Courier: kis case ka */}
@@ -230,7 +230,7 @@ export default function DeptExpenseReviews({
                         )}
                         {row.caseDeleted && (
                           <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-red-600">
-                            <AlertTriangle className="h-3.5 w-3.5" /> Case delete ho chuka — manzoori par Other kharcha
+                            <AlertTriangle className="h-3.5 w-3.5" /> Case delete ho chuka — manzoori par Other expenses mein
                             banega
                           </p>
                         )}

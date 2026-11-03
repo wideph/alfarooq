@@ -106,7 +106,7 @@ export default function DeptExpenses({
                 <tr className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2 text-right">Courier kharcha (baqi)</th>
-                  <th className="px-3 py-2 text-right">Other kharcha (baqi)</th>
+                  <th className="px-3 py-2 text-right">Other expenses (baqi)</th>
                   <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
               </thead>

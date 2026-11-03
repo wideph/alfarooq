@@ -126,7 +126,7 @@ export const DEPT_COMMISSION_KIND_STYLES: Record<string, string> = {
 export const DEPT_PAYOUT_KIND_LABELS: Record<string, string> = {
   COMMISSION: "Commission",
   COURIER_EXPENSE: "Courier kharcha",
-  OTHER_EXPENSE: "Other kharcha",
+  OTHER_EXPENSE: "Other expenses",
 };
 
 export const DEPT_PAYOUT_STATUS_LABELS: Record<string, string> = {

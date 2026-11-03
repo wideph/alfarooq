@@ -387,3 +387,15 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   (review nahi). Notifications: naya kharcha → super admins; faisla → user.
 - Courier list row: "Rs X manzoor" (user ka manzoor shuda, `myCourierExpense`) aur
   "Rs Y review mein" (`myCourierPending`) — sirf user ka apna.
+
+## BR21. Mera account ki tarteeb + "Other expenses" naam — §W53
+
+- Department user ke "Other kharcha" ka naam har jagah **"Other expenses"** (add form
+  "New other expenses"; admin Finance / review / payment request labels bhi).
+- Mera account (department user) ki tarteeb: (1) teen hisaab lines — Commission, phir
+  Courier kharcha, phir Other expenses (kul / wapas mila / admin se wasooli baqi; review
+  wali raqam line par note). Admin jis qism ki payment bheje, us ki request ("Mil gaya"
+  / "Nahi mila") USI line ke foran neeche. (2) Commission detail, phir Courier kharcha
+  detail (review mein + manzoor shuda), phir Other expenses detail. (3) Baqi: New other
+  expenses form, Payment history (commission wasool + kharchon ki wapsi / wapas ki gayi).
+  Hisaab / API mein koi tabdeeli nahi.

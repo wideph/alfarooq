@@ -86,12 +86,12 @@ export default function DeptExpensesDrawer({
                 />
               </section>
               <section className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Other kharcha</p>
-                <DeptMoneyEquation money={data.totals.other} title="Kul other kharcha" />
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Other expenses</p>
+                <DeptMoneyEquation money={data.totals.other} title="Kul other expenses" />
                 <DeptExpenseList
                   kind="OTHER"
                   rows={data.other}
-                  empty="Koi other kharcha nahi"
+                  empty="Koi other expenses nahi"
                   onChanged={load}
                   onToast={onToast}
                 />
