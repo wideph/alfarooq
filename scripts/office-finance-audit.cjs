@@ -77,11 +77,18 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
       }
     }
     // Office expenses → member debits
-    const oexp = await p.officeExpense.findMany({ where: { bookingOfficeId: o.id }, select: { id: true, amount: true, deductFromCommission: true, description: true } });
+    const oexp = await p.officeExpense.findMany({ where: { bookingOfficeId: o.id }, select: { id: true, amount: true, deductFromCommission: true, description: true, paidByAdminId: true } });
     for (const e of oexp) {
       const tag = o.type === "PROFIT_SHARE" ? `Office expense share [${e.id}]` : `Commission expense share [${e.id}]`;
       const d = allLedger.filter((l) => l.type === "EXPENSE" && (l.remarks || "").startsWith(tag));
       const debited = r2(d.reduce((t, l) => t - signed(l), 0));
+      // §W54: delete hue case ka department kharcha "usi office par" — member
+      // hisse case wale (snapshot % / commission se jitna minus tha), aam split
+      // nahi. Sirf itna pakka: members ka hissa kharche se zyada na ho.
+      if (e.paidByAdminId) {
+        if (debited - n(e.amount) > 0.005) issue(`${o.name} case-delete office expense ${n(e.amount)}: member debits ${debited} zyada`);
+        continue;
+      }
       if (o.type === "PROFIT_SHARE") {
         const pctSum = o.members.filter((m) => m.isActive).reduce((t, m) => t + n(m.profitPercent), 0);
         const expected = o.members.filter((m) => m.isActive && n(m.profitPercent) > 0).reduce((t, m) => t + r2(n(e.amount) * n(m.profitPercent) / 100), 0);

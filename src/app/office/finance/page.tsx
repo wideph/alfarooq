@@ -245,7 +245,8 @@ function FinanceDashboard({
         expenses={totalExpenses}
         wasool={users?.totals.wasool ?? 0}
         due={users?.totals.due ?? 0}
-        payableExpenses={payableDeptExpenses(deptUsers)}
+        payableExpenses={payableDeptExpenses(deptUsers).payable}
+        advanceExpenses={payableDeptExpenses(deptUsers).advance}
       />
 
       {/* 1b. §W21 Admin profit strip (period selector + breakdown modal) */}

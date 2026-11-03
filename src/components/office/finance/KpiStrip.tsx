@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMoney } from "@/lib/office/client";
 import { StatCard } from "./ui";
 
 // KPI strip — all-time honest numbers:
@@ -15,12 +16,15 @@ export default function KpiStrip({
   wasool,
   due,
   payableExpenses,
+  advanceExpenses = 0,
 }: {
   received: number;
   expenses: number;
   wasool: number;
   due: number;
   payableExpenses: number;
+  // §W54: kharchon ki wapsi jo advance mein di (users ne admin ka dena hai).
+  advanceExpenses?: number;
 }) {
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -36,7 +40,11 @@ export default function KpiStrip({
           label="Payable expenses"
           value={payableExpenses}
           tone={payableExpenses > 0 ? "amber" : "slate"}
-          hint="Department users ke kharche (courier + other) — wapas dene hain"
+          hint={
+            advanceExpenses > 0
+              ? `Department users ke kharche — wapas dene hain · advance diya ${formatMoney(advanceExpenses)}`
+              : "Department users ke kharche (courier + other) — wapas dene hain"
+          }
         />
       </a>
     </div>

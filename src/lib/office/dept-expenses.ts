@@ -13,6 +13,8 @@ import { dec, toNumber } from "@/lib/office/money";
 // Wapsi DeptPayoutRequest se (user accept kare tab "paid"); commission ki
 // payment bhi isi request flow se (accept par purani PAYOUT ledger row).
 // Baqi = kul kharcha − accept ho chuki wapsi ("Admin se wasooli baqi").
+// §W54: admin kharchon ki wapsi ADVANCE mein bhi de sakta hai — baqi minus
+// (user ne admin ka itna dena hai / agle kharchon se barabar).
 
 export const DEPT_PAYOUT_KINDS = ["COMMISSION", "COURIER_EXPENSE", "OTHER_EXPENSE"] as const;
 export type DeptPayoutKind = (typeof DEPT_PAYOUT_KINDS)[number];
@@ -36,10 +38,17 @@ function emptyTotals() {
 // Har user ke kharche / wapsi / pending requests ka total (ek batch, koi N+1 nahi).
 export async function deptExpenseTotals(adminIds?: string[]): Promise<Map<string, DeptExpenseTotals>> {
   const paidBy = adminIds ? { in: adminIds } : { not: null };
-  const [courierRows, otherRows, requestRows] = await Promise.all([
+  const [courierRows, officeCourierRows, otherRows, requestRows] = await Promise.all([
     prisma.caseExpense.groupBy({
       by: ["paidByAdminId"],
       where: { paidByAdminId: paidBy, kind: COURIER_EXPENSE_KIND },
+      _sum: { amount: true },
+    }),
+    // §W54: case delete par "usi office par rahe" — courier kharcha office ka
+    // kharcha ban gaya, user ki wapsi courier hisaab mein hi.
+    prisma.officeExpense.groupBy({
+      by: ["paidByAdminId"],
+      where: { paidByAdminId: paidBy },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
@@ -63,8 +72,10 @@ export async function deptExpenseTotals(adminIds?: string[]): Promise<Map<string
     }
     return entry;
   };
-  for (const row of courierRows) {
-    if (row.paidByAdminId) of(row.paidByAdminId).courier.total = dec(row._sum.amount);
+  for (const row of [...courierRows, ...officeCourierRows]) {
+    if (!row.paidByAdminId) continue;
+    const entry = of(row.paidByAdminId);
+    entry.courier.total = entry.courier.total.plus(dec(row._sum.amount));
   }
   for (const row of otherRows) {
     if (row.paidByAdminId) of(row.paidByAdminId).other.total = dec(row._sum.amount);

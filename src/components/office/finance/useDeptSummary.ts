@@ -20,6 +20,15 @@ export function useDeptSummary(): DeptCommissionSummaryUser[] | null {
 }
 
 // Admin ne department users ko kharchon ki kitni wapsi deni hai (courier + other).
+// §W54: advance (minus baqi) is mein se nahi katta — wo alag (`advance`).
 export function payableDeptExpenses(users: DeptCommissionSummaryUser[] | null) {
-  return (users ?? []).reduce((acc, user) => acc + user.courier.remaining + user.other.remaining, 0);
+  let payable = 0;
+  let advance = 0;
+  for (const user of users ?? []) {
+    for (const remaining of [user.courier.remaining, user.other.remaining]) {
+      if (remaining > 0) payable += remaining;
+      else advance -= remaining;
+    }
+  }
+  return { payable, advance };
 }

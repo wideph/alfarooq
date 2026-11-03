@@ -14,7 +14,12 @@ import { CUSTOM_LABEL_COLORS } from "@/lib/office/labels";
 import { getOfficeCategories } from "@/lib/office/setup-cache";
 import { advanceCourierStage, parseCaseInput } from "@/lib/office/workflow";
 import { notifyCourierStage } from "@/lib/office/notifications";
-import { DEPT_OTHER_EXPENSE_CATEGORY } from "@/lib/office/dept-expenses";
+import {
+  deptExpenseDecisionPayload,
+  deptExpenseDeleteOps,
+  isCaseDeleteExpenseChoice,
+  loadCaseDeptExpenses,
+} from "@/lib/office/case-delete-expenses";
 
 export const preferredRegion = ["sin1"];
 
@@ -185,7 +190,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 // interactive transaction mein; R2 objects + audit rows + notifications
 // commit ke baad best-effort. Ledger rows delete hone se users ki
 // earning/wasool/due har jagah apne aap sahi ho jati hai.
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+// §W54: case par department user ka manzoor shuda kharcha ho to admin ka faisla
+// lazmi — `?deptExpenses=OTHER|OFFICE|REVERSE` (case-delete-expenses.ts). Na ho
+// to 409 `needsDeptExpenseDecision` (koi write nahi; dialog sawal dikhata hai).
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:cases:write");
   if (denied) return denied;
   if (session.role !== "admin") return forbidden("Case sirf super admin delete kar sakta hai");
@@ -201,27 +209,28 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         payments: { select: { id: true, slipKey: true } },
         files: { select: { fileKey: true } },
         remarks: { select: { id: true } },
-        // §W51: department user ka apni jeb se diya kharcha (courier).
-        expenses: {
-          where: { paidByAdminId: { not: null } },
-          select: { amount: true, description: true, expenseDate: true, paidByAdminId: true, createdById: true },
-        },
       },
     });
     if (!existing) return notFound("Case nahi mila");
 
+    const deptExpenses = await loadCaseDeptExpenses(id);
+    const choice = new URL(request.url).searchParams.get("deptExpenses");
+    let expenseOps: ReturnType<typeof deptExpenseDeleteOps> = [];
+    if (deptExpenses && deptExpenses.expenses.length > 0) {
+      if (!isCaseDeleteExpenseChoice(choice)) {
+        return NextResponse.json(
+          {
+            error: "Is case par department user ka kharcha hai — pehle batayein us ka kya karna hai",
+            needsDeptExpenseDecision: deptExpenseDecisionPayload(deptExpenses),
+          },
+          { status: 409 }
+        );
+      }
+      expenseOps = deptExpenseDeleteOps(deptExpenses, choice, session.adminId);
+    }
+
     const paymentIds = existing.payments.map((payment) => payment.id);
     const remarkIds = existing.remarks.map((remark) => remark.id);
-    // §W51: case jaye magar user ka diya paisa (admin se wasooli baqi) na jaye —
-    // wo kharcha company expense (Other) ban kar user ke hisaab mein rehta hai.
-    const keptDeptExpenses = existing.expenses.map((expense) => ({
-      amount: expense.amount,
-      description: `Case ${existing.caseNumber} (delete ho chuka) — ${expense.description}`.slice(0, 300),
-      category: DEPT_OTHER_EXPENSE_CATEGORY,
-      expenseDate: expense.expenseDate,
-      paidByAdminId: expense.paidByAdminId,
-      createdById: expense.createdById,
-    }));
 
     // Dependency order: children first, case row last. §W20-R5 (review #4):
     // interactive tx ke 12 sequential round-trips (cross-region par ~2-4s) ki
@@ -230,7 +239,8 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
       prisma.ledgerEntry.deleteMany({
         where: { OR: [{ caseId: id }, { paymentId: { in: paymentIds } }] },
       }),
-      ...(keptDeptExpenses.length ? [prisma.companyExpense.createMany({ data: keptDeptExpenses })] : []),
+      // §W54: admin ke faisle wale writes (Other / office / reverse = kuch nahi).
+      ...expenseOps,
       prisma.caseExpense.deleteMany({ where: { caseId: id } }),
       prisma.caseAttestation.deleteMany({ where: { caseId: id } }),
       ...(remarkIds.length
@@ -272,6 +282,17 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         .deleteMany({ where: { link: { contains: `/office/cases/${id}` } } })
         .catch((error) => console.error("[office] case.delete notification cleanup fail", error)),
     ]);
+
+    // §W54: department kharche ka faisla — alag entity par (case ke audit rows
+    // upar saaf ho jate hain, ye nishan rehta hai).
+    if (deptExpenses && deptExpenses.expenses.length > 0) {
+      await logOfficeAction(session, {
+        action: "case.delete.dept-expenses",
+        entity: "CaseDelete",
+        entityId: id,
+        after: { choice, ...deptExpenseDecisionPayload(deptExpenses) },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

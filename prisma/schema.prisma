@@ -804,6 +804,10 @@ model OfficeExpense {
   // members par profitPercent se split ho kar un ke commission ledger se
   // kat-ta hai (per-member EXPENSE DEBIT rows).
   deductFromCommission Boolean @default(false)
+  // §W54: case delete par admin ne "kharcha usi office par rahe" chuna — department
+  // user ka courier kharcha office ka kharcha ban gaya; user ka wapsi ka haq
+  // (admin se wasooli) isi se. null = aam office kharcha.
+  paidByAdminId   String?
   createdById     String
   createdAt       DateTime @default(now())
 
@@ -812,6 +816,7 @@ model OfficeExpense {
 
   @@index([bookingOfficeId])
   @@index([expenseDate])
+  @@index([paidByAdminId])
 }
 
 model DepartmentLink {

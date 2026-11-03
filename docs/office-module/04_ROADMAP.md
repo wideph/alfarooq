@@ -99,3 +99,4 @@ to `05_AGENT_LOG.md` when you finish or stop.
 - [x] W51.1 Courier kharcha list se hi (slip button ke neeche amount + Add), slip preview se amount hataya.
 - [x] W52 Department kharche admin ke review ke baad hi system mein: DeptExpenseRequest (PENDING / ACCEPTED / REJECTED), Payments tab ka sub-tab "Department kharche" (badge, Review baqi / Manzoor / Wapas, raqam theek kar ke manzoor, wajah ke saath wapas), user ke liye review status + cancel, navbar Payments badge mein ginti.
 - [x] W53 "Other kharcha" → "Other expenses" (New other expenses); Mera account: teen hisaab lines (Commission → Courier → Other) aur har line ke neeche us ki payment request, phir teeno ki detail lists, phir baqi.
+- [x] W54 Kharchon ki wapsi advance mein (baqi minus, "Advance" button / warning, KPI mein alag); case delete par department kharche ka admin faisla: Other expenses / usi office par rahe (OfficeExpense + member hisse wahi) / har jagah se reverse.

@@ -399,3 +399,28 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   detail (review mein + manzoor shuda), phir Other expenses detail. (3) Baqi: New other
   expenses form, Payment history (commission wasool + kharchon ki wapsi / wapas ki gayi).
   Hisaab / API mein koi tabdeeli nahi.
+
+## BR22. Kharchon ki advance wapsi + case delete par admin ka faisla — §W54
+
+- **Advance**: admin department user ko courier kharcha / other expenses ki wapsi
+  baqi se zyada bhi bhej sakta hai (commission jaisa) — accept par us qism ka
+  "Admin se wasooli baqi" minus ("Advance mila (minus)", red); agle kharche us mein
+  barabar hote hain. Admin Finance → Department kharche: har department user ki row
+  (kharcha na ho tab bhi), baqi 0 / minus par button "Advance"; Pay modal baqi se
+  zyada par amber "Advance: Rs X…". KPI "Payable expenses" = sirf musbat baqi ka
+  total; advance hint mein alag.
+- **Case delete** (BR19 ka "khud Other ban jata hai" khatam): case par manzoor shuda
+  department kharcha (CaseExpense.paidByAdminId) ho to delete 409
+  `needsDeptExpenseDecision` → dialog mein teen options, `?deptExpenses=`:
+  - **OTHER** — Other expenses (CompanyExpense DEPT_OTHER): sirf admin ka; user ki
+    wapsi baqi.
+  - **OFFICE** — "Usi office par rahe": OfficeExpense (paidByAdminId = user) usi
+    booking office par; partner office → har member ke % (case snapshot, warna abhi
+    ke active %) ka EXPENSE DEBIT `Office expense share [id]`; commission office →
+    jitna case par commission se minus tha utna hi usi member par `Commission expense
+    share [id]` (flag on); salary → koi member row nahi. User ki wapsi baqi (courier
+    hisaab mein). Hatana Finance → Office expenses se.
+  - **REVERSE** — kharcha khatam, wapsi ka haq khatam; wapsi pehle di ho to user ka
+    courier hisaab minus.
+  Review mein pade kharche is faisle mein nahi (Payments → Department kharche mein;
+  manzoori par Other expenses). Faisla audit: entity "CaseDelete".

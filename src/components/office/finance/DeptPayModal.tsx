@@ -38,6 +38,9 @@ export default function DeptPayModal({
     remarks: "",
   });
   const [saving, setSaving] = useState(false);
+  // §W54: baqi se zyada = advance (user ka hisaab minus mein).
+  const typed = Number(form.amount.replace(/,/g, ""));
+  const advance = Number.isFinite(typed) && typed > payable ? typed - payable : 0;
 
   async function submit() {
     if (!form.amount.trim() || Number(form.amount) <= 0) {
@@ -137,6 +140,12 @@ export default function DeptPayModal({
             />
           </div>
         </div>
+        {advance > 0 && (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
+            Advance: {formatMoney(advance)} baqi se zyada — accept hone par {user.name} ka {label.toLowerCase()} hisaab
+            minus mein chala jayega (agle {kind === "COMMISSION" ? "commission" : "kharchon"} se barabar hoga).
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <button
             type="button"

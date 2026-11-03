@@ -2148,3 +2148,29 @@ Investigation-first (live DB audit):
   review notifications → "Other expenses". Koi API / hisaab / DB change nahi.
 - **Verify**: tsc 0, lint 0, build exit 0. Browser check nahi (live data ki ijazat nahi).
 - **Next step**: owner department user se Mera account (desktop + mobile) dekhe.
+
+## WAVE 54 (2026-11-06) — Kharchon ki advance wapsi + case delete par admin ka faisla
+
+- **Owner**: (1) kharcha advance mein bhi ja sakta hai — tab kharcha minus mein dikhe.
+  (2) case delete par courier kharcha khud "Other" na bane — system admin se poochhe:
+  Other expenses (sirf admin) / isi jagah rahe / har jagah se reverse. Sawal (AskUserQuestion):
+  "isi jagah" = usi office par rahe (shareholders % / commission member utna hi, user ki
+  wapsi baqi); reverse par wapsi de chuke hon to user ka hisaab minus — dono par haan.
+- **DB**: migration `20261106120000_office_wave54` — OfficeExpense.paidByAdminId (+ index).
+- **Advance**: dept-payouts POST se kharchon ki "baqi se zyada nahi" had hata di (sirf
+  dept user check). DeptExpenses: tamam dept users ki rows (activity wale upar), baqi ≤ 0
+  par "Advance" button, MoneyCell "advance diya hua"; DeptPayModal amber advance warning;
+  KPI payable = musbat baqi, advance hint; Mera account line minus par "Advance mila
+  (minus)" red.
+- **Case delete**: `lib/office/case-delete-expenses.ts` (load, 409 payload, batch ops
+  OTHER / OFFICE / REVERSE); cases/[id] DELETE `?deptExpenses=` (na ho to 409, koi write
+  nahi), faisla audit entity "CaseDelete". DeleteCaseButton: 409 par usi dialog mein
+  kharchon ki list + teen radio options (office type ke mutabiq asar likha) + review
+  wale kharchon ka note. deptExpenseTotals courier mein OfficeExpense.paidByAdminId;
+  dept-expenses GET courier list mein bhi (delete Office expenses se). Audit script:
+  paidByAdminId wale office expense par sirf "debits ≤ amount".
+- **Verify**: tsc 0, lint 0, build exit 0. Offline test (prisma createMany mock) 9/9:
+  OTHER → DEPT_OTHER + paidBy; REVERSE → kuch nahi; partner snapshot 40/25% → 400 / 250
+  `Office expense share [id]`; bina snapshot active 30/20 (inactive skip); FIXED 500 →
+  usi member `Commission expense share` + flag; FIXED 0 / SALARY → sirf office expense;
+  409 payload. Browser check nahi (live data ki ijazat nahi).

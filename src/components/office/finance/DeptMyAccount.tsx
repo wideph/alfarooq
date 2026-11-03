@@ -78,13 +78,18 @@ function SummaryLine({
           <p className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-sky-700">Wapas mila</p>
           <p className="truncate text-sm font-bold text-sky-800 sm:text-base">{formatMoney(money.paid)}</p>
         </div>
-        <div className={`rounded-xl px-2.5 py-2 ${money.remaining > 0 ? "bg-amber-50" : "bg-emerald-50"}`}>
+        {/* §W54: minus = admin ne advance diya (agle kharche / commission se barabar). */}
+        <div
+          className={`rounded-xl px-2.5 py-2 ${
+            money.remaining > 0 ? "bg-amber-50" : money.remaining < 0 ? "bg-red-50" : "bg-emerald-50"
+          }`}
+        >
           <p
             className={`text-[10px] font-semibold uppercase leading-tight tracking-wide ${
-              money.remaining > 0 ? "text-amber-700" : "text-emerald-700"
+              money.remaining > 0 ? "text-amber-700" : money.remaining < 0 ? "text-red-700" : "text-emerald-700"
             }`}
           >
-            Admin se wasooli baqi
+            {money.remaining < 0 ? "Advance mila (minus)" : "Admin se wasooli baqi"}
           </p>
           <p
             className={`truncate text-sm font-bold sm:text-base ${

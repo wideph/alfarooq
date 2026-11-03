@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const canAdminDelete = hasPermission(session, "office:expenses:write");
-    const [courier, other, requests, reviews, totals] = await Promise.all([
+    const [courier, officeCourier, other, requests, reviews, totals] = await Promise.all([
       prisma.caseExpense.findMany({
         where: { paidByAdminId: requested, kind: COURIER_EXPENSE_KIND },
         orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
@@ -47,6 +47,14 @@ export async function GET(request: NextRequest) {
           createdAt: true,
           case: { select: { id: true, caseNumber: true, clientName: true } },
         },
+      }),
+      // §W54: case delete par "usi office par rahe" — ab office ka kharcha (case
+      // nahi raha); hatana Finance → Office expenses se (tagged rows ke saath).
+      prisma.officeExpense.findMany({
+        where: { paidByAdminId: requested },
+        orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
+        take: 200,
+        select: { id: true, amount: true, description: true, expenseDate: true, createdAt: true },
       }),
       prisma.companyExpense.findMany({
         where: { paidByAdminId: requested },
@@ -78,17 +86,27 @@ export async function GET(request: NextRequest) {
         ok: true,
         adminId: requested,
         totals: totals.get(requested) ?? emptyDeptExpenseTotals(),
-        courier: courier.map((row) => ({
-          id: row.id,
-          amount: row.amount,
-          description: row.description,
-          expenseDate: row.expenseDate,
-          createdAt: row.createdAt,
-          caseId: row.case.id,
-          caseNumber: row.case.caseNumber,
-          clientName: row.case.clientName || null,
-          canDelete: canAdminDelete,
-        })),
+        courier: [
+          ...courier.map((row) => ({
+            id: row.id,
+            amount: row.amount,
+            description: row.description,
+            expenseDate: row.expenseDate,
+            createdAt: row.createdAt,
+            caseId: row.case.id,
+            caseNumber: row.case.caseNumber,
+            clientName: row.case.clientName || null,
+            canDelete: canAdminDelete,
+          })),
+          ...officeCourier.map((row) => ({
+            id: row.id,
+            amount: row.amount,
+            description: row.description,
+            expenseDate: row.expenseDate,
+            createdAt: row.createdAt,
+            canDelete: false,
+          })),
+        ].sort((a, b) => b.expenseDate.getTime() - a.expenseDate.getTime()),
         other: other.map((row) => ({
           id: row.id,
           amount: row.amount,

@@ -28,6 +28,7 @@ function MoneyCell({ money }: { money: DeptMoney }) {
   return (
     <div className="text-right">
       <p className={`font-bold ${dueToneClass(money.remaining)}`}>{formatMoney(money.remaining)}</p>
+      {money.remaining < 0 && <p className="text-[11px] font-semibold text-red-600">advance diya hua</p>}
       <p className="text-[11px] text-slate-400">
         kul {formatMoney(money.total)} · wapas {formatMoney(money.paid)}
       </p>
@@ -62,17 +63,23 @@ export default function DeptExpenses({
   }, []);
   useLiveRefresh(loadPending, { immediate: true });
 
-  const rows = (users ?? []).filter(
-    (user) => user.courier.total > 0 || user.other.total > 0 || user.courier.paid > 0 || user.other.paid > 0
-  );
+  // §W54: har department user (advance bhi diya ja sakta hai — kharcha na ho tab
+  // bhi Pay); kharche / wapsi wale upar.
+  const active = (user: DeptCommissionSummaryUser) =>
+    user.courier.total !== 0 || user.other.total !== 0 || user.courier.paid !== 0 || user.other.paid !== 0;
+  const rows = [...(users ?? [])].sort((a, b) => Number(active(b)) - Number(active(a)));
   const payButton = (user: DeptCommissionSummaryUser, kind: DeptPayoutKind) => (
     <button
       type="button"
       onClick={() => setPay({ user, kind })}
-      disabled={deptPayable(user, kind) <= 0}
-      className="inline-flex items-center gap-1 rounded-xl bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+      title={deptPayable(user, kind) <= 0 ? "Baqi nahi — advance dena ho to" : undefined}
+      className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold ${
+        deptPayable(user, kind) > 0
+          ? "bg-primary-600 text-white"
+          : "border border-primary-200 bg-white text-primary-700 hover:bg-primary-50"
+      }`}
     >
-      <HandCoins className="h-3.5 w-3.5" /> Pay
+      <HandCoins className="h-3.5 w-3.5" /> {deptPayable(user, kind) > 0 ? "Pay" : "Advance"}
     </button>
   );
 
@@ -98,7 +105,7 @@ export default function DeptExpenses({
         {users === null ? (
           <TableSkeleton rows={2} />
         ) : rows.length === 0 ? (
-          <EmptyState>Abhi kisi department user ka koi kharcha nahi</EmptyState>
+          <EmptyState>Abhi koi department user nahi</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-sm">

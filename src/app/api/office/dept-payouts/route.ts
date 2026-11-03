@@ -5,16 +5,11 @@ import { hasPermission, parsePermissions } from "@/lib/auth";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { notifyUsers } from "@/lib/office/notifications";
-import { dec, parseAmount, toNumber } from "@/lib/office/money";
+import { parseAmount, toNumber } from "@/lib/office/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly, todayPakistan, toJson } from "@/lib/office/serializers";
 import { deptCommissionKindsOf, hasAnyDeptCommissionPermission } from "@/lib/office/dept-commission";
-import {
-  DEPT_PAYOUT_STATUSES,
-  deptExpenseTotals,
-  emptyDeptExpenseTotals,
-  isDeptPayoutKind,
-} from "@/lib/office/dept-expenses";
+import { DEPT_PAYOUT_STATUSES, deptExpenseTotals, isDeptPayoutKind } from "@/lib/office/dept-expenses";
 import { DEPT_PAYOUT_KIND_LABELS } from "@/lib/office/labels";
 
 export const preferredRegion = ["sin1"];
@@ -63,8 +58,8 @@ export async function GET(request: NextRequest) {
 }
 
 // POST { adminId, kind, amount, method?, entryDate, remarks? } (office:ledger:write)
-// → PENDING + user ko notification. Kharchon ki wapsi baqi (− pending) se
-// zyada nahi; commission par pehle jaisa koi had nahi (advance mumkin).
+// → PENDING + user ko notification. §W54: koi had nahi — commission ki tarah
+// kharchon ki wapsi bhi advance mein (baqi minus) ho sakti hai.
 export async function POST(request: NextRequest) {
   const { session, denied } = await guardOffice("office:ledger:write");
   if (denied) return denied;
@@ -86,22 +81,14 @@ export async function POST(request: NextRequest) {
     const entryDate = parseDateOnly(body.entryDate) ?? todayPakistan();
     const remarks = cleanText(body.remarks, 500);
 
-    if (kind === "COMMISSION") {
-      if (deptCommissionKindsOf(user.role, parsePermissions(user.permissions)).length === 0) {
-        const earned = await prisma.ledgerEntry.count({ where: { adminId, type: "DEPT_COMMISSION" } });
-        if (earned === 0) return badRequest("Ye department user nahi hai");
-      }
-    } else {
-      const totals = (await deptExpenseTotals([adminId])).get(adminId) ?? emptyDeptExpenseTotals();
-      const bucket = kind === "COURIER_EXPENSE" ? totals.courier : totals.other;
-      const payable = dec(bucket.remaining).minus(bucket.pending);
-      if (amount.greaterThan(payable)) {
-        return badRequest(
-          `${DEPT_PAYOUT_KIND_LABELS[kind]} ki baqi Rs ${toNumber(payable).toLocaleString("en-PK")} hai` +
-            (bucket.pending > 0 ? ` (Rs ${bucket.pending.toLocaleString("en-PK")} ki request pehle se pending)` : "") +
-            " — is se zyada nahi"
-        );
-      }
+    // §W54: teeno qismon mein advance mumkin (baqi se zyada → user ka hisaab
+    // minus). Sirf ye pakka ke user department ka hai (ya pehle se hisaab hai).
+    if (deptCommissionKindsOf(user.role, parsePermissions(user.permissions)).length === 0) {
+      const [earned, totals] = await Promise.all([
+        prisma.ledgerEntry.count({ where: { adminId, type: "DEPT_COMMISSION" } }),
+        deptExpenseTotals([adminId]),
+      ]);
+      if (earned === 0 && !totals.has(adminId)) return badRequest("Ye department user nahi hai");
     }
 
     const payout = await prisma.deptPayoutRequest.create({
