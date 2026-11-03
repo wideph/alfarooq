@@ -2174,3 +2174,8 @@ Investigation-first (live DB audit):
   `Office expense share [id]`; bina snapshot active 30/20 (inactive skip); FIXED 500 →
   usi member `Commission expense share` + flag; FIXED 0 / SALARY → sirf office expense;
   409 payload. Browser check nahi (live data ki ijazat nahi).
+- **Live (2026-11-06, owner ki ijazat se)**: `prisma migrate deploy` → wave54 applied;
+  push 4eb6c9c.
+- **Next step**: owner live par: (a) kisi dept user ko baqi se zyada wapsi bhej kar accept
+  → Mera account line "Advance mila (minus)"; (b) department kharche wala case delete
+  kar ke teeno options ka sawal dekhe.
