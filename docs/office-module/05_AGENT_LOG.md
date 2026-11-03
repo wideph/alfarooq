@@ -2126,3 +2126,10 @@ Investigation-first (live DB audit):
   courier → CaseExpense (paidBy / createdBy user), rule 0 → koi debit nahi, ACCEPTED +
   link, dobara accept band, raqam 300 (bheja 350), 50% rule → 150 member par, delete
   case → Other, OTHER → DEPT_OTHER.
+- **Live (2026-11-05, owner ki ijazat se)**: build exit 0; `prisma migrate deploy` →
+  wave52 applied (sirf naya table); push 6dee05c. Browser check nahi (live data parhne
+  ki ijazat nahi). Note: W51 aur W52 ke darmiyan kisi user ne kharcha daala ho to wo
+  pehle hi system mein hai (review se pehle wala) — admin Finance → Department kharche
+  → Details mein dekh / hata sakta hai.
+- **Next step**: owner live par: courier user list se amount Add → admin Payments →
+  "Department kharche" → Manzoor / Wapas; user ke Mera account mein status.
