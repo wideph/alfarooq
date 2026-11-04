@@ -2311,7 +2311,9 @@ Investigation-first (live DB audit):
   FIRST_PAYMENT_PENDING → naya 7,000 sawal, agreed edit, status Attestation 400 / 200,
   reissue .txt → 400, multipart reissue 201, 3 pages 200). Chrome extension connect nahi
   tha — screenshot nahi; asal tasveer R2 par upload test nahi kiya (live storage).
-- **Next step**: owner se live migration ki ijazat → `prisma migrate deploy` (wave57) →
-  live read-only audit → push. Owner live par: (a) kisi test case ki payment delete →
+- **Live (2026-11-09, owner ki ijazat se)**: `prisma migrate deploy` → wave57 applied;
+  live read-only `office-finance-audit.cjs` TOTAL ISSUES 0 (naye checks: so raha tukra /
+  bacha % — koi nahi); push 98a0986. Browser check nahi (Chrome extension connect nahi).
+- **Next step**: owner live par: (a) kisi test case ki payment delete →
   dobara upload → naya extra sawal; (b) status dropdown "Attestation — step chunein…";
   (c) extra service reissue par tasveer chunein (file naam dikhe) aur book karein.
