@@ -78,6 +78,20 @@ export type DeptQueueRow = {
   // §W55: Bykea kharcha (manzoor / review mein).
   myBykeaExpense?: number;
   myBykeaPending?: number;
+  // §W56: extra services (reissue ki hidayat).
+  services?: Array<{
+    id: string;
+    name: string;
+    reissue: boolean;
+    reissueDone?: boolean;
+    remarks?: string | null;
+    // Poori (bina dept) rows par — cases list.
+    amount?: number;
+    musadiqa?: boolean;
+    musadiqaStatus?: string | null;
+    customName?: string | null;
+    customDone?: boolean;
+  }>;
 };
 
 // §W55: courier list mein slip ke neeche kharchon ki do lines.
@@ -430,6 +444,15 @@ export default function DeptQueue({
         {/* §W46: courier list mein case number ke saath Roll / Reg bhi */}
         {dept === "courier" && <p className="text-xs font-semibold text-slate-600">{rollRegText(item)}</p>}
         {item.createdAt && <p className="text-xs text-slate-400">{formatDate(item.createdAt)}</p>}
+        {/* §W56: document reissue (extra service) — filing / printing ko saaf
+            nazar aaye ke ye dobara wala kaam hai, booking office ki hidayat ke saath. */}
+        {(item.services ?? [])
+          .filter((service) => service.reissue && !service.reissueDone)
+          .map((service) => (
+            <p key={service.id} className="mt-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-900 ring-1 ring-amber-200">
+              <b>Reissue:</b> {service.remarks || service.name}
+            </p>
+          ))}
       </div>
     );
   }

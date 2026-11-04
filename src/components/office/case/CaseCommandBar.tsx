@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, BadgePercent, Flame, Layers, Loader2, Printer, ScanBarcode, Tag, Tags } from "lucide-react";
 import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
-import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import ExtraAmountPopup, { extraDecisionLabel, type ExtraDecision } from "@/components/office/ExtraAmountPopup";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import { formatDate, formatMoney, officeFetch } from "@/lib/office/client";
 import { caseStatusLabel, CUSTOM_LABEL_COLORS, CUSTOM_LABEL_STYLES, STATUS_STYLES } from "@/lib/office/labels";
@@ -77,14 +77,14 @@ export default function CaseCommandBar({
     setBusy(false);
   }
 
-  async function decideExtra(percent: number) {
+  async function decideExtra(decision: ExtraDecision) {
     const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}/commission`, {
       method: "PATCH",
-      json: { extraSharePercent: percent },
+      json: { extraDecision: decision },
     });
     if (res.ok) {
       onUpdated(res.data);
-      onMessage(`Extra share ${percent}% set ho gaya`);
+      onMessage(`Extra ka hissa ${extraDecisionLabel(decision)} tay ho gaya`);
     } else onMessage(res.error, "error");
     setPopup(false);
   }

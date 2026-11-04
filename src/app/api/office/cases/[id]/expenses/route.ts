@@ -133,6 +133,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const expenseId = new URL(request.url).searchParams.get("expenseId") || "";
   const expense = await prisma.caseExpense.findFirst({ where: { id: expenseId, caseId: id } });
   if (!expense) return notFound("Expense nahi mila");
+  // §W56: dobara kaam ka department commission — commission ke saath hi jata
+  // hai (printing file delete → removeDeptCommission); alag se nahi.
+  if (expense.kind === "DEPT_COMMISSION") {
+    return badRequest("Ye department commission ka kharcha hai — alag se delete nahi hota");
+  }
   await prisma.$transaction(async (tx) => {
     // §W21 / §W51: commission se minus hone wali (tagged) ledger rows bhi isi
     // transaction mein delete.

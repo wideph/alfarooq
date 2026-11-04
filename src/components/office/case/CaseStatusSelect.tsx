@@ -189,6 +189,10 @@ export default function CaseStatusSelect({
                   Ye kaam pehle ho chuka hai aur us ka commission department ko mil chuka hai. Kaam dobara hone par
                   commission dobara dena hai?
                 </p>
+                <p className="text-[11px] text-amber-800">
+                  &quot;Haan&quot; = dobara wala commission is case ka kharcha bhi banega (case expenses mein nazar aayega)
+                  aur booking office ke users ke khate se pehle wale formula ke mutabiq minus hoga.
+                </p>
                 {questions.map((question) => (
                   <div key={question.kind} className="space-y-1.5 rounded-lg bg-white p-2.5 text-xs">
                     <p className="text-slate-700">

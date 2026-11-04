@@ -1,5 +1,23 @@
 // Client-side shape of /api/office/cases/[id] (see lib/office/case-detail.ts).
 
+// §W56: booking office ki extra service (case detail / list).
+export type CaseServiceItem = {
+  id: string;
+  name: string;
+  amount: number;
+  status: "ACTIVE" | "CANCELLED";
+  remarks: string | null;
+  hasImage: boolean;
+  musadiqa: boolean;
+  musadiqaStatus: "APPLIED" | "ATTESTED" | null;
+  customName: string | null;
+  customDone: boolean;
+  parts: Array<{ key: string; label: string; done: boolean }>;
+  done: boolean;
+  createdAt: string;
+  createdByName?: string | null;
+};
+
 // §W51 / §W52: department user ka apna kharcha (case page "Courier kharcha") —
 // ACCEPTED = admin ne manzoor kiya (hisaab mein), PENDING = admin ke review
 // mein (user cancel kar sakta hai), REJECTED = wapas (decisionNote = wajah).
@@ -124,6 +142,20 @@ export type CaseDetail = {
   }>;
   // §W51: case bante waqt office ka expense rule (% commission se minus).
   expenseDeductPercent?: number;
+  // §W56: extra services ki kul amount (agreedAmount mein shamil; asal agreed =
+  // agreedAmount − extraServicesAmount) aur services ki list.
+  extraServicesAmount?: number;
+  services?: CaseServiceItem[];
+  // §W56: commission office — extra payment ke tay shuda tukre.
+  extraTranches?: Array<{
+    id: string;
+    extraAmount: number;
+    shareAmount: number;
+    mode: "PERCENT" | "AMOUNT";
+    percent: number | null;
+    createdAt: string;
+    validFraction: number;
+  }>;
   // §W51: department user (courier) ke is case par apne kharche.
   myDeptExpenses?: DeptOwnExpense[];
   // §F22.6: case ke sath attached dept commission rows (read-only display;
@@ -176,6 +208,18 @@ export type FilingCaseDetail = {
   clientPictureUrl: string | null;
   customLabel?: string | null;
   customLabelColor?: string | null;
+  // §W56: extra services (bina raqam) — reissue ki hidayat / tasveer.
+  services?: SlimServiceItem[];
+};
+
+// §W56: filing / department rows ke liye extra service (bina raqam).
+export type SlimServiceItem = {
+  id: string;
+  name: string;
+  reissue: boolean;
+  reissueDone: boolean;
+  remarks: string | null;
+  hasImage: boolean;
 };
 
 // GET /api/office/cases/[id]/files item.

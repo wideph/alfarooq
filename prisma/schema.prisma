@@ -386,6 +386,17 @@ model Case {
   // §W51: case bante waqt office ka expense rule (BookingOffice.expenseDeductPercent)
   // — is case ke expenses ka kitna % commission se minus. Purane cases 0.
   expenseDeductPercent     Decimal   @default(0) @db.Decimal(5, 2)
+  // §W56: extra services ki kul amount (agreedAmount mein shamil). Asal
+  // (initial) agreed = agreedAmount − extraServicesAmount — commission office
+  // ki poori commission isi asal par (service se commission wapas nahi hoti).
+  extraServicesAmount      Decimal   @default(0) @db.Decimal(12, 2)
+  // §W56: dobara kaam (admin "haan" / reissue / extra attestation) ka department
+  // commission kis credit number se "case ka kharcha" bhi ({ PRINTING: 2 }) —
+  // us credit ka CaseExpense (kind DEPT_COMMISSION) banta hai.
+  deptCommissionChargeFrom Json?
+  // §W56: reissue par filing dobara — is waqt ke baad wali pehli filing file
+  // case ko printing par bhejti hai.
+  filingRoundAt            DateTime?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -405,6 +416,8 @@ model Case {
   reads            CaseRead[]
   discountRequests DiscountRequest[]
   bonusRequests    BonusRequest[]
+  services         CaseService[]
+  extraTranches    ExtraShareTranche[]
 
   @@index([bookingOfficeId, status])
   @@index([bookingOfficeId, createdAt])
@@ -504,6 +517,11 @@ model CaseExpense {
   // §W51: department user jis ne apni jeb se diya — admin ne wapas dena hai
   // (DeptPayoutRequest COURIER_EXPENSE). null = company ne khud diya.
   paidByAdminId String?
+  // §W56: kind DEPT_COMMISSION — dobara kaam ka department commission jo case ka
+  // kharcha bhi hai (us ki DEPT_COMMISSION ledger row). Partner pool aur finance
+  // mein ledger row hi ginti hoti hai (ye row wahan nahi — double nahi); sirf
+  // commission office ke rule / admin % se member par minus aur case par nazar.
+  deptLedgerEntryId String?
   createdById String
   createdAt   DateTime @default(now())
   case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -511,6 +529,66 @@ model CaseExpense {
   @@index([caseId])
   @@index([expenseDate])
   @@index([paidByAdminId])
+  @@index([deptLedgerEntryId])
+}
+
+// §W56 — booking office ki "extra service" (case banne ke baad): ek booking mein
+// kai hissay, ek amount (Case.agreedAmount + extraServicesAmount mein judti hai).
+//   reissue     — case dobara filing → printing → (attestation) → courier;
+//                 printing / courier commission dobara (case ka kharcha).
+//   attestationIds — CaseAttestation ids jo is service ne naye / dobara banaye.
+//   musadiqa    — musadiqaStatus APPLIED → ATTESTED (admin), commission nahi.
+//   customName  — admin ko remark; admin "<naam> Complete" (customDoneAt).
+model CaseService {
+  id               String    @id @default(cuid())
+  caseId           String
+  name             String
+  amount           Decimal   @db.Decimal(12, 2)
+  reissue          Boolean   @default(false)
+  reissueDoneAt    DateTime?
+  attestationIds   Json?
+  musadiqa         Boolean   @default(false)
+  // APPLIED | ATTESTED (null = musadiqa hissa nahi)
+  musadiqaStatus   String?
+  musadiqaDoneAt   DateTime?
+  customName       String?
+  customDoneAt     DateTime?
+  remarks          String?
+  imageKey         String?
+  imageType        String?
+  // ACTIVE | CANCELLED
+  status           String    @default("ACTIVE")
+  createdById      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([musadiqaStatus])
+}
+
+// §W56 — commission office: extra payment (received − agreed) ka har faisla ek
+// tukra. extraAmount = is faisle mein kitni extra raqam, shareAmount = us mein se
+// office ko (Rs), receivedAt = faisle ke waqt kul received. Tay shuda tukra baad
+// mein service se agreed barhne par dobara nahi khulta; sirf payment wapas hone
+// (received < receivedAt) par us ka hissa usi nisbat se kam hota hai. Nayi extra
+// (extra − tay shuda) par naya faisla.
+model ExtraShareTranche {
+  id           String   @id @default(cuid())
+  caseId       String
+  extraAmount  Decimal  @db.Decimal(12, 2)
+  shareAmount  Decimal  @db.Decimal(12, 2)
+  // PERCENT | AMOUNT
+  mode         String
+  percent      Decimal? @db.Decimal(5, 2)
+  receivedAt   Decimal  @db.Decimal(12, 2)
+  decidedById  String
+  createdAt    DateTime @default(now())
+
+  case Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
 }
 
 model LedgerEntry {

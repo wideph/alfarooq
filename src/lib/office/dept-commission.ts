@@ -5,6 +5,16 @@ import { round2 } from "@/lib/office/money";
 import { todayPakistan } from "@/lib/office/serializers";
 import { syncProfitShare } from "@/lib/office/profit-share";
 import { CASE_STATUS_ORDER } from "@/lib/office/workflow";
+import { commissionExpenseTag, syncCommissionExpenseDeductions } from "@/lib/office/expense-deduction";
+
+// §W56: dobara kaam ke commission ka case kharcha (CaseExpense.kind).
+export const DEPT_COMMISSION_EXPENSE_KIND = "DEPT_COMMISSION";
+
+function jsonCount(value: unknown, key: string): number {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  const raw = Number((value as Record<string, unknown>)[key]);
+  return Number.isFinite(raw) ? raw : 0;
+}
 
 // ---------------------------------------------------------------------------
 // F4 — Department commission engine.
@@ -145,6 +155,7 @@ export async function creditDeptCommission(
         categoryId: true,
         setId: true,
         deptCommissionRounds: true,
+        deptCommissionChargeFrom: true,
         category: { select: { name: true } },
       },
     });
@@ -179,6 +190,26 @@ export async function creditDeptCommission(
         createdById: input.adminId,
       },
     });
+    // §W56: dobara kaam (admin "haan" / reissue / extra service attestation) ka
+    // commission case ka KHARCHA bhi — CaseExpense (kind DEPT_COMMISSION)
+    // jo case ke expenses mein nazar aata hai aur commission office mein case
+    // ke rule / admin % se member par minus hota hai. Partner pool / finance
+    // mein ledger row hi ginti (ye row wahan exclude — double nahi).
+    const chargeFrom = Number(jsonCount(item.deptCommissionChargeFrom, input.kind));
+    if (chargeFrom > 0 && credited + 1 >= chargeFrom) {
+      await db.caseExpense.create({
+        data: {
+          caseId: item.id,
+          amount,
+          description: `${DEPT_KIND_LABELS[input.kind]} commission (dobara kaam) — ${item.caseNumber}`,
+          expenseDate: created.entryDate,
+          kind: DEPT_COMMISSION_EXPENSE_KIND,
+          deptLedgerEntryId: created.id,
+          createdById: input.adminId,
+        },
+      });
+      await syncCommissionExpenseDeductions(item.id, input.adminId, db);
+    }
     // §W40: partner (PROFIT_SHARE) office — department commission case pool se
     // minus hoti hai (admin + members sab ke hisse se), is liye share dobara.
     if (db === prisma) await syncProfitShare(item.id, input.adminId);
@@ -206,7 +237,28 @@ export async function removeDeptCommission(
     select: { id: true, adminId: true, amount: true, remarks: true },
   });
   if (rows.length === 0) return [];
-  await prisma.ledgerEntry.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
+  const ids = rows.map((row) => row.id);
+  // §W56: in commissions ka "case kharcha" (CaseExpense DEPT_COMMISSION) aur us
+  // ki commission-se-minus rows bhi.
+  const mirrors = await prisma.caseExpense.findMany({
+    where: { caseId: input.caseId, deptLedgerEntryId: { in: ids } },
+    select: { id: true },
+  });
+  await prisma.$transaction([
+    ...(mirrors.length
+      ? [
+          prisma.ledgerEntry.deleteMany({
+            where: {
+              caseId: input.caseId,
+              type: "EXPENSE",
+              OR: mirrors.map((mirror) => ({ remarks: { startsWith: `${commissionExpenseTag(mirror.id)}:` } })),
+            },
+          }),
+          prisma.caseExpense.deleteMany({ where: { id: { in: mirrors.map((mirror) => mirror.id) } } }),
+        ]
+      : []),
+    prisma.ledgerEntry.deleteMany({ where: { id: { in: ids } } }),
+  ]);
   await syncProfitShare(input.caseId, input.actorId);
   return rows.map((row) => ({ ...row, amount: Number(row.amount) }));
 }

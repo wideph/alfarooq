@@ -126,6 +126,31 @@ export default function FilingCaseView({
             </div>
           </SectionCard>
 
+          {/* §W56: document reissue — booking office ki hidayat + nayi tasveer. */}
+          {(detail.services ?? [])
+            .filter((service) => service.reissue)
+            .map((service) => (
+              <div
+                key={service.id}
+                className={`rounded-2xl border p-4 text-sm ${service.reissueDone ? "border-slate-200 bg-slate-50" : "border-amber-300 bg-amber-50"}`}
+              >
+                <p className="font-bold text-amber-900">
+                  Document reissue{service.reissueDone ? " — dobara print ho chuka ✓" : " — dobara filing karni hai"}
+                </p>
+                {service.remarks && <p className="mt-1 whitespace-pre-wrap text-slate-800">{service.remarks}</p>}
+                {service.hasImage && (
+                  <a
+                    href={`/api/office/cases/${detail.id}/services/${service.id}/image`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:underline"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" /> Booking office ki nayi tasveer dekhein
+                  </a>
+                )}
+              </div>
+            ))}
+
           <CaseFilesTab
             detail={{ id: detail.id, caseNumber: detail.caseNumber, category: detail.category, rollNumber: detail.rollNumber, setId: null, setName: detail.setName }}
             admin={admin}

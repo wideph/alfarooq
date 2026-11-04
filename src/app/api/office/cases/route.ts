@@ -27,6 +27,7 @@ import {
   isFilingLimited,
   parseCaseInput,
   serializeFilingCase,
+  slimServices,
   unseenWarningCaseIds,
 } from "@/lib/office/workflow";
 
@@ -65,7 +66,7 @@ async function serializeDeptQueueCase(item: DeptQueueRow) {
     customLabel: item.customLabel ?? null,
     customLabelColor: item.customLabelColor ?? null,
     filingFilesCount: item._count.files,
-    filingDone: item._count.files > 0,
+    filingDone: item._count.files > 0 && item.status !== "WAITING_FOR_FILE",
     limited: true,
   });
 }
@@ -100,6 +101,24 @@ const caseListRowInclude = {
   // W21: filtered count — filing queue rows need filingFilesCount/filingDone
   // (pending vs done colors). Prisma filtered _count keeps this free.
   _count: { select: { files: { where: { department: "FILING" } } } },
+  // §W56: extra services (list mein naam + amount; filing ko reissue ka nishan).
+  services: {
+    where: { status: "ACTIVE" },
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      id: true,
+      name: true,
+      amount: true,
+      reissue: true,
+      reissueDoneAt: true,
+      remarks: true,
+      imageKey: true,
+      musadiqa: true,
+      musadiqaStatus: true,
+      customName: true,
+      customDoneAt: true,
+    },
+  },
 } satisfies Prisma.CaseInclude;
 
 export async function GET(request: NextRequest) {
@@ -267,8 +286,23 @@ export async function GET(request: NextRequest) {
       // serializeDeptQueueCase mein). onlineVerificationNumber serializeCaseRow
       // ke ...item spread se khud aa jata hai.
       row.filingFilesCount = item._count.files;
-      row.filingDone = item._count.files > 0;
+      // §W56: reissue par WAITING_FOR_FILE — purani files ke bawajood pending.
+      row.filingDone = item._count.files > 0 && item.status !== "WAITING_FOR_FILE";
       row.limited = false;
+      // §W56: extra services — list mein naam + amount (+ musadiqa / custom halat).
+      row.services = item.services.map((service) => ({
+        id: service.id,
+        name: service.name,
+        amount: toNumber(service.amount),
+        reissue: service.reissue,
+        reissueDone: Boolean(service.reissueDoneAt),
+        musadiqa: service.musadiqa,
+        musadiqaStatus: service.musadiqaStatus,
+        customName: service.customName,
+        customDone: Boolean(service.customDoneAt),
+        remarks: service.reissue ? service.remarks : null,
+        hasImage: Boolean(service.imageKey),
+      }));
       if (unreadIds) row.unread = unreadIds.has(item.id);
       if (addressRows) row.addresses = addressesOf(item.id);
       if (courierExpenseRows) Object.assign(row, myExpenseFields(item.id));
@@ -277,6 +311,8 @@ export async function GET(request: NextRequest) {
         delete safe.payments;
         delete safe.expenses;
         delete safe.ledger;
+        // §W56: department worker ko services sirf kaam ke liye (raqam nahi).
+        safe.services = slimServices(item.services);
         safe.bookingOffice = { id: item.bookingOffice.id, name: item.bookingOffice.name, type: null };
         return safe;
       }

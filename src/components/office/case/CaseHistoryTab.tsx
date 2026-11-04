@@ -173,10 +173,17 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
                   {formatDate(e.expenseDate)}
                   {e.createdByName ? ` · ${e.createdByName}` : ""}
                 </span>
-                {(e.kind === "COURIER" || e.kind === "BYKEA" || e.paidByName) && (
+                {(e.kind === "COURIER" || e.kind === "BYKEA" || e.kind === "DEPT_COMMISSION" || e.paidByName) && (
                   <span className="mt-1 flex flex-wrap gap-1.5">
                     {e.kind === "COURIER" && (
                       <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-bold text-teal-700">Courier</span>
+                    )}
+                    {/* §W56: dobara kaam ka department commission — commission ke
+                        saath hi aata / jata hai (alag delete nahi). */}
+                    {e.kind === "DEPT_COMMISSION" && (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+                        Department commission (dobara kaam)
+                      </span>
                     )}
                     {e.kind === "BYKEA" && (
                       <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">Bykea</span>
@@ -201,7 +208,7 @@ function ExpensesPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 <span className="font-semibold">{formatMoney(e.amount)}</span>
-                {canExpenses && (
+                {canExpenses && e.kind !== "DEPT_COMMISSION" && (
                   <button
                     onClick={() => removeExpense(e.id)}
                     aria-label="Expense delete karein"

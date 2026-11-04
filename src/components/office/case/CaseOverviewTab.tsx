@@ -26,6 +26,8 @@ import SectionCard from "@/components/ui/SectionCard";
 import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
+import CaseServicesPanel from "@/components/office/case/CaseServicesPanel";
+import AgreedBreakdown from "@/components/office/case/AgreedBreakdown";
 import { formatDateTime, formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
@@ -58,19 +60,33 @@ export default function CaseOverviewTab({
       detail.contacts.length > 0 || detail.addresses.length > 0 || adminCanAny(admin, ["office:courier:write"]);
     return (
       <div className={`grid grid-cols-1 gap-4 ${showContacts ? "lg:grid-cols-3" : ""}`}>
-        <div className={showContacts ? "lg:col-span-2" : ""}>
+        <div className={`space-y-4 ${showContacts ? "lg:col-span-2" : ""}`}>
           <ClientInfoPanel detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
+          {/* §W56: extra services ka kaam (reissue remarks / tasveer) — raqam nahi. */}
+          {(detail.services?.length ?? 0) > 0 && (
+            <CaseServicesPanel detail={detail} canBook={false} isAdmin={false} showAmounts={false} onUpdated={onUpdated} onMessage={onMessage} />
+          )}
         </div>
         {showContacts && <ContactsPanel detail={detail} admin={admin} onReload={onReload} onMessage={onMessage} />}
       </div>
     );
   }
+  // §W56: extra service — booking office (apna case) / admin / cases:write wala.
+  const canBook = adminCanAny(admin, ["office:cases:write"]) && detail.status !== "CANCELLED";
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
         <CourierSlipsPanel detail={detail} />
         <ClientInfoPanel detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
         <MoneySummary detail={detail} admin={admin} onUpdated={onUpdated} onMessage={onMessage} />
+        <CaseServicesPanel
+          detail={detail}
+          canBook={canBook}
+          isAdmin={admin.role === "admin"}
+          showAmounts
+          onUpdated={onUpdated}
+          onMessage={onMessage}
+        />
       </div>
       <ContactsPanel detail={detail} admin={admin} onReload={onReload} onMessage={onMessage} />
     </div>
@@ -96,7 +112,9 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
     rollNumber: detail.rollNumber || "",
     registrationNumber: detail.registrationNumber || "",
     categoryId: detail.category?.id || "",
-    agreedAmount: String(detail.agreedAmount),
+    // §W56: form ASAL (initial) agreed dikhata hai — extra services ki amount
+    // server khud jodta hai.
+    agreedAmount: String(Math.round((detail.agreedAmount - (detail.extraServicesAmount ?? 0)) * 100) / 100),
     courierNumber: detail.courierNumber || "",
     notes: detail.notes || "",
   });
@@ -217,13 +235,20 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
                 </option>
               ))}
             </select>
-            <input
-              className={inputClass}
-              inputMode="decimal"
-              value={form.agreedAmount}
-              onChange={(e) => setForm({ ...form, agreedAmount: e.target.value })}
-              placeholder="Agreed amount"
-            />
+            <label className="block">
+              <input
+                className={`${inputClass} w-full`}
+                inputMode="decimal"
+                value={form.agreedAmount}
+                onChange={(e) => setForm({ ...form, agreedAmount: e.target.value })}
+                placeholder="Agreed amount"
+              />
+              {(detail.extraServicesAmount ?? 0) > 0 && (
+                <span className="mt-1 block text-[11px] text-slate-500">
+                  Asal agreed — extra services ({formatMoney(detail.extraServicesAmount ?? 0)}) is ke ilawa khud judti hain
+                </span>
+              )}
+            </label>
             <input
               className={inputClass}
               value={form.courierNumber}
@@ -399,7 +424,26 @@ function MoneySummary({ detail, admin, onUpdated, onMessage }: Omit<TabProps, "o
   return (
     <SectionCard icon={Wallet} title="Money summary">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatTile icon={HandCoins} label="Agreed" value={formatMoney(detail.totals.agreedAmount)} />
+        {/* §W56: kul agreed par hover / click → initial + extra services. */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-slate-900">
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide opacity-70">
+            <HandCoins className="h-3.5 w-3.5" />
+            Agreed
+          </p>
+          <p className="mt-0.5 text-base font-bold">
+            <AgreedBreakdown
+              total={detail.totals.agreedAmount}
+              servicesAmount={detail.extraServicesAmount ?? 0}
+              services={detail.services ?? []}
+            />
+          </p>
+          {(detail.extraServicesAmount ?? 0) > 0 && (
+            <p className="text-[11px] opacity-60">
+              Initial {formatMoney(detail.totals.agreedAmount - (detail.extraServicesAmount ?? 0))} + services{" "}
+              {formatMoney(detail.extraServicesAmount ?? 0)}
+            </p>
+          )}
+        </div>
         <StatTile icon={Coins} label="Received" value={formatMoney(detail.totals.received)} tone="emerald" />
         <StatTile
           icon={PiggyBank}

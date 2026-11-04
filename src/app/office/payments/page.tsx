@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, ExternalLink, FileSearch, Loader2, Receipt, Save, Wallet } from "lucide-react";
 import OfficePageFrame from "@/components/office/OfficePageFrame";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
-import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import ExtraAmountPopup, { extraDecisionLabel, type ExtraDecision } from "@/components/office/ExtraAmountPopup";
 import DeptExpenseReviews from "@/components/office/payments/DeptExpenseReviews";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
@@ -184,13 +184,16 @@ export default function OfficePaymentsPage() {
     setBusy(null);
   }
 
-  async function decideExtra(percent: number) {
+  async function decideExtra(decision: ExtraDecision) {
     if (!popup) return;
     const res = await officeFetch(`/api/office/cases/${popup.caseId}/commission`, {
       method: "PATCH",
-      json: { extraSharePercent: percent },
+      json: { extraDecision: decision },
     });
-    setMessage(res.ok ? `${popup.caseNumber}: extra share ${percent}% set ho gaya` : res.error, res.ok ? "success" : "error");
+    setMessage(
+      res.ok ? `${popup.caseNumber}: extra ka hissa ${extraDecisionLabel(decision)} tay ho gaya` : res.error,
+      res.ok ? "success" : "error"
+    );
     setPopup(null);
   }
 

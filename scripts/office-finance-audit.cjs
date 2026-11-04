@@ -23,25 +23,40 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
     const cases = await p.case.findMany({
       where: { bookingOfficeId: o.id },
       select: { id: true, caseNumber: true, status: true, agreedAmount: true, commissionAmount: true, extraSharePercent: true, commissionHalfCreditedAt: true, commissionFullCreditedAt: true, profitShareSnapshot: true,
-        createdByAdminId: true, commissionMemberId: true, expenseDeductPercent: true,
-        payments: { select: { amount: true, status: true } }, expenses: { select: { id: true, amount: true, deductFromCommission: true, commissionDeductPercent: true } } },
+        createdByAdminId: true, commissionMemberId: true, expenseDeductPercent: true, extraServicesAmount: true,
+        extraTranches: { select: { extraAmount: true, shareAmount: true, receivedAt: true } },
+        payments: { select: { amount: true, status: true } }, expenses: { select: { id: true, amount: true, kind: true, deptLedgerEntryId: true, deductFromCommission: true, commissionDeductPercent: true } } },
     });
     console.log(`\n=== ${o.name} [${o.type}] cases=${cases.length}`);
     for (const c of cases) {
       const rec = c.payments.filter((x) => x.status === "RECEIVED").reduce((t, x) => t + n(x.amount), 0);
       const L = allLedger.filter((l) => l.caseId === c.id);
+      // §W56: har "dobara kaam" kharcha (DEPT_COMMISSION mirror) ki asal ledger
+      // row maujood aur raqam barabar — warna kharcha bina commission ke.
+      for (const e of c.expenses.filter((x) => x.kind === "DEPT_COMMISSION")) {
+        const row = L.find((l) => l.id === e.deptLedgerEntryId && l.type === "DEPT_COMMISSION");
+        if (!row) issue(`${o.name} ${c.caseNumber}: dobara-commission kharcha ${n(e.amount)} ki ledger row nahi`);
+        else if (Math.abs(n(row.amount) - n(e.amount)) > 0.005) issue(`${o.name} ${c.caseNumber}: dobara-commission kharcha ${n(e.amount)} ≠ ledger ${n(row.amount)}`);
+      }
       if (o.type === "FIXED_COMMISSION") {
         const com = n(c.commissionAmount), half = r2(com / 2), agreed = n(c.agreedAmount);
-        const target = rec > 0 ? (agreed > 0 && rec >= agreed ? com : half) : 0;
+        // §W56: poori commission ASAL agreed par (agreed − extra services).
+        const base = agreed - n(c.extraServicesAmount);
+        const target = rec > 0 ? (base > 0 && rec >= base ? com : half) : 0;
         const cur = r2(L.filter((l) => ["COMMISSION_HALF", "COMMISSION_FINAL", "COMMISSION_ADJUST"].includes(l.type)).reduce((t, l) => t + signed(l), 0));
         if (Math.abs(cur - target) > 0.005) issue(`${o.name} ${c.caseNumber}: commission ledger ${cur} ≠ target ${target} (rec ${rec}, agreed ${agreed}, commission ${com})`);
         const extra = Math.max(rec - agreed, 0);
         const exCur = r2(L.filter((l) => l.type === "EXTRA_SHARE").reduce((t, l) => t + signed(l), 0));
-        if (c.extraSharePercent !== null) {
-          const exTarget = r2(extra * n(c.extraSharePercent) / 100);
-          if (Math.abs(exCur - exTarget) > 0.005) issue(`${o.name} ${c.caseNumber}: extra share ledger ${exCur} ≠ target ${exTarget} (extra ${extra} × ${n(c.extraSharePercent)}%)`);
-        } else if (exCur !== 0) issue(`${o.name} ${c.caseNumber}: extra share ${exCur} hai magar percent null`);
-        if (extra > 0 && c.extraSharePercent === null) console.log(`  note ${c.caseNumber}: extra ${extra} ka faisla baqi (percent null)`);
+        // §W56: extra share = tukron ka hissa × valid (payment wapas ho to kam).
+        let covered = 0, exTarget = 0;
+        for (const t of c.extraTranches) {
+          const amt = n(t.extraAmount); if (amt <= 0) continue;
+          const f = Math.min(Math.max((rec - (n(t.receivedAt) - amt)) / amt, 0), 1);
+          covered += amt * f; exTarget += r2(n(t.shareAmount) * f);
+        }
+        exTarget = r2(exTarget);
+        if (Math.abs(exCur - exTarget) > 0.005) issue(`${o.name} ${c.caseNumber}: extra share ledger ${exCur} ≠ tukron ka target ${exTarget}`);
+        if (r2(extra - covered) > 0.005) console.log(`  note ${c.caseNumber}: extra ${r2(extra - covered)} ka faisla baqi`);
         // §W51: case expense → "Commission expense [expenseId]" debit = amount ×
         // (admin ka % ?? case ka rule %) ÷ 100 — sirf jab case ki commission
         // kisi member ke account mein ho (warna sync kuch nahi badalta).
@@ -58,7 +73,8 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
           if (Math.abs(cur - target) > 0.005) issue(`${o.name} ${c.caseNumber}: case expense ${n(e.amount)} × ${pct}% ka debit ${cur} ≠ ${target}`);
         }
       } else if (o.type === "PROFIT_SHARE") {
-        const exp = c.expenses.reduce((t, e) => t + n(e.amount), 0);
+        // §W56: dobara kaam ke commission ka case kharcha (DEPT_COMMISSION) pool mein nahi — ledger row se.
+        const exp = c.expenses.filter((e) => e.kind !== "DEPT_COMMISSION").reduce((t, e) => t + n(e.amount), 0);
         const dept = L.filter((l) => l.type === "DEPT_COMMISSION").reduce((t, l) => t + signed(l), 0);
         const pool = rec - exp - dept;
         const snap = c.profitShareSnapshot && typeof c.profitShareSnapshot === "object" ? c.profitShareSnapshot : null;

@@ -2205,3 +2205,50 @@ Investigation-first (live DB audit):
 - **Next step**: owner live par courier user se kisi case par Bykea amount Add → admin
   Payments → Department kharche → Manzoor → courier user ke Mera account mein "Other
   expenses" mein; case ke History → Case expenses mein "Bykea" chip.
+
+## WAVE 56 (2026-11-08) — Filing tabs, dobara-kaam commission kharcha, edit error, extra services, extra ke tukre
+
+- **Owner**: (1) print ho chuka case filing queue mein na rahe — admin + filing ke liye
+  do tabs "Pending for file" / "Filing complete", count sirf pending. (2) admin status
+  peeche + commission dobara "Haan" → wo commission case ka kharcha bhi, booking office
+  users se formula ke mutabiq minus. (3) booking office ko naam / tasveer badalne par
+  agreed wala error. (4) extra services: booking office case par book kare (amount,
+  agreed mein), list mein naam + amount, kul agreed par hover / click breakdown;
+  reissue (filing ko wapas, remarks lazmi, nayi tasveer), attestations (AI date),
+  musadiqa (admin remark + queue Applied / Attested), custom (admin "Complete");
+  reissue → printing commission dobara (kharcha), attestation → attestation commission,
+  musadiqa / custom → koi commission nahi. (5) extra payment: pehle tay shuda dobara
+  nahi, sirf nayi baqi (misaal 3,000) ka sawal; % ke ilawa Rs ka option + saaf jumla.
+  Partner office ke liye pehle wale formula; koi kharcha do dafa / ek dafa bhi na chhoote.
+- **Owner ke jawab**: ek booking mein kai hissay + ek amount; reissue ke baad courier
+  dobara aur courier commission bhi; commission office mein wahi case expense rule;
+  service ki amount par office ko hissa nahi (commission asal agreed par).
+- **DB**: migration `20261108120000_office_wave56` — Case.extraServicesAmount /
+  deptCommissionChargeFrom / filingRoundAt, CaseExpense.deptLedgerEntryId, CaseService,
+  ExtraShareTranche (+ purane % faisle → ek tukra, wahi raqam).
+- **Server**: `case-services.ts` (book / update / serialize, legacy tukra agreed barhne
+  se pehle), `extra-share.ts` (tukron ka hisaab + applyExtraDecision), commission.ts
+  (base agreed, tukre), dept-commission.ts (chargeFrom → CaseExpense DEPT_COMMISSION +
+  rule; removeDeptCommission mirror bhi), status route chargeFrom, profit-share pool aur
+  finance mein mirror exclude (member hissa deptCommissions se ghata), case-files
+  (filingRoundAt; reissue print → attestation baqi na ho to complete), evaluateCaseCompletion
+  (service attestations), filing tabs / musadiqa queue (deptQueueWhere, counts), cases
+  PATCH fix, routes: /cases/[id]/services (POST / PATCH), /services/[serviceId]/image,
+  commission route (extraDecision), case delete service tasveer R2 cleanup; audit script.
+- **UI**: cases page filing do tabs + wazahat, admin "Musadiqa" chip + Applied / Attested,
+  rows par "Extra: naam · Rs" + admin Attested / Complete, Agreed hover / click
+  (AgreedBreakdown); case Overview "Extra services" panel + ExtraServiceModal + Agreed
+  tile breakdown; dept view services (bina raqam); FilingCaseView + filing / printing
+  rows reissue hidayat; ExtraAmountPopup % ya Rs; commission panel tukron ki list
+  (Badlein / Faisla karein); expenses mein "Department commission (dobara kaam)" chip
+  (delete nahi); status sawal mein "Haan" ka matlab.
+- **Verify**: tsc 0, lint 0, build exit 0. Local Postgres (scratchpad, port 55432, live
+  nahi) par tamam 26 migrations; dummy-data simulation 55/55 (owner ki misaal: 5000 →
+  Rs 2000, service, 13000 → sirf 3000, bogus → wapas; reissue 50% rule: printing +
+  courier dobara kharcha, 250 + 150 minus, admin 100%, file delete par sab saath hata;
+  partner 30/20: har qadam pool sahi, dobara attestation / courier sirf EK dafa, musadiqa
+  koi commission nahi); legacy % case conversion (idempotent, ledger same, service ke
+  baad bhi 2500 qaim, 13000 → 3000); audit script 0 issues; dev server (local DB) HTTP
+  26/26 (verify popup, booking edit fix, Rs faisla, services, filing tabs, musadiqa,
+  delete 409 → OFFICE) + 6 pages 200. Chrome extension connect nahi tha — screen
+  screenshot nahi.

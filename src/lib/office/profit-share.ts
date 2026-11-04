@@ -58,7 +58,13 @@ async function distributeProfitShare(caseId: string, actorId: string): Promise<P
           },
         },
         payments: { where: { status: "RECEIVED" }, select: { amount: true } },
-        expenses: { select: { amount: true } },
+        // §W56: dobara kaam ke commission ka case kharcha (kind DEPT_COMMISSION)
+        // yahan nahi — wo neeche DEPT_COMMISSION ledger row se pehle hi minus hai
+        // (warna do dafa). NULL kind wale aam kharche zaroor (OR).
+        expenses: {
+          where: { OR: [{ kind: null }, { kind: { not: "DEPT_COMMISSION" } }] },
+          select: { amount: true },
+        },
         ledger: {
           where: { type: { in: [...SHARE_TYPES, DEPT_COMMISSION_TYPE] } },
           select: { memberId: true, direction: true, amount: true, type: true },

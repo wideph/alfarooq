@@ -14,6 +14,7 @@ import {
 import { STATUS_LABELS } from "@/lib/office/labels";
 import { cleanText } from "@/lib/office/serializers";
 import { advanceCourierStage, applyAttestationJump, applyStatusSideEffects } from "@/lib/office/workflow";
+import { jsonRecord } from "@/lib/office/case-services";
 
 export const preferredRegion = ["sin1"];
 
@@ -53,6 +54,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       isPrinted?: boolean;
       printedAt?: Date | null;
       deptCommissionRounds?: Record<string, number>;
+      deptCommissionChargeFrom?: Record<string, number>;
     } = {};
     let recreditDecisions: Partial<Record<DeptCommissionKind, boolean>> | null = null;
     let adminNote: string | null = null;
@@ -132,18 +134,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                 { status: 409 }
               );
             }
-            const rounds: Record<string, number> = {
-              ...((item.deptCommissionRounds && typeof item.deptCommissionRounds === "object"
-                ? item.deptCommissionRounds
-                : {}) as Record<string, number>),
-            };
+            const rounds = jsonRecord(item.deptCommissionRounds);
+            // §W56: "Haan" wala dobara commission case ka KHARCHA bhi (case
+            // expenses mein; booking office ke users par formula ke mutabiq).
+            const chargeFrom = jsonRecord(item.deptCommissionChargeFrom);
             recreditDecisions = {};
             for (const kind of pendingKinds) {
               const again = decision[kind] === true;
-              rounds[kind] = (credits[kind]?.count ?? 0) + (again ? 1 : 0);
+              const count = credits[kind]?.count ?? 0;
+              rounds[kind] = count + (again ? 1 : 0);
+              if (again) chargeFrom[kind] = Math.min(Number(chargeFrom[kind]) || Number.POSITIVE_INFINITY, count + 1);
               recreditDecisions[kind] = again;
             }
             data.deptCommissionRounds = rounds;
+            data.deptCommissionChargeFrom = chargeFrom;
           }
         }
       }
@@ -161,6 +165,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
               data: {
                 ...(data.isPrinted !== undefined ? { isPrinted: data.isPrinted, printedAt: data.printedAt } : {}),
                 ...(data.deptCommissionRounds ? { deptCommissionRounds: data.deptCommissionRounds } : {}),
+                ...(data.deptCommissionChargeFrom ? { deptCommissionChargeFrom: data.deptCommissionChargeFrom } : {}),
               },
             });
           }

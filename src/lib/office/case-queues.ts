@@ -24,6 +24,8 @@ export type CaseQueueCounts = {
   depts: Record<string, number>;
   // §W47: courier ka doosra page (Delivered = deptQueueWhere history).
   deptDone: Record<string, number>;
+  // §W56: super admin — Musadiqa queue (extra service) Applied / Attested.
+  musadiqa?: { applied: number; attested: number };
 };
 
 // §W35 — cases page ki har queue ke upar us queue ke cases ki tadad. Scope
@@ -35,14 +37,16 @@ export async function caseQueueCounts(session: AdminSession, officeId: string): 
     (dept) => hasPermission(session, DEPT_QUEUE_PERMISSIONS[dept]) || session.role === "cashier"
   );
 
-  const doneDepts = depts.filter((dept) => dept === "courier");
+  // §W47 courier "Delivered" + §W56 filing "Filing complete" (history pages).
+  const doneDepts = depts.filter((dept) => dept === "courier" || dept === "filing");
   const deptWhereFor = (dept: string, history: boolean) => ({
     ...(hasPermission(session, DEPT_QUEUE_PERMISSIONS[dept]) ? {} : caseScope(session)),
     ...officeWhere,
     AND: [deptQueueWhere(dept, history) ?? {}],
   });
 
-  const [statusRows, deptTotals, doneTotals] = await Promise.all([
+  const musadiqaWhere = (history: boolean) => ({ ...officeWhere, AND: [deptQueueWhere("musadiqa", history) ?? {}] });
+  const [statusRows, deptTotals, doneTotals, musadiqaCounts] = await Promise.all([
     prisma.case.groupBy({
       by: ["status"],
       where: { ...caseScope(session), ...officeWhere },
@@ -50,6 +54,12 @@ export async function caseQueueCounts(session: AdminSession, officeId: string): 
     }),
     Promise.all(depts.map((dept) => prisma.case.count({ where: deptWhereFor(dept, false) }))),
     Promise.all(doneDepts.map((dept) => prisma.case.count({ where: deptWhereFor(dept, true) }))),
+    session.role === "admin"
+      ? Promise.all([
+          prisma.case.count({ where: musadiqaWhere(false) }),
+          prisma.case.count({ where: musadiqaWhere(true) }),
+        ])
+      : Promise.resolve(null),
   ]);
 
   const statuses: Record<string, number> = {};
@@ -63,5 +73,6 @@ export async function caseQueueCounts(session: AdminSession, officeId: string): 
     total,
     depts: Object.fromEntries(depts.map((dept, index) => [dept, deptTotals[index]])),
     deptDone: Object.fromEntries(doneDepts.map((dept, index) => [dept, doneTotals[index]])),
+    ...(musadiqaCounts ? { musadiqa: { applied: musadiqaCounts[0], attested: musadiqaCounts[1] } } : {}),
   };
 }

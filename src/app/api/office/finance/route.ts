@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
 
     // §W20: offices list cached directory se (pehle report queries ke BAAD ek
     // alag sequential round-trip thi) — ab sab ek hi parallel batch mein.
-    const [payments, shares, expenseDebits, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows, memberRows] =
+    const [payments, shares, expenseDebits, caseExpenses, salariesRaw, otherExpenses, officeExpenses, liabilities, offices, remainingRows, memberRows, mirrorExpenses] =
       await Promise.all([
         prisma.payment.findMany({
           where: { status: "RECEIVED", ...(inRange ? { paymentDate: inRange } : {}) },
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
         }),
         prisma.caseExpense.findMany({
           where: inRange ? { expenseDate: inRange } : {},
-          select: { amount: true, expenseDate: true, case: { select: { bookingOfficeId: true } } },
+          select: { amount: true, expenseDate: true, kind: true, case: { select: { bookingOfficeId: true } } },
         }),
         prisma.salaryEntry.findMany({
           where: inRange
@@ -279,6 +279,8 @@ export async function GET(request: NextRequest) {
           select: { id: true, name: true, bookingOfficeId: true, profitPercent: true, isActive: true },
           orderBy: { createdAt: "asc" },
         }),
+        // §W56: dobara kaam ke commission ke case kharche (mirror) — ids.
+        prisma.caseExpense.findMany({ where: { kind: "DEPT_COMMISSION" }, select: { id: true } }),
       ]);
 
     const salaries = salariesRaw.filter((entry) => {
@@ -354,15 +356,24 @@ export async function GET(request: NextRequest) {
     const addTo = (map: Record<string, Prisma.Decimal>, key: string, amount: Prisma.Decimal) => {
       map[key] = (map[key] || zero()).plus(amount);
     };
+    // §W56: dobara kaam ke commission ka case kharcha (DEPT_COMMISSION mirror) —
+    // us ka member se minus hissa department commission ka hissa hai (case
+    // kharche ka nahi; wo raqam deptCommissions bucket mein hai).
+    const mirrorIds = new Set(mirrorExpenses.map((row) => row.id));
+    const deptShareByOffice: Record<string, Prisma.Decimal> = {};
     for (const d of expenseDebits) {
       const remarks = d.remarks || "";
-      if (remarks.startsWith("Commission expense [")) addTo(caseExpShareByOffice, d.bookingOfficeId, d.amount);
+      const tagged = /^Commission expense \[([^\]]+)\]/.exec(remarks);
+      if (tagged && mirrorIds.has(tagged[1])) addTo(deptShareByOffice, d.bookingOfficeId, d.amount);
+      else if (remarks.startsWith("Commission expense [")) addTo(caseExpShareByOffice, d.bookingOfficeId, d.amount);
       else if (remarks.startsWith("Commission expense share [") || remarks.startsWith("Office expense share ["))
         addTo(officeExpShareByOffice, d.bookingOfficeId, d.amount);
       // untagged office-level debits (FIXED_COMMISSION flag=false) kisi member
       // ke payout se nahi kat-te → admin ka cost rehta hai → share maps mein nahi.
     }
     for (const e of caseExpenses) {
+      // §W56: mirror (DEPT_COMMISSION) yahan nahi — DEPT_COMMISSION ledger se ginti.
+      if (e.kind === "DEPT_COMMISSION") continue;
       caseExpenseTotal = caseExpenseTotal.plus(e.amount);
       day(e.expenseDate).caseExpenses = day(e.expenseDate).caseExpenses.plus(e.amount);
       addTo(caseExpRawByOffice, e.case.bookingOfficeId, e.amount);
@@ -427,6 +438,12 @@ export async function GET(request: NextRequest) {
         totalProfit.officeExpensesMemberShare = totalProfit.officeExpensesMemberShare.plus(
           officeExpShareByOffice[officeId] || zero()
         );
+      }
+      // §W56: dept commission ka wo hissa jo commission member se minus hua —
+      // admin ka bojh utna kam.
+      for (const [officeId, share] of Object.entries(deptShareByOffice)) {
+        profitOffice(officeId).deptCommissions = profitOffice(officeId).deptCommissions.minus(share);
+        totalProfit.deptCommissions = totalProfit.deptCommissions.minus(share);
       }
     }
     for (const item of remainingRows) {

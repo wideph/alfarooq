@@ -130,11 +130,16 @@ export async function registerCaseFiles(params: {
       const isSticker = department === "FILING" && stepKey === VERIFICATION_STICKER_STEP_KEY;
 
       if (department === "FILING" && !isSticker && item.status === "WAITING_FOR_FILE") {
+        // §W56: reissue par case dobara filing par aata hai — sirf us waqt
+        // (filingRoundAt) ke baad wali filing files ginti (purani files ke
+        // bawajood nayi file case ko printing par bhejti hai).
+        const round = await tx.case.findUnique({ where: { id: caseId }, select: { filingRoundAt: true } });
         const earlier = await tx.caseFile.count({
           where: {
             caseId,
             department: "FILING",
             id: { notIn: createdIds },
+            ...(round?.filingRoundAt ? { createdAt: { gte: round.filingRoundAt } } : {}),
             // Stickers uploaded earlier must not mark filing as done.
             OR: [{ stepKey: null }, { stepKey: { not: VERIFICATION_STICKER_STEP_KEY } }],
           },
@@ -159,9 +164,20 @@ export async function registerCaseFiles(params: {
         // (Alag se chuni hui attestations hon to normal attestation flow.)
         const info = await tx.case.findUnique({
           where: { id: caseId },
-          select: { setId: true, _count: { select: { attestations: { where: { status: { not: "DONE" } } } } } },
+          select: {
+            setId: true,
+            _count: { select: { attestations: { where: { status: { not: "DONE" } } } } },
+            // §W56: reissue wali extra service — dobara print ho gaya.
+            services: { where: { status: "ACTIVE", reissue: true, reissueDoneAt: null }, select: { id: true } },
+          },
         });
-        if (info && !info.setId && info._count.attestations === 0) {
+        const reissueIds = info?.services.map((service) => service.id) ?? [];
+        if (reissueIds.length > 0) {
+          await tx.caseService.updateMany({ where: { id: { in: reissueIds } }, data: { reissueDoneAt: new Date() } });
+        }
+        // §W56: reissue ke baad koi attestation baqi nahi (set ho tab bhi) →
+        // seedha attestation complete → courier (document dobara bhejna hai).
+        if (info && (!info.setId || reissueIds.length > 0) && info._count.attestations === 0) {
           caseData.status = "ATTESTATION_COMPLETE";
           caseData.currentAttestationId = null;
           nextStatus = "ATTESTATION_COMPLETE";

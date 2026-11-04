@@ -4,6 +4,7 @@ import type { AdminSession } from "@/lib/auth";
 import { dec, round2, sum, toNumber } from "@/lib/office/money";
 import { todayPakistan } from "@/lib/office/serializers";
 import { refreshExpectedPrintingDate } from "@/lib/office/working-day";
+import { extraShareState } from "@/lib/office/extra-share";
 
 // docs/office-module/03_BUSINESS_RULES.md BR1, BR3.
 // Single entry point that keeps a case's money state consistent after any
@@ -78,6 +79,8 @@ export async function recomputeCaseFinancials(
           where: { type: { in: [...COMMISSION_TYPES, "EXTRA_SHARE"] } },
           select: { type: true, direction: true, amount: true },
         },
+        // §W56: extra payment ke tay shuda tukre.
+        extraTranches: { orderBy: { createdAt: "asc" } },
       },
     });
     if (!item) throw new Error("Case nahi mila");
@@ -102,11 +105,15 @@ export async function recomputeCaseFinancials(
     if (item.bookingOffice.type === "FIXED_COMMISSION") {
       const commission = dec(item.commissionAmount);
       const half = round2(commission.div(2));
+      // §W56: poori commission ASAL (initial) agreed par — extra service ki
+      // amount (agreedAmount mein shamil) se pehle se mili commission wapas nahi
+      // hoti. Services na hon to baseAgreed === agreed (pehle jaisa).
+      const baseAgreed = agreed.minus(dec(item.extraServicesAmount));
 
       // BR3.5 target credited commission.
       let target = new Prisma.Decimal(0);
       if (received.greaterThan(0)) {
-        target = agreed.greaterThan(0) && received.greaterThanOrEqualTo(agreed) ? commission : half;
+        target = baseAgreed.greaterThan(0) && received.greaterThanOrEqualTo(baseAgreed) ? commission : half;
       }
 
       const commissionEntries = item.ledger.filter((entry) => COMMISSION_TYPES.includes(entry.type));
@@ -149,37 +156,50 @@ export async function recomputeCaseFinancials(
           ? item.commissionFullCreditedAt || now
           : null;
 
-      // BR3.6 extra amount share.
-      if (extra.greaterThan(0) && item.extraSharePercent === null) {
-        needsExtraDecision = toNumber(extra);
-      } else {
+      // BR3.6 / §W56 extra amount share — tukron (ExtraShareTranche) se.
+      // Purana faisla (extraSharePercent, koi tukra nahi) pehli dafa extra par
+      // ek tukra ban jata hai (wahi % — natija purane jaisa).
+      let tranches = item.extraTranches;
+      if (tranches.length === 0 && item.extraSharePercent !== null && extra.greaterThan(0)) {
         const percent = dec(item.extraSharePercent);
-        const extraTarget = round2(extra.mul(percent).div(100));
-        const extraEntries = item.ledger.filter((entry) => entry.type === "EXTRA_SHARE");
-        const extraCurrent = netOf(extraEntries);
-        const extraDiff = round2(extraTarget.minus(extraCurrent));
-        if (!extraDiff.isZero()) {
-          await tx.ledgerEntry.create({
-            data: {
-              bookingOfficeId: item.bookingOfficeId,
-              memberId: attributionMemberId,
-              caseId,
-              paymentId: options.paymentId || null,
-              type: "EXTRA_SHARE",
-              direction: extraDiff.greaterThan(0) ? "CREDIT" : "DEBIT",
-              amount: extraDiff.abs(),
-              entryDate,
-              remarks: extraCurrent.isZero()
-                ? `Extra amount ${toNumber(extra)} ka ${toNumber(percent)}%`
-                : "Extra share adjust",
-              createdById: session.adminId,
-            },
-          });
-        }
-        caseUpdate.extraShareCreditedAt = extraTarget.greaterThan(0)
-          ? item.extraShareCreditedAt || now
-          : null;
+        const legacy = await tx.extraShareTranche.create({
+          data: {
+            caseId,
+            extraAmount: extra,
+            shareAmount: round2(extra.mul(percent).div(100)),
+            mode: "PERCENT",
+            percent,
+            receivedAt: received,
+            decidedById: session.adminId,
+          },
+        });
+        tranches = [legacy];
       }
+      const state = extraShareState({ received, extra, tranches });
+      if (state.unsettled.greaterThan(0)) needsExtraDecision = toNumber(state.unsettled);
+      const extraTarget = state.target;
+      const extraEntries = item.ledger.filter((entry) => entry.type === "EXTRA_SHARE");
+      const extraCurrent = netOf(extraEntries);
+      const extraDiff = round2(extraTarget.minus(extraCurrent));
+      if (!extraDiff.isZero()) {
+        await tx.ledgerEntry.create({
+          data: {
+            bookingOfficeId: item.bookingOfficeId,
+            memberId: attributionMemberId,
+            caseId,
+            paymentId: options.paymentId || null,
+            type: "EXTRA_SHARE",
+            direction: extraDiff.greaterThan(0) ? "CREDIT" : "DEBIT",
+            amount: extraDiff.abs(),
+            entryDate,
+            remarks: extraCurrent.isZero()
+              ? `Extra amount ka hissa (tay shuda ${toNumber(state.covered)})`
+              : "Extra share adjust",
+            createdById: session.adminId,
+          },
+        });
+      }
+      caseUpdate.extraShareCreditedAt = extraTarget.greaterThan(0) ? item.extraShareCreditedAt || now : null;
     }
 
     // Automatic forward-only status moves (02_ARCHITECTURE.md §6).

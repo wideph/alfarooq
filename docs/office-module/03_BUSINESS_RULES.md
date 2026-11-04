@@ -438,3 +438,41 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   expenses"** hisaab mein (Mera account line + detail list case number ke saath; payment
   request OTHER_EXPENSE), courier wala "Courier kharcha" mein. Case delete par "usi
   office par rahe" wala OfficeExpense `kind` yaad rakhta hai (BYKEA → Other expenses).
+
+## BR24. Filing tabs, dobara-kaam commission, extra services, extra ke tukre — §W56
+
+- **Filing queue** do tabs: "Pending for file" (sirf WAITING_FOR_FILE — naye + reissue
+  wale; navbar / chip ginti isi ki) aur "Filing complete" (history=1, filing se aage).
+  Print ho chuka case pending tab mein nahi rehta. Reissue par `Case.filingRoundAt` —
+  us ke baad wali pehli filing file case ko printing par bhejti hai.
+- **Dobara kaam ka department commission** (admin status wapas + "Haan" §W44, reissue,
+  extra service attestation): `Case.deptCommissionChargeFrom` — us credit number se
+  har commission ka CaseExpense (kind DEPT_COMMISSION, deptLedgerEntryId) bhi: case
+  expenses mein nazar; commission office mein case ke rule / admin % se member par
+  minus. Partner pool aur finance mein sirf DEPT_COMMISSION ledger row ginti (mirror
+  exclude — double nahi); finance member-se-minus hissa deptCommissions se ghatata hai.
+  Mirror alag se delete nahi; printing file delete (removeDeptCommission) par saath hatta.
+- **Booking office edit**: "payment ke baad agreed nahi badal sakte" sirf tab jab agreed
+  waqai badle (pehle naam / tasveer badalne par bhi aata tha). Edit form ASAL agreed
+  dikhata hai; server services jodta hai.
+- **Extra service** (`CaseService`, `lib/office/case-services.ts`): booking office (cases:
+  write, apna case) / admin — ek booking, kai hissay, ek amount → `agreedAmount +=`,
+  `extraServicesAmount +=`. Hissay: Document reissue (filing ke liye remarks LAZMI,
+  nayi tasveer optional; case → WAITING_FOR_FILE; printing + courier dobara = case
+  kharcha; dobara print par attestation baqi na ho to seedha ATTESTATION_COMPLETE →
+  courier), Attestations (pehle se → dobara PENDING, warna nayi; date = aaj ke baad
+  pehla PK working day; case attestation se aage ho to PRINTED; attestation + courier
+  dobara = case kharcha), Musadiqa (admin remark; Musadiqa queue Applied → Attested,
+  commission nahi), Custom (admin remark; admin "<naam> Complete", commission nahi).
+  Dobara commission sirf us kind ka jo pehle ban chuka. Admin service cancel kar sakta
+  hai (amount agreed se wapas; kaam waisa). List: "Extra: naam · Rs"; kul agreed par
+  hover / click = initial + services.
+- **Commission office**: poori commission ASAL agreed (agreed − extraServicesAmount)
+  par — service se mili commission wapas nahi; service ki amount par office ko hissa
+  nahi. **Extra payment** `ExtraShareTranche` tukron mein: faisla % ya seedhi Rs (sirf
+  BAQI tay na shuda extra ka); tay shuda tukra service se agreed barhne par nahi
+  khulta; payment wapas (received < receivedAt) par us ka hissa usi nisbat se kam.
+  Misaal: 55,000, 60,000 aaye → 5,000 tay; 10,000 service, 13,000 aaye → sirf 3,000
+  ka sawal. Purane % faisle migration mein ek tukra (wahi raqam, ledger nahi badla).
+- Partner office: services ki payments received mein → pool (received − kharche −
+  dept commission) ke mutabiq shares; extra ka koi alag faisla nahi.

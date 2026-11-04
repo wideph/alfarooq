@@ -128,14 +128,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     let agreedChanged = false;
-    if (body.agreedAmount !== undefined) {
-      const agreedAmount = parseAmount(body.agreedAmount);
-      if (agreedAmount === null) return badRequest("Agreed amount sahi nahi hai");
-      const hasReceived = existing.payments.some((p) => p.status === "RECEIVED");
-      if (hasReceived && !hasPermission(session, "office:payments:verify")) {
-        return forbidden("Payment receive hone ke baad agreed amount cashier / admin badal sakta hai");
-      }
+    if (body.agreedAmount !== undefined && body.agreedAmount !== "") {
+      // §W56: form agreed amount hamesha saath bhejta hai — rok SIRF tab jab
+      // raqam waqai badli ho (pehle naam / tasveer badalne par bhi ye error aata
+      // tha). Edit form ASAL (initial) agreed dikhata hai; extra services ki
+      // amount server khud jodta hai (agreedAmount = asal + services).
+      const baseAgreed = parseAmount(body.agreedAmount);
+      if (baseAgreed === null) return badRequest("Agreed amount sahi nahi hai");
+      const agreedAmount = baseAgreed.plus(existing.extraServicesAmount);
       if (!agreedAmount.equals(existing.agreedAmount)) {
+        const hasReceived = existing.payments.some((p) => p.status === "RECEIVED");
+        if (hasReceived && !hasPermission(session, "office:payments:verify")) {
+          return forbidden("Payment receive hone ke baad agreed amount cashier / admin badal sakta hai");
+        }
         data.agreedAmount = agreedAmount;
         agreedChanged = true;
       }
@@ -209,6 +214,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         payments: { select: { id: true, slipKey: true } },
         files: { select: { fileKey: true } },
         remarks: { select: { id: true } },
+        // §W56: extra service (reissue) ki tasveer — R2 se bhi saaf.
+        services: { where: { imageKey: { not: null } }, select: { imageKey: true } },
       },
     });
     if (!existing) return notFound("Case nahi mila");
@@ -263,6 +270,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       ...existing.files.map((file) => file.fileKey),
       ...existing.payments.map((payment) => payment.slipKey).filter((key): key is string => Boolean(key)),
       ...(existing.clientPictureKey ? [existing.clientPictureKey] : []),
+      ...existing.services.map((service) => service.imageKey).filter((key): key is string => Boolean(key)),
     ];
     await Promise.all([
       ...r2Keys.map((key) =>

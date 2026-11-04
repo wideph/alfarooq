@@ -17,7 +17,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
 import SectionCard from "@/components/ui/SectionCard";
 import EmptyState from "@/components/ui/EmptyState";
-import ExtraAmountPopup from "@/components/office/ExtraAmountPopup";
+import ExtraAmountPopup, { extraDecisionLabel, type ExtraDecision } from "@/components/office/ExtraAmountPopup";
 import { formatDate, formatMoney, officeFetch, todayInputDate, toInputDate } from "@/lib/office/client";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_STYLES } from "@/lib/office/labels";
 import { PAYMENT_METHODS } from "@/lib/office/permissions";
@@ -167,14 +167,14 @@ function PaymentsPanel({ detail, admin, onReload, onUpdated, onMessage }: TabPro
     setBusy(null);
   }
 
-  async function decideExtra(percent: number) {
+  async function decideExtra(decision: ExtraDecision) {
     const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}/commission`, {
       method: "PATCH",
-      json: { extraSharePercent: percent },
+      json: { extraDecision: decision },
     });
     if (res.ok) {
       onUpdated(res.data);
-      onMessage(`Extra share ${percent}% set ho gaya`);
+      onMessage(`Extra ka hissa ${extraDecisionLabel(decision)} tay ho gaya`);
     } else onMessage(res.error, "error");
     setPopupExtra(null);
   }
@@ -386,7 +386,8 @@ function CommissionPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
   const canClaim = adminCanAny(admin, ["office:cases:write", "office:payments:submit"]);
   const [commission, setCommission] = useState(String(detail.commissionAmount));
   const [reason, setReason] = useState("");
-  const [extraPercent, setExtraPercent] = useState(detail.extraSharePercent === null ? "" : String(detail.extraSharePercent));
+  // §W56: extra ke faisle tukron mein — naya (baqi) ya kisi tukre ko badalna.
+  const [extraPopup, setExtraPopup] = useState<{ extra: number; trancheId?: string } | null>(null);
   const [claim, setClaim] = useState(detail.claimedRemaining === null ? "" : String(detail.claimedRemaining));
   const [busy, setBusy] = useState(false);
   const isFixed = detail.bookingOffice.type === "FIXED_COMMISSION";
@@ -427,9 +428,15 @@ function CommissionPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
             <div className="text-right text-xs text-slate-500">
               <p>Half: {detail.commissionHalfCreditedAt ? `credited ${formatDate(detail.commissionHalfCreditedAt)}` : "pending"}</p>
               <p>Final: {detail.commissionFullCreditedAt ? `credited ${formatDate(detail.commissionFullCreditedAt)}` : "pending"}</p>
-              {detail.extraSharePercent !== null && (
+              {(detail.extraTranches?.length ?? 0) > 0 && (
                 <p>
-                  Extra share: {detail.extraSharePercent}%{detail.extraShareCreditedAt ? ` (credited)` : ""}
+                  Extra hissa:{" "}
+                  {formatMoney(
+                    (detail.extraTranches ?? []).reduce(
+                      (acc, tranche) => acc + Math.round(tranche.shareAmount * tranche.validFraction * 100) / 100,
+                      0
+                    )
+                  )}
                 </p>
               )}
             </div>
@@ -472,25 +479,68 @@ function CommissionPanel({ detail, admin, onUpdated, onMessage }: TabProps) {
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
                 </button>
               </div>
-              {detail.totals.extra > 0 && (
-                <div className="flex flex-col gap-2 pt-1 sm:flex-row">
-                  <input
-                    className={`${inputClass} sm:max-w-[10rem]`}
-                    inputMode="decimal"
-                    placeholder="Extra share %"
-                    value={extraPercent}
-                    onChange={(e) => setExtraPercent(e.target.value)}
-                  />
-                  <button
-                    disabled={busy || extraPercent === ""}
-                    onClick={() => patchCommission({ extraSharePercent: extraPercent }, "Extra share % update ho gaya")}
-                    className={`${primaryBtnClass} min-h-[40px] shrink-0`}
-                  >
-                    Set extra share %
-                  </button>
+            </div>
+          )}
+          {/* §W56: extra payment ke faisle (tukre) — har tukre mein kitni extra
+              aur us mein se office ko kitna; payment wapas ho to hissa usi
+              nisbat se kam (validFraction). */}
+          {((detail.extraTranches?.length ?? 0) > 0 || detail.needsExtraDecision !== null) && (
+            <div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Extra payment ke faisle</p>
+              {(detail.extraTranches ?? []).map((tranche, index) => (
+                <div key={tranche.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>
+                    <b>{index + 1}.</b> {formatMoney(tranche.extraAmount)} extra → office ko{" "}
+                    <b className="text-emerald-700">{formatMoney(tranche.shareAmount)}</b>
+                    <span className="text-xs text-slate-500">
+                      {tranche.mode === "PERCENT" && tranche.percent !== null ? ` (${tranche.percent}%)` : " (Rs)"}
+                      {tranche.validFraction < 1 &&
+                        ` · payment wapas hui — abhi ${formatMoney(Math.round(tranche.shareAmount * tranche.validFraction * 100) / 100)}`}
+                    </span>
+                  </span>
+                  {canLedgerWrite && (
+                    <button
+                      type="button"
+                      onClick={() => setExtraPopup({ extra: tranche.extraAmount, trancheId: tranche.id })}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300"
+                    >
+                      Badlein
+                    </button>
+                  )}
+                </div>
+              ))}
+              {detail.needsExtraDecision !== null && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <span>
+                    <b>{formatMoney(detail.needsExtraDecision)}</b> extra abhi tay nahi
+                  </span>
+                  {canLedgerWrite && (
+                    <button
+                      type="button"
+                      onClick={() => setExtraPopup({ extra: detail.needsExtraDecision ?? 0 })}
+                      className={`${primaryBtnClass} min-h-[36px]`}
+                    >
+                      Faisla karein
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+          )}
+          {extraPopup && (
+            <ExtraAmountPopup
+              caseNumber={detail.caseNumber}
+              extra={extraPopup.extra}
+              editing={Boolean(extraPopup.trancheId)}
+              onSubmit={async (decision) => {
+                await patchCommission(
+                  { extraDecision: { ...decision, trancheId: extraPopup.trancheId } },
+                  `Extra ka hissa ${extraDecisionLabel(decision)} tay ho gaya`
+                );
+                setExtraPopup(null);
+              }}
+              onClose={() => setExtraPopup(null)}
+            />
           )}
         </div>
       ) : detail.bookingOffice.type === "PROFIT_SHARE" ? (

@@ -9,6 +9,7 @@ import CaseStatusSelect from "@/components/office/case/CaseStatusSelect";
 import DeleteCaseButton from "@/components/office/case/DeleteCaseButton";
 import DeptQueue, { type DeptQueueKey, type DeptQueueRow } from "@/components/office/case/DeptQueue";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
+import AgreedBreakdown from "@/components/office/case/AgreedBreakdown";
 import { adminCanAny, type AdminNavUser } from "@/components/admin/AdminNav";
 import { formatDate, formatMoney, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_STYLES, caseStatusLabel, caseStatusStyle, STATUS_LABELS } from "@/lib/office/labels";
@@ -91,6 +92,8 @@ type CaseRow = DeptQueueRow & {
   hasUnseenWarning?: boolean;
   // §W14.2: expenses ka compact summary har row ke saath.
   expenseSummary?: { count: number; total: number; reasons: string[] };
+  // §W56: extra services (DeptQueueRow.services) ki kul amount.
+  extraServicesAmount?: number;
 };
 
 type Office = { id: string; name: string };
@@ -168,6 +171,21 @@ function CasesList() {
     } else {
       showToast(res.error, "error");
     }
+  }
+
+  // §W56: admin — list se hi extra service ka musadiqa attested / custom complete.
+  const [serviceBusy, setServiceBusy] = useState<string | null>(null);
+  async function serviceAction(item: CaseRow, serviceId: string, action: "musadiqa-attested" | "custom-done") {
+    setServiceBusy(serviceId);
+    const res = await officeFetch(`/api/office/cases/${item.id}/services`, {
+      method: "PATCH",
+      json: { serviceId, action },
+    });
+    setServiceBusy(null);
+    showToast(
+      res.ok ? `${item.caseNumber}: ${action === "musadiqa-attested" ? "musadiqa attested" : "service complete"}` : res.error,
+      res.ok ? "success" : "error"
+    );
   }
 
   // silent=true par loading spinner nahi (live-refresh background mein chale).
@@ -407,6 +425,45 @@ function CasesList() {
             ) : null}
           </p>
         )}
+        {/* §W56: extra services — naam + amount; admin yahin se musadiqa
+            attested / custom complete. */}
+        {(item.services?.length ?? 0) > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1" onClick={stopRowClick}>
+            {item.services!.map((service) => (
+              <span key={service.id} className="inline-flex flex-wrap items-center gap-1">
+                <span
+                  title={service.reissue && !service.reissueDone ? "Document reissue — kaam jaari" : undefined}
+                  className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-800 ring-1 ring-indigo-200"
+                >
+                  Extra: {service.name}
+                  {typeof service.amount === "number" && !isDeptWorkerAccess(admin.role, admin.permissions)
+                    ? ` · ${formatMoney(service.amount)}`
+                    : ""}
+                </span>
+                {admin.role === "admin" && service.musadiqa && service.musadiqaStatus === "APPLIED" && (
+                  <button
+                    type="button"
+                    disabled={serviceBusy !== null}
+                    onClick={() => void serviceAction(item, service.id, "musadiqa-attested")}
+                    className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    Musadiqa attested
+                  </button>
+                )}
+                {admin.role === "admin" && service.customName && !service.customDone && (
+                  <button
+                    type="button"
+                    disabled={serviceBusy !== null}
+                    onClick={() => void serviceAction(item, service.id, "custom-done")}
+                    className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {service.customName} Complete
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         {(admin.role === "admin" || adminCanAny(admin, ["office:expenses:write"])) && (
           <button
             type="button"
@@ -449,7 +506,15 @@ function CasesList() {
     if (!item.totals) return <span className="text-xs text-slate-400">—</span>;
     return (
       <>
-        <p>Agreed: {formatMoney(item.totals.agreedAmount)}</p>
+        {/* §W56: hover / click → initial agreed + extra service charges. */}
+        <p onClick={stopRowClick}>
+          Agreed:{" "}
+          <AgreedBreakdown
+            total={item.totals.agreedAmount}
+            servicesAmount={item.extraServicesAmount ?? 0}
+            services={(item.services ?? []).map((service) => ({ id: service.id, name: service.name, amount: service.amount ?? 0 }))}
+          />
+        </p>
         <p className="text-emerald-700">Received: {formatMoney(item.totals.received)}</p>
         {item.totals.remaining > 0 && <p className="text-amber-700">Remaining: {formatMoney(item.totals.remaining)}</p>}
         {item.totals.extra > 0 && <p className="text-violet-700">Extra: {formatMoney(item.totals.extra)}</p>}
@@ -471,7 +536,7 @@ function CasesList() {
                 jaisa) — "Cases" likha hona confusing tha. Courier ki ginti
                 Waiting / Delivered tabs par hai, is liye yahan nahi. */}
             <h2 className="text-xl font-bold text-slate-900">
-              {deptTab ? DEPT_HEADINGS[deptTab.key] : "Cases"}
+              {deptTab ? DEPT_HEADINGS[deptTab.key] : dept === "musadiqa" ? "Musadiqa" : "Cases"}
               {deptTab?.key !== "courier" && <span className="ml-1 text-sm font-normal text-slate-400">({total})</span>}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -505,8 +570,7 @@ function CasesList() {
               super admin ko — office users ke navbar (OfficeNav) mein yehi Cases +
               department tabs pehle se hain (same rule), page par dobara confusing
               tha. Filing ka History checkbox sab ke liye. */}
-          {((admin.role === "admin" && DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission))) ||
-            dept === "filing") && (
+          {admin.role === "admin" && DEPT_TABS.some((tab) => canSeeDeptTab(admin, tab.permission)) && (
             <div className="flex flex-wrap items-center gap-2">
               {admin.role === "admin" && (
                 <>
@@ -517,25 +581,90 @@ function CasesList() {
                   {DEPT_TABS.filter((tab) => canSeeDeptTab(admin, tab.permission)).map((tab) => (
                     <button key={tab.key} onClick={() => selectDept(tab.key)} className={chipClass(dept === tab.key)}>
                       {tab.label}
-                      {/* courier khula ho to ginti Waiting / Delivered tabs par hai */}
-                      {!(tab.key === "courier" && dept === "courier") && (
+                      {/* courier / filing khula ho to ginti un ke do tabs par hai */}
+                      {!((tab.key === "courier" || tab.key === "filing") && dept === tab.key) && (
                         <CountPill count={counts?.depts[tab.key]} active={dept === tab.key} />
                       )}
                     </button>
                   ))}
+                  {/* §W56: extra service wali musadiqa — Applied / Attested. */}
+                  <button onClick={() => selectDept("musadiqa")} className={chipClass(dept === "musadiqa")}>
+                    Musadiqa
+                    {dept !== "musadiqa" && <CountPill count={counts?.musadiqa?.applied} active={false} />}
+                  </button>
                 </>
               )}
-              {dept === "filing" && (
-                <label className="ml-1 inline-flex items-center gap-1.5 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
-                    checked={history}
-                    onChange={(e) => setParam("history", e.target.checked ? "1" : "")}
-                    className="rounded border-slate-300"
-                  />
-                  History (filing se aage ke cases)
-                </label>
-              )}
+            </div>
+          )}
+
+          {/* §W56: Musadiqa queue (sirf admin) — extra service mein musadiqa:
+              Applied (booking office ne apply kiya) / Attested (admin ne mark kiya). */}
+          {dept === "musadiqa" && admin.role === "admin" && (
+            <div className="space-y-1.5">
+              <div role="tablist" aria-label="Musadiqa pages" className="flex w-full gap-1 rounded-2xl bg-slate-100 p-1 sm:w-fit">
+                {[
+                  { key: "", label: "Applied", count: counts?.musadiqa?.applied },
+                  { key: "1", label: "Attested", count: counts?.musadiqa?.attested },
+                ].map((tab) => {
+                  const active = (tab.key === "1") === history;
+                  return (
+                    <button
+                      key={tab.label}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setParam("history", tab.key)}
+                      className={`inline-flex flex-1 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold sm:flex-none ${
+                        active ? "bg-white text-primary-700 shadow-sm" : "text-slate-600 hover:text-primary-700"
+                      }`}
+                    >
+                      {tab.label}
+                      <CountPill count={tab.count} active={false} />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500">
+                {history
+                  ? "Attested: in cases ka musadiqa ho chuka (aap ne \"Musadiqa attested\" mark kiya)."
+                  : "Applied: booking office ne extra service mein musadiqa apply kiya — kaam ho jaye to row par \"Musadiqa attested\" dabayein."}
+              </p>
+            </div>
+          )}
+
+          {/* §W56: filing ke do alag pages (courier jaisa) — tab khulte hi
+              "Pending for file"; jin ki filing ho chuki wo alag page par.
+              Navbar / chip ki ginti sirf pending ki. */}
+          {dept === "filing" && (
+            <div className="space-y-1.5">
+              <div role="tablist" aria-label="Filing pages" className="flex w-full gap-1 rounded-2xl bg-slate-100 p-1 sm:w-fit">
+                {[
+                  { key: "", label: "Pending for file", count: counts?.depts.filing },
+                  { key: "1", label: "Filing complete", count: counts?.deptDone?.filing },
+                ].map((tab) => {
+                  const active = (tab.key === "1") === history;
+                  return (
+                    <button
+                      key={tab.label}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setParam("history", tab.key)}
+                      className={`inline-flex flex-1 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold sm:flex-none ${
+                        active ? "bg-white text-primary-700 shadow-sm" : "text-slate-600 hover:text-primary-700"
+                      }`}
+                    >
+                      {tab.label}
+                      <CountPill count={tab.count} active={false} />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500">
+                {history
+                  ? "Filing complete: in cases ki filing file upload ho chuki aur case aage (printing / attestation / courier) ja chuka — sirf dekhne ke liye."
+                  : "Pending for file: in cases ki filing file abhi upload karni hai (naye cases + reissue ke liye wapas aaye cases). Upload hote hi case printing par chala jata hai aur yahan se hat jata hai."}
+              </p>
             </div>
           )}
 

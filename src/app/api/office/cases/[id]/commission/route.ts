@@ -5,14 +5,20 @@ import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { recomputeCaseFinancials } from "@/lib/office/commission";
-import { parseAmount, parsePercent } from "@/lib/office/money";
+import { parseAmount } from "@/lib/office/money";
 import { cleanText } from "@/lib/office/serializers";
+import { applyExtraDecision, ExtraDecisionError } from "@/lib/office/extra-share";
 
 export const preferredRegion = ["sin1"];
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// BR3.2 (reduce commission) and BR3.6 (extra-amount share %). Cashier / super admin.
+// BR3.2 (reduce commission) and BR3.6 (extra-amount share). Cashier / super admin.
+// §W56: extra ka faisla TUKRON mein (extra-share.ts applyExtraDecision) —
+//   { extraDecision: { mode: "PERCENT" | "AMOUNT", value, trancheId? } }
+//   trancheId na ho → abhi ki BAQI (tay na shuda) extra ka naya tukra;
+//   trancheId ho → us tukre ka hissa badalna (% ya Rs).
+//   Purana { extraSharePercent } bhi chalta hai (= PERCENT faisla).
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { session, denied } = await guardOffice("office:ledger:write");
   if (denied) return denied;
@@ -25,41 +31,37 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const data: { commissionAmount?: ReturnType<typeof parseAmount>; extraSharePercent?: ReturnType<typeof parsePercent> } = {};
     const remarks = cleanText(body.reason, 300);
-
+    let commissionAmount: ReturnType<typeof parseAmount> | undefined;
     if (body.commissionAmount !== undefined) {
-      const commissionAmount = parseAmount(body.commissionAmount);
+      commissionAmount = parseAmount(body.commissionAmount);
       if (commissionAmount === null) return badRequest("Commission amount sahi nahi hai");
       if (!remarks) return badRequest("Commission change ki wajah likhein");
-      data.commissionAmount = commissionAmount;
     }
-    if (body.extraSharePercent !== undefined) {
-      const extraSharePercent = parsePercent(body.extraSharePercent);
-      if (extraSharePercent === null) return badRequest("Extra share % 0 se 100 ke darmiyan ho");
-      data.extraSharePercent = extraSharePercent;
-    }
-    if (Object.keys(data).length === 0) return badRequest("Kuch change nahi kiya");
+    const rawDecision: { mode?: unknown; value?: unknown; trancheId?: unknown } | null =
+      body.extraDecision && typeof body.extraDecision === "object"
+        ? (body.extraDecision as { mode?: unknown; value?: unknown; trancheId?: unknown })
+        : body.extraSharePercent !== undefined
+          ? { mode: "PERCENT", value: body.extraSharePercent }
+          : null;
+    if (commissionAmount === undefined && !rawDecision) return badRequest("Kuch change nahi kiya");
 
-    await prisma.case.update({
-      where: { id },
-      data: {
-        ...(data.commissionAmount !== undefined ? { commissionAmount: data.commissionAmount! } : {}),
-        ...(data.extraSharePercent !== undefined ? { extraSharePercent: data.extraSharePercent! } : {}),
-      },
-    });
+    if (commissionAmount) await prisma.case.update({ where: { id }, data: { commissionAmount } });
+    const extraLog = rawDecision ? await applyExtraDecision(id, session.adminId, rawDecision) : null;
+
     await logOfficeAction(session, {
       action: "case.commission",
       entity: "Case",
       entityId: id,
       before: { commissionAmount: item.commissionAmount, extraSharePercent: item.extraSharePercent },
-      after: { ...data, remarks },
+      after: { ...(commissionAmount ? { commissionAmount } : {}), ...(extraLog ? { extraDecision: extraLog } : {}), remarks },
     });
 
     const result = await recomputeCaseFinancials(id, session);
     const detail = await loadCaseDetail(session, id);
     return NextResponse.json({ ...(detail as object), needsExtraDecision: result.needsExtraDecision });
   } catch (error) {
+    if (error instanceof ExtraDecisionError) return badRequest(error.message);
     return serverError(error);
   }
 }

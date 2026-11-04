@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPermission, type AdminSession } from "@/lib/auth";
 import { caseScope, deptPermissionsOf, isDeptWorker } from "@/lib/office/case-access";
 import { computeTotals } from "@/lib/office/commission";
-import { sum, toNumber } from "@/lib/office/money";
+import { dec, sum, toNumber } from "@/lib/office/money";
 import { getOfficeFileSignedUrl, originalFilenameFromKey } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 import {
@@ -13,6 +13,8 @@ import {
 } from "@/lib/office/workflow";
 import { DEPT_COMMISSION_TYPE, parseDeptCommissionKind } from "@/lib/office/dept-commission";
 import { commissionExpenseTag, effectiveDeductPercent } from "@/lib/office/expense-deduction";
+import { extraShareState, trancheValidFraction } from "@/lib/office/extra-share";
+import { serializeService } from "@/lib/office/case-services";
 
 export const caseListInclude = {
   bookingOffice: { select: { id: true, name: true, type: true } },
@@ -48,6 +50,8 @@ export function stripCaseMoney<T extends Record<string, unknown>>(row: T): T {
     profitShareSnapshot: null,
     profitStale: false,
     expenseDeductPercent: 0,
+    extraServicesAmount: 0,
+    extraTranches: [],
     agreedAmountRemarks: null,
     totals: ZERO_TOTALS,
     expenseSummary: { count: 0, total: 0, reasons: [] },
@@ -242,6 +246,9 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
         orderBy: { createdAt: "asc" },
         include: { member: { select: { id: true, name: true } } },
       },
+      // §W56: extra services + extra payment ke faisle (tukre).
+      services: { orderBy: { createdAt: "asc" } },
+      extraTranches: { orderBy: { createdAt: "asc" } },
     },
   });
   // §W18: caseScope ne block kiya — department workers ko limited detail.
@@ -266,6 +273,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
       ...item.expenses.flatMap((e) => [e.createdById, e.paidByAdminId]),
       ...item.ledger.map((l) => l.createdById),
+      ...item.services.map((s) => s.createdById),
     ]),
     remarkTarget
       ? prisma.caseRemarkRecipient.findFirst({
@@ -373,12 +381,27 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       ? item.ledger.map((l) => ({ ...l, createdByName: names[l.createdById] || null }))
       : [],
     totals,
-    needsExtraDecision:
-      item.bookingOffice.type === "FIXED_COMMISSION" &&
-      totals.extra > 0 &&
-      item.extraSharePercent === null
-        ? totals.extra
-        : null,
+    // §W56: baqi (tay na shuda) extra — tukron ke baad. Purana sirf-% faisla
+    // (koi tukra nahi) agle recompute par khud tukra ban jata hai → sawal nahi.
+    needsExtraDecision: (() => {
+      if (item.bookingOffice.type !== "FIXED_COMMISSION" || totals.extra <= 0) return null;
+      if (item.extraTranches.length === 0 && item.extraSharePercent !== null) return null;
+      const state = extraShareState({ received: totals.received, extra: totals.extra, tranches: item.extraTranches });
+      return state.unsettled.greaterThan(0) ? toNumber(state.unsettled) : null;
+    })(),
+    extraTranches: item.extraTranches.map((tranche) => ({
+      id: tranche.id,
+      extraAmount: tranche.extraAmount,
+      shareAmount: tranche.shareAmount,
+      mode: tranche.mode,
+      percent: tranche.percent,
+      createdAt: tranche.createdAt,
+      validFraction: toNumber(trancheValidFraction(tranche, dec(totals.received))),
+    })),
+    services: item.services.map((service) => ({
+      ...serializeService(service, item.attestations),
+      createdByName: names[service.createdById] || null,
+    })),
   };
   if (!deptWorker) return toJson(payload);
 
@@ -394,6 +417,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     deptCommissions: deptCommissions.filter((row) => row.adminId === session.adminId),
     // §W51 / §W52: sirf apne courier kharche (case ki baqi raqam nahi).
     myDeptExpenses,
+    // §W56: extra services — sirf kaam (naam / hissay / reissue remarks), raqam nahi.
+    services: payload.services.map((service) => ({ ...service, amount: 0 })),
     contacts: courier ? item.contacts : [],
     addresses: courier ? item.addresses : [],
   });

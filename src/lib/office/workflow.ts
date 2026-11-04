@@ -102,16 +102,11 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
               ],
             },
           }
-        : // W21: the filing tab KEEPS cases after their files are uploaded —
-          // pending (no filing file yet) OR done (≥1 FILING file). Rows carry
-          // filingFilesCount / filingDone so the UI can color them; the cases
-          // route sorts pending first.
-          {
-            OR: [
-              { status: "WAITING_FOR_FILE" },
-              { files: { some: { department: "FILING" } } },
-            ],
-          };
+        : // §W56: do tabs — "Pending for file" (yahi; sirf WAITING_FOR_FILE,
+          // reissue wale cases bhi) aur "Filing complete" (history=1, upar).
+          // Print ho chuka case ab pending tab mein nahi (pehle W21 mein
+          // filing file wala har case yahan rehta tha).
+          { status: "WAITING_FOR_FILE" };
     case "printing":
       // §W23: printing queue = sirf kaam ka intezar karne wale cases. PRINTED
       // case attestation phase mein hota hai — wo SIRF attestation queue ka
@@ -128,6 +123,14 @@ export function deptQueueWhere(dept: string, history: boolean): Prisma.CaseWhere
       // §W47: do alag pages — default "Waiting for courier slip", history=1
       // par "Delivered".
       return history ? { status: "DELIVERED" } : { status: "WAITING_FOR_COURIER" };
+    case "musadiqa":
+      // §W56: extra service mein musadiqa — "Applied" (default) / "Attested"
+      // (history=1). Case ka status nahi badalta; service ka musadiqaStatus.
+      return {
+        services: {
+          some: { status: "ACTIVE", musadiqa: true, musadiqaStatus: history ? "ATTESTED" : "APPLIED" },
+        },
+      };
     default:
       return null;
   }
@@ -192,7 +195,31 @@ type FilingCaseRow = {
   // W21: cases list rows carry a filtered FILING files count; when present the
   // payload gets filingFilesCount / filingDone (pending vs done colors).
   _count?: { files: number };
+  // §W56: extra services — filing / department ko sirf kaam (raqam nahi).
+  services?: Array<{
+    id: string;
+    name: string;
+    reissue: boolean;
+    reissueDoneAt: Date | null;
+    remarks: string | null;
+    imageKey: string | null;
+    status?: string;
+  }>;
 };
+
+// §W56: extra services ka slim (bina raqam) shape — filing / department rows.
+export function slimServices(services: FilingCaseRow["services"]) {
+  return (services ?? [])
+    .filter((service) => !service.status || service.status === "ACTIVE")
+    .map((service) => ({
+      id: service.id,
+      name: service.name,
+      reissue: service.reissue,
+      reissueDone: Boolean(service.reissueDoneAt),
+      remarks: service.reissue ? service.remarks : null,
+      hasImage: Boolean(service.imageKey),
+    }));
+}
 
 export async function serializeFilingCase(item: FilingCaseRow) {
   return toJson({
@@ -209,8 +236,13 @@ export async function serializeFilingCase(item: FilingCaseRow) {
     customLabel: item.customLabel ?? null,
     customLabelColor: item.customLabelColor ?? null,
     ...(item._count
-      ? { filingFilesCount: item._count.files, filingDone: item._count.files > 0 }
+      ? {
+          filingFilesCount: item._count.files,
+          // §W56: reissue par case dobara WAITING_FOR_FILE — purani files ke bawajood pending.
+          filingDone: item._count.files > 0 && item.status !== "WAITING_FOR_FILE",
+        }
       : {}),
+    services: slimServices(item.services),
     clientPictureType: item.clientPictureType,
     clientPictureUrl: item.clientPictureKey
       ? await getOfficeFileSignedUrl(item.clientPictureKey)
@@ -273,6 +305,8 @@ export async function evaluateCaseCompletion(
     include: {
       attestations: { include: { attestationType: { select: { name: true } } } },
       set: { include: { steps: { select: { label: true } } } },
+      // §W56: extra service ki attestations (set mein na hon tab bhi zaroori).
+      services: { where: { status: "ACTIVE" }, select: { attestationIds: true } },
     },
   });
   if (!item) return false;
@@ -280,9 +314,14 @@ export async function evaluateCaseCompletion(
   // §W39: printing se pehle complete nahi (sirf admin — allowBeforePrinting).
   if (PRE_PRINTING_STATUSES.includes(item.status) && !options.allowBeforePrinting) return false;
 
+  const serviceIds = new Set(
+    item.services.flatMap((service) =>
+      Array.isArray(service.attestationIds) ? (service.attestationIds as unknown[]).filter((id): id is string => typeof id === "string") : []
+    )
+  );
   const relevant = item.set
-    ? item.attestations.filter((a) =>
-        item.set!.steps.some((step) => step.label === a.attestationType.name)
+    ? item.attestations.filter(
+        (a) => serviceIds.has(a.id) || item.set!.steps.some((step) => step.label === a.attestationType.name)
       )
     : item.attestations;
   if (relevant.length === 0 && !options.allowNoAttestations) return false;
