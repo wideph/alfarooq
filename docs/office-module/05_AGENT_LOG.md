@@ -2252,3 +2252,12 @@ Investigation-first (live DB audit):
   26/26 (verify popup, booking edit fix, Rs faisla, services, filing tabs, musadiqa,
   delete 409 → OFFICE) + 6 pages 200. Chrome extension connect nahi tha — screen
   screenshot nahi.
+- **Live (2026-11-08, owner ki ijazat se)**: `prisma migrate deploy` → wave56 applied
+  (purane % faislon ke tukre samait); live read-only `office-finance-audit.cjs` TOTAL
+  ISSUES 0 (naye rules: asal agreed, tukre, pool bina mirror); push 4f82524.
+- **Next step**: owner live par: (a) filing tab ke do hisse; (b) booking office se case
+  par "Extra service book karein" (reissue remarks ke saath / attestation / musadiqa /
+  custom) → list mein "Extra: naam · Rs", Agreed par click; (c) extra payment par popup
+  mein "Seedhi raqam (Rs)"; (d) admin Cases → Musadiqa chip; (e) status wapas + "Haan"
+  → case expenses mein "Department commission (dobara kaam)". Chrome extension connect
+  ho to UI screenshot check.
