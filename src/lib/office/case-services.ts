@@ -1,10 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AdminSession } from "@/lib/auth";
-import { dec, round2, toNumber } from "@/lib/office/money";
+import { toNumber } from "@/lib/office/money";
 import { caseDeptCommissionCredits, type DeptCommissionKind } from "@/lib/office/dept-commission";
 import { CASE_STATUS_ORDER } from "@/lib/office/workflow";
-import { computeTotals } from "@/lib/office/commission";
 
 // §W56 — booking office ki EXTRA SERVICE (case banne ke baad). Ek booking mein
 // kai hissay + ek amount (owner ka faisla):
@@ -28,8 +27,6 @@ import { computeTotals } from "@/lib/office/commission";
 // commission (deptCommissionRounds) aur wo case ka kharcha bhi
 // (deptCommissionChargeFrom → CaseExpense kind DEPT_COMMISSION). Musadiqa /
 // custom par koi commission nahi.
-
-type Tx = Prisma.TransactionClient;
 
 export type ServiceInput = {
   name?: string | null;
@@ -80,38 +77,6 @@ function bumpRecredit(
   return true;
 }
 
-// §W56: purana extra faisla (sirf %, koi tukra nahi) — agreed barhne se PEHLE
-// tukra ban jaye, warna service ki amount extra ko kha jati aur tay shuda hissa
-// ulta ho jata.
-export async function ensureLegacyExtraTranche(tx: Tx, caseId: string, actorId: string) {
-  const item = await tx.case.findUnique({
-    where: { id: caseId },
-    select: {
-      agreedAmount: true,
-      extraSharePercent: true,
-      bookingOffice: { select: { type: true } },
-      payments: { select: { amount: true, status: true } },
-      _count: { select: { extraTranches: true } },
-    },
-  });
-  if (!item || item.bookingOffice.type !== "FIXED_COMMISSION") return;
-  if (item.extraSharePercent === null || item._count.extraTranches > 0) return;
-  const totals = computeTotals(item.payments, item.agreedAmount);
-  const extra = dec(totals.extra);
-  if (!extra.greaterThan(0)) return;
-  await tx.extraShareTranche.create({
-    data: {
-      caseId,
-      extraAmount: extra,
-      shareAmount: round2(extra.mul(dec(item.extraSharePercent)).div(100)),
-      mode: "PERCENT",
-      percent: item.extraSharePercent,
-      receivedAt: dec(totals.received),
-      decidedById: actorId,
-    },
-  });
-}
-
 export class ServiceInputError extends Error {}
 
 export async function bookCaseService(session: AdminSession, caseId: string, input: ServiceInput) {
@@ -138,8 +103,6 @@ export async function bookCaseService(session: AdminSession, caseId: string, inp
       ? await tx.attestationType.findMany({ where: { id: { in: input.attestationTypeIds } }, select: { id: true, name: true } })
       : [];
     if (types.length !== new Set(input.attestationTypeIds).size) throw new ServiceInputError("Koi attestation nahi mili");
-
-    await ensureLegacyExtraTranche(tx, caseId, session.adminId);
 
     // Attestations: pehle se hon to dobara PENDING, warna nayi.
     const attestationIds: string[] = [];

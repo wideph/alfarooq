@@ -165,7 +165,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     // response ke baad chalti hai (W13.2).
     let courierStage: Awaited<ReturnType<typeof advanceCourierStage>> = null;
     if (agreedChanged) {
-      await recomputeCaseFinancials(id, session);
+      // §W57: asal agreed badli → purane extra faisle (purani agreed par) khatam;
+      // extra bachi ho to admin se naya faisla.
+      await recomputeCaseFinancials(id, session, { resetExtraDecisions: true });
       // §W30: agreed kam hone se baqi 0 ho gaya → courier stage (forward-only).
       courierStage = await advanceCourierStage(id);
     }

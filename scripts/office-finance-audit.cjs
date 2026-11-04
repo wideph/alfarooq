@@ -47,10 +47,14 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
         if (Math.abs(cur - target) > 0.005) issue(`${o.name} ${c.caseNumber}: commission ledger ${cur} ≠ target ${target} (rec ${rec}, agreed ${agreed}, commission ${com})`);
         const extra = Math.max(rec - agreed, 0);
         const exCur = r2(L.filter((l) => l.type === "EXTRA_SHARE").reduce((t, l) => t + signed(l), 0));
-        // §W56: extra share = tukron ka hissa × valid (payment wapas ho to kam).
+        // §W56: extra share = tukron ka hissa. §W57: payment wapas / kam hone par
+        // tukra delete ho jata hai — so raha tukra (received < receivedAt) ya
+        // bacha hua purana % ab ghalati hai.
         let covered = 0, exTarget = 0;
+        if (c.extraSharePercent !== null) issue(`${o.name} ${c.caseNumber}: purana extraSharePercent ${n(c.extraSharePercent)} abhi bhi case par (W57 ke baad null hona chahiye)`);
         for (const t of c.extraTranches) {
           const amt = n(t.extraAmount); if (amt <= 0) continue;
+          if (rec < n(t.receivedAt) - 0.005) issue(`${o.name} ${c.caseNumber}: so raha extra tukra (${amt}, faisla ${n(t.receivedAt)} par, ab received ${rec}) — delete hona chahiye tha`);
           const f = Math.min(Math.max((rec - (n(t.receivedAt) - amt)) / amt, 0), 1);
           covered += amt * f; exTarget += r2(n(t.shareAmount) * f);
         }
@@ -79,6 +83,10 @@ const issue = (s) => { issues.push(s); console.log("ISSUE:", s); };
         const pool = rec - exp - dept;
         const snap = c.profitShareSnapshot && typeof c.profitShareSnapshot === "object" ? c.profitShareSnapshot : null;
         const shareRows = L.filter((l) => ["PROFIT_SHARE", "ADJUSTMENT"].includes(l.type));
+        // §W57: sab paisa wapas aur sab hissay 0 → snapshot hat jana chahiye.
+        const shareMembers = [...new Set(shareRows.map((l) => l.memberId || "NULL"))];
+        const allSharesZero = shareMembers.every((id) => Math.abs(shareRows.filter((l) => (l.memberId || "NULL") === id).reduce((t, l) => t + signed(l), 0)) < 0.005);
+        if (snap && !rec && !exp && !dept && allSharesZero) console.log(`  note ${c.caseNumber}: sab paisa wapas — purana profit snapshot abhi bhi (agli sync par hatega)`);
         if (!snap && shareRows.length === 0) { if (rec || exp || dept) issue(`${o.name} ${c.caseNumber}: paisa hai (rec ${rec}) magar profit share bana hi nahi`); continue; }
         const ids = new Set([...Object.keys(snap || {}), ...shareRows.map((l) => l.memberId || "NULL")]);
         for (const id of ids) {

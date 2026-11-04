@@ -143,13 +143,20 @@ async function distributeProfitShare(caseId: string, actorId: string): Promise<P
       });
     }
 
+    // §W57: saara paisa / kharcha wapas (payment delete) → upar har member ka
+    // hissa 0 ho chuka; purana snapshot (purane %) PERMANENT hata do — agli asal
+    // payment par us waqt ke % se naya snapshot (pehle purane % so kar wapas
+    // zinda ho jate the).
+    const fullyReversed = received.isZero() && expenses.isZero() && deptCommissions.isZero();
     await tx.case.update({
       where: { id: caseId },
-      data: {
-        profitFinalizedAt: new Date(),
-        // §W12.6 — first distribution writes the snapshot (same transaction).
-        ...(item.profitShareSnapshot ? {} : { profitShareSnapshot: snapshot }),
-      },
+      data: fullyReversed
+        ? { profitFinalizedAt: null, profitShareSnapshot: Prisma.DbNull }
+        : {
+            profitFinalizedAt: new Date(),
+            // §W12.6 — first distribution writes the snapshot (same transaction).
+            ...(item.profitShareSnapshot ? {} : { profitShareSnapshot: snapshot }),
+          },
     });
 
     // §W11.4 — percent total + admin remainder (explicit in summary).

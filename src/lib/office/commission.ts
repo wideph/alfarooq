@@ -4,7 +4,7 @@ import type { AdminSession } from "@/lib/auth";
 import { dec, round2, sum, toNumber } from "@/lib/office/money";
 import { todayPakistan } from "@/lib/office/serializers";
 import { refreshExpectedPrintingDate } from "@/lib/office/working-day";
-import { extraShareState } from "@/lib/office/extra-share";
+import { extraShareState, trancheValidFraction } from "@/lib/office/extra-share";
 
 // docs/office-module/03_BUSINESS_RULES.md BR1, BR3.
 // Single entry point that keeps a case's money state consistent after any
@@ -59,12 +59,16 @@ export function caseCommissionMemberId(
 export type RecomputeResult = CaseTotals & {
   needsExtraDecision: number | null;
   status: string;
+  // §W57: kitne purane extra faisle (payment kam hone par) delete hue.
+  droppedExtraDecisions: number;
 };
 
 export async function recomputeCaseFinancials(
   caseId: string,
   session: AdminSession,
-  options: { paymentId?: string | null } = {}
+  // resetExtraDecisions (§W57): admin ne ASAL agreed badli — purane saare extra
+  // faisle khatam (un ki buniyad hi badal gayi), nayi extra par naya faisla.
+  options: { paymentId?: string | null; resetExtraDecisions?: boolean } = {}
 ): Promise<RecomputeResult> {
   const result = await prisma.$transaction(async (tx) => {
     const item = await tx.case.findUnique({
@@ -101,6 +105,7 @@ export async function recomputeCaseFinancials(
     const entryDate = todayPakistan();
     const caseUpdate: Prisma.CaseUpdateInput = {};
     let needsExtraDecision: number | null = null;
+    let droppedExtraDecisions = 0;
 
     if (item.bookingOffice.type === "FIXED_COMMISSION") {
       const commission = dec(item.commissionAmount);
@@ -157,24 +162,24 @@ export async function recomputeCaseFinancials(
           : null;
 
       // BR3.6 / §W56 extra amount share — tukron (ExtraShareTranche) se.
-      // Purana faisla (extraSharePercent, koi tukra nahi) pehli dafa extra par
-      // ek tukra ban jata hai (wahi % — natija purane jaisa).
+      // §W57: jis faisle ki POORI extra ab maujood nahi (payment delete / un-
+      // receive / raqam kam) wo faisla — aur us ke baad wale — PERMANENT delete.
+      // Pehle tukra sirf "0 nisbat" par so jata tha aur nayi payment aate hi
+      // purani extra + purana % / Rs wapas zinda ho jata tha. Ab nayi extra par
+      // admin se NAYA faisla. Purana Case.extraSharePercent ab kabhi nahi parha
+      // jata (W57 migration ne null kiya).
       let tranches = item.extraTranches;
-      if (tranches.length === 0 && item.extraSharePercent !== null && extra.greaterThan(0)) {
-        const percent = dec(item.extraSharePercent);
-        const legacy = await tx.extraShareTranche.create({
-          data: {
-            caseId,
-            extraAmount: extra,
-            shareAmount: round2(extra.mul(percent).div(100)),
-            mode: "PERCENT",
-            percent,
-            receivedAt: received,
-            decidedById: session.adminId,
-          },
-        });
-        tranches = [legacy];
+      const staleAt =
+        options.resetExtraDecisions && tranches.length > 0
+          ? 0
+          : tranches.findIndex((tranche) => trancheValidFraction(tranche, received).lessThan(1));
+      if (staleAt >= 0) {
+        const stale = tranches.slice(staleAt);
+        await tx.extraShareTranche.deleteMany({ where: { id: { in: stale.map((tranche) => tranche.id) } } });
+        droppedExtraDecisions = stale.length;
+        tranches = tranches.slice(0, staleAt);
       }
+      if (item.extraSharePercent !== null) caseUpdate.extraSharePercent = null;
       const state = extraShareState({ received, extra, tranches });
       if (state.unsettled.greaterThan(0)) needsExtraDecision = toNumber(state.unsettled);
       const extraTarget = state.target;
@@ -192,9 +197,12 @@ export async function recomputeCaseFinancials(
             direction: extraDiff.greaterThan(0) ? "CREDIT" : "DEBIT",
             amount: extraDiff.abs(),
             entryDate,
-            remarks: extraCurrent.isZero()
-              ? `Extra amount ka hissa (tay shuda ${toNumber(state.covered)})`
-              : "Extra share adjust",
+            remarks:
+              droppedExtraDecisions > 0
+                ? "Extra faisla khatam (payment / agreed badli) — nayi extra par naya faisla"
+                : extraCurrent.isZero()
+                  ? `Extra amount ka hissa (tay shuda ${toNumber(state.covered)})`
+                  : "Extra share adjust",
             createdById: session.adminId,
           },
         });
@@ -215,7 +223,7 @@ export async function recomputeCaseFinancials(
       await tx.case.update({ where: { id: caseId }, data: caseUpdate });
     }
 
-    return { ...totals, needsExtraDecision, status };
+    return { ...totals, needsExtraDecision, status, droppedExtraDecisions };
   }, { maxWait: 10000, timeout: 30000 });
 
   // Working-day lookup may call the AI, so it stays outside the transaction.

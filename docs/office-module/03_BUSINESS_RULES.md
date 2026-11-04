@@ -471,8 +471,37 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   par — service se mili commission wapas nahi; service ki amount par office ko hissa
   nahi. **Extra payment** `ExtraShareTranche` tukron mein: faisla % ya seedhi Rs (sirf
   BAQI tay na shuda extra ka); tay shuda tukra service se agreed barhne par nahi
-  khulta; payment wapas (received < receivedAt) par us ka hissa usi nisbat se kam.
+  khulta; payment wapas / kam ho to wo tukra PERMANENT delete (BR25, §W57).
   Misaal: 55,000, 60,000 aaye → 5,000 tay; 10,000 service, 13,000 aaye → sirf 3,000
   ka sawal. Purane % faisle migration mein ek tukra (wahi raqam, ledger nahi badla).
 - Partner office: services ki payments received mein → pool (received − kharche −
   dept commission) ke mutabiq shares; extra ka koi alag faisla nahi.
+
+## BR25. Delete / badlaav ke baad purana data zinda nahi — §W57
+
+- **Extra ke tukre** (commission office): payment delete / un-receive / raqam kam ho
+  (kul RECEIVED < tukre ka receivedAt) → wo tukra aur us ke baad wale recompute mein
+  PERMANENT delete; EXTRA_SHARE ledger wapas (remark "Extra faisla khatam …"). Nayi
+  payment aaye to POORI maujooda extra par admin se NAYA sawal — purani extra, purana %
+  ya Rs kabhi wapas nahi. Misaal: 55,000; 60,000 → 5,000 @ 50% = 2,500; payment delete
+  → 0; 62,000 dobara → 7,000 ka naya sawal (pehle purana 5,000 / 50% zinda ho jata tha).
+- Admin ASAL agreed seedha badle (case edit, remaining claim accept / edit, discount
+  accept) → us case ke saare extra faisle khatam (buniyad badal gayi), extra bachi ho to
+  naya sawal. Extra SERVICE se agreed barhna / service cancel is mein shamil nahi (BR24
+  wahi: tay shuda tukra qaim).
+- `Case.extraSharePercent` ab na parha jata na likha jata (W57 migration ne sab null
+  kiye; jahan purana % abhi tukra nahi bana tha aur extra thi, pehle tukra bana).
+- **Partner office**: case ka saara paisa / kharcha / dept commission wapas (sab hissay 0)
+  → `profitShareSnapshot` + `profitFinalizedAt` hat jate hain; agli asal payment par us
+  waqt ke members ke % se naya snapshot (purane % zinda nahi).
+- **Stage wapas** (sirf jo usi payment ki wajah se tha): RECEIVED payment delete / status
+  badla / raqam kam → (a) koi RECEIVED nahi + WAITING_FOR_FILE + filing file nahi
+  (sticker ke ilawa) → FIRST_PAYMENT_PENDING; (b) WAITING_FOR_COURIER_ADDRESS /
+  WAITING_FOR_COURIER + ab baqi > 0 → ATTESTATION_COMPLETE. Asal kaam ho chuka ho
+  (filing file, PRINTED ya aage, DELIVERED) to kuch nahi.
+- **Admin status → Attestation**: dropdown ka "Attestation — step chunein…" modal mein
+  is case ki attestations ki list (number, naam, Pending / Jaari / Done, tareekh) — step
+  chune baghair Confirm band. Koi attestation na ho to saaf paigham.
+- **Reissue tasveer**: file picker checkbox ke label se bahar (pehle click roka jata
+  tha); 4 MB se badi JPG / PNG / WebP browser mein chhoti; ghalat qisam / badi file par
+  saaf 400 paigham.

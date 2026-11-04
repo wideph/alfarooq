@@ -186,6 +186,21 @@ async function shrinkImageForServer(file: File, maxBytes: number): Promise<File 
   }
 }
 
+// §W57 — ek file seedha multipart (server raaste) se bhejni ho (maslan extra
+// service reissue ki tasveer): badi photo ko browser mein hi chhota karo taake
+// Vercel ki 4.5 MB body limit mein aa jaye. { file } ya { error }.
+export async function prepareFileForServer(
+  file: File
+): Promise<{ file: File; error?: undefined } | { file?: undefined; error: string }> {
+  if (file.size === 0) return { error: `"${file.name}" khali file hai` };
+  if (file.size <= PROXY_MAX_BYTES) return { file };
+  const shrunk = await shrinkImageForServer(file, PROXY_MAX_BYTES - 64 * 1024);
+  if (shrunk) return { file: shrunk };
+  return {
+    error: `"${file.name}" (${formatFileSize(file.size)}) bohat badi hai — 4 MB se chhoti file ya JPG/PNG photo chunein`,
+  };
+}
+
 // §W37 — upload kis stage par atki (server par audit log mein jati hai).
 type UploadStage = "presign" | "put" | "register" | "server" | "too-big" | "network";
 type UploadReportItem = {

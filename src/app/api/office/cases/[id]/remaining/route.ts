@@ -66,7 +66,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         before: { agreedAmount: item.agreedAmount, claimedRemaining: item.claimedRemaining },
         after: { agreedAmount, remaining },
       });
-      const result = await recomputeCaseFinancials(id, session);
+      // §W57: agreed seedha badli → purane extra faisle khatam (naya faisla).
+      const result = await recomputeCaseFinancials(id, session, { resetExtraDecisions: true });
       // §W30: agreed badalne se baqi 0 ho gaya → courier stage (forward-only).
       const courierStage = await advanceCourierStage(id);
       after(() => notifyCourierStage(id, courierStage));

@@ -65,8 +65,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const reissue = flag(fields.reissue);
     if (image && !reissue) return badRequest("Nayi tasveer sirf reissue ke saath");
     if (image) {
-      const uploaded = await uploadOfficeFile(image, `services/${item.caseNumber}`);
-      uploadedKey = uploaded.key;
+      // §W57 — ghalat qisam / badi file ka saaf paigham (500 nahi).
+      try {
+        const uploaded = await uploadOfficeFile(image, `services/${item.caseNumber}`);
+        uploadedKey = uploaded.key;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (/allowed|MB/.test(message)) return badRequest(message);
+        throw error;
+      }
     }
 
     const result = await bookCaseService(session, id, {

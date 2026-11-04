@@ -402,6 +402,47 @@ export async function advanceCourierStage(
   return next;
 }
 
+// §W57 — payment delete / un-receive / raqam kam hone ke baad PURANA stage jo
+// sirf usi payment ki wajah se tha, wapas (pehle case aage hi atka rehta tha):
+//   koi RECEIVED payment nahi + WAITING_FOR_FILE + filing ne abhi koi file
+//     nahi di                                   → FIRST_PAYMENT_PENDING
+//   WAITING_FOR_COURIER_ADDRESS / WAITING_FOR_COURIER (slip abhi nahi) + ab
+//     baqi > 0                                  → ATTESTATION_COMPLETE
+// Asal kaam ho chuka ho (filing file, courier slip / dispatch) to kuch nahi.
+// Naya status return (kuch na badle to null).
+export async function regressStageAfterPaymentLoss(
+  caseId: string
+): Promise<{ from: string; to: string } | null> {
+  const item = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: {
+      status: true,
+      agreedAmount: true,
+      payments: { where: { status: "RECEIVED" }, select: { amount: true } },
+    },
+  });
+  if (!item) return null;
+  let next: string | null = null;
+  if (item.status === "WAITING_FOR_FILE" && item.payments.length === 0) {
+    const filingFiles = await prisma.caseFile.count({
+      where: {
+        caseId,
+        department: "FILING",
+        OR: [{ stepKey: null }, { stepKey: { not: VERIFICATION_STICKER_STEP_KEY } }],
+      },
+    });
+    if (filingFiles === 0) next = "FIRST_PAYMENT_PENDING";
+  } else if (item.status === "WAITING_FOR_COURIER_ADDRESS" || item.status === "WAITING_FOR_COURIER") {
+    const agreed = Number(item.agreedAmount);
+    const received = item.payments.reduce((total, payment) => total + Number(payment.amount), 0);
+    const remainingPaisa = Math.max(Math.round(agreed * 100) - Math.round(received * 100), 0);
+    if (agreed > 0 && remainingPaisa > 0) next = "ATTESTATION_COMPLETE";
+  }
+  if (!next) return null;
+  await prisma.case.update({ where: { id: caseId }, data: { status: next } });
+  return { from: item.status, to: next };
+}
+
 // §W39: F22.5 ka "dual-permission auto-bridge" hata diya — printing +
 // attestation dono permission wala user WAITING_FOR_PRINTING case par
 // attestation kaam karta to case printed proof ke baghair khud PRINTED ho jata

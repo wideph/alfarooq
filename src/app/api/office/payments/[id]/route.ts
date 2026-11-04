@@ -11,7 +11,7 @@ import { syncProfitShare } from "@/lib/office/profit-share";
 import { PAYMENT_METHODS, PAYMENT_STATUSES, type PaymentMethod, type PaymentStatus } from "@/lib/office/permissions";
 import { PAYMENT_STATUS_LABELS } from "@/lib/office/labels";
 import { deleteOfficeFile } from "@/lib/office/r2";
-import { activateWorkflowOnFirstPayment, advanceCourierStage } from "@/lib/office/workflow";
+import { activateWorkflowOnFirstPayment, advanceCourierStage, regressStageAfterPaymentLoss } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
@@ -83,6 +83,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // §W40: PROFIT_SHARE pool ab upar har badlaav par (syncProfitShare).
       ({ datesNeeded } = await activateWorkflowOnFirstPayment(caseId));
     }
+    // §W57: RECEIVED payment hati / kam hui → sirf usi payment wala stage wapas.
+    const stageBack = existing.status === "RECEIVED" ? await regressStageAfterPaymentLoss(existing.caseId) : null;
 
     // W13.2: audit log + notifications + AI date generation sab response ke
     // baad — verify response foran return hota hai.
@@ -93,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         entity: "Payment",
         entityId: id,
         before: existing,
-        after: data,
+        after: { ...data, ...(stageBack ? { caseStatus: stageBack } : {}), ...(result.droppedExtraDecisions ? { extraFaislaKhatam: result.droppedExtraDecisions } : {}) },
       });
       await notifyCourierStage(existing.caseId, courierStage);
       // §W11.8: verify decision → payment submitter + case creator.
@@ -148,12 +150,24 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
         console.error("[office] slip delete fail", error)
       );
     }
-    await logOfficeAction(session, { action: "payment.delete", entity: "Payment", entityId: id, before: existing });
-
     const result = await recomputeCaseFinancials(existing.caseId, session);
     // §W40: RECEIVED payment delete → partner case ka profit share wapas.
     await syncProfitShare(existing.caseId, session.adminId);
-    return NextResponse.json({ success: true, ...result });
+    // §W57: payment ki wajah se aaya stage (filing / courier) wapas.
+    const stageBack = existing.status === "RECEIVED" ? await regressStageAfterPaymentLoss(existing.caseId) : null;
+    after(() =>
+      logOfficeAction(session, {
+        action: "payment.delete",
+        entity: "Payment",
+        entityId: id,
+        before: existing,
+        after: {
+          ...(stageBack ? { caseStatus: stageBack } : {}),
+          ...(result.droppedExtraDecisions ? { extraFaislaKhatam: result.droppedExtraDecisions } : {}),
+        },
+      })
+    );
+    return NextResponse.json({ success: true, ...result, status: stageBack?.to ?? result.status });
   } catch (error) {
     return serverError(error);
   }

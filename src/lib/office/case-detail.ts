@@ -381,11 +381,10 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       ? item.ledger.map((l) => ({ ...l, createdByName: names[l.createdById] || null }))
       : [],
     totals,
-    // §W56: baqi (tay na shuda) extra — tukron ke baad. Purana sirf-% faisla
-    // (koi tukra nahi) agle recompute par khud tukra ban jata hai → sawal nahi.
+    // §W56: baqi (tay na shuda) extra — tukron ke baad. §W57: purana
+    // Case.extraSharePercent ab nahi parha jata (stale faisla wapas zinda hota tha).
     needsExtraDecision: (() => {
       if (item.bookingOffice.type !== "FIXED_COMMISSION" || totals.extra <= 0) return null;
-      if (item.extraTranches.length === 0 && item.extraSharePercent !== null) return null;
       const state = extraShareState({ received: totals.received, extra: totals.extra, tranches: item.extraTranches });
       return state.unsettled.greaterThan(0) ? toNumber(state.unsettled) : null;
     })(),

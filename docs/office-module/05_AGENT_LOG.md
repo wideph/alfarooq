@@ -2261,3 +2261,57 @@ Investigation-first (live DB audit):
   mein "Seedhi raqam (Rs)"; (d) admin Cases → Musadiqa chip; (e) status wapas + "Haan"
   → case expenses mein "Department commission (dobara kaam)". Chrome extension connect
   ho to UI screenshot check.
+
+## WAVE 57 (2026-11-09) — Delete ke baad purana data zinda nahi, status "Attestation" list, reissue tasveer
+
+- **Owner**: (1) admin ne payment delete ki → bonus (extra share) wapas hua (theek), magar
+  payment badli raqam ke saath dobara upload ki to system ne purani agreed / extra aur
+  purana bonus formula utha liya — "changes data base sy permanent nahi hati"; aisa "hard
+  coded ya temporary delete" jahan bhi ho, theek karo. (2) admin status change mein
+  Attestation chunein to "attestation select karne ke baghair status nahi badlega" — magar
+  case ki attestations ki list dekhne / chunne ka UI hi nahi. (3) extra service reissue
+  mein tasveer upload ka option dikhta hai, chalta nahi.
+- **Wajah**: (1) `ExtraShareTranche` payment kam hone par sirf "0 nisbat" par so jata tha;
+  nayi payment se received wapas receivedAt tak pahunchte hi purana tukra (purani 5,000
+  extra + purana 50%) zinda. Saath `Case.extraSharePercent` (purana %) case par reh jata
+  aur recompute ka lazy legacy conversion use dobara tukra bana deta. Isi tarah partner
+  case ka `profitShareSnapshot` (purane %) aur payment se aaya stage (WAITING_FOR_FILE /
+  courier) payment hatne ke baad bhi rehte. (2) dropdown ka sada "Attestation" option
+  bina step ke server ko jata tha. (3) file input checkbox ke `<label>` ke andar ek span
+  mein tha jis par `onClick preventDefault` — is se file picker khulta hi nahi tha.
+- **Server**: `commission.ts` — tukra jis ka valid < 1 (aur baad wale) PERMANENT delete,
+  `droppedExtraDecisions`, option `resetExtraDecisions` (case PATCH agreed, remaining
+  accept / edit, discount accept), lazy legacy conversion hataya, stray `extraSharePercent`
+  null. `extra-share.ts` — `extraSharePercent` ab nahi likhta. `case-services.ts` —
+  `ensureLegacyExtraTranche` hataya. `case-detail.ts` — legacy check hataya.
+  `profit-share.ts` — sab wapas → snapshot + finalizedAt null. `workflow.ts` —
+  `regressStageAfterPaymentLoss` (payments PATCH jab pehle RECEIVED thi + DELETE; audit
+  log mein `caseStatus` / `extraFaislaKhatam`; DELETE ka audit ab after() mein).
+  services route — upload ki ghalat qisam / badi file → 400 saaf paigham.
+- **DB**: migration `20261109120000_office_wave57` (schema nahi badla, sirf data):
+  purana % jahan extra thi aur tukra nahi → tukra; `extraSharePercent` sab null; so rahe
+  tukre delete + EXTRA_SHARE ledger reconcile (`system-wave57` row, member attribution);
+  partner case jahan sab 0 → snapshot null. Idempotent (dobara chalane par 0 rows).
+- **UI**: `CaseStatusSelect` — "Attestation — step chunein…" → modal mein case ki
+  attestations (number, naam, Pending / Jaari / Done, tareekh) radio list, step ke baghair
+  Confirm band, koi attestation na ho to amber paigham. `ExtraServiceModal` — reissue
+  remarks + tasveer label se bahar, "Nayi tasveer (optional)" button, file naam + size +
+  hatane ka X; `prepareFileForServer` (upload-files.ts) 4 MB se badi photo browser mein
+  chhoti; network / 413 par saaf paigham.
+- **Audit script**: so raha tukra ya bacha `extraSharePercent` = ISSUE; partner sab-wapas
+  snapshot = note.
+- **Verify**: tsc 0, lint 0, build exit 0. Local Postgres (scratchpad, port 55432, live
+  nahi): migration pehle se banaye purane data par (A–G: so raha, aadha so raha 1500 →
+  DEBIT 1500, purana 40% → tukra, % null, partner snapshot) + simulation 40/40 (owner ki
+  misaal: 60,000 → 50% → delete → 62,000 par naya 7,000 sawal; raqam kam / wapas barhi →
+  purana Rs zinda nahi; sirf baad wala tukra hata; agreed edit → naya sawal; service ke
+  baad tay shuda qaim; idempotent; courier / filing stage wapas aur PRINTED par nahi;
+  partner snapshot reset aur naye 25% se); W56 simulation 55/55 + W56 HTTP 26/26
+  (regression nahi); dev server (local DB, R2 band) HTTP 17/17 (verify → delete →
+  FIRST_PAYMENT_PENDING → naya 7,000 sawal, agreed edit, status Attestation 400 / 200,
+  reissue .txt → 400, multipart reissue 201, 3 pages 200). Chrome extension connect nahi
+  tha — screenshot nahi; asal tasveer R2 par upload test nahi kiya (live storage).
+- **Next step**: owner se live migration ki ijazat → `prisma migrate deploy` (wave57) →
+  live read-only audit → push. Owner live par: (a) kisi test case ki payment delete →
+  dobara upload → naya extra sawal; (b) status dropdown "Attestation — step chunein…";
+  (c) extra service reissue par tasveer chunein (file naam dikhe) aur book karein.

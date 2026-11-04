@@ -14,7 +14,20 @@ import { useToast } from "@/hooks/useToast";
 // PATCH /api/office/cases/[id]/status. CANCELLED hamesha aakhir mein alag.
 // Sirf admin ke liye render hota hai (caller decide karta hai).
 
-type AttestationOption = { id: string; attestationType: { name: string } };
+type AttestationOption = {
+  id: string;
+  attestationType: { name: string };
+  // §W57: modal ki list mein halat / tareekh (list row + detail dono dete hain).
+  status?: string;
+  scheduledDate?: string | null;
+  completedDate?: string | null;
+};
+
+const ATTESTATION_STATE: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: "Pending", cls: "bg-slate-100 text-slate-600" },
+  IN_PROGRESS: { label: "Jaari", cls: "bg-violet-100 text-violet-700" },
+  DONE: { label: "Done", cls: "bg-emerald-100 text-emerald-700" },
+};
 
 // §W44: status peeche karne par server poochhta hai — department commission
 // dobara dena hai ya nahi (har kaam ke liye alag).
@@ -63,6 +76,10 @@ export default function CaseStatusSelect({
       const attestationId = raw.slice("ATTESTATION:".length);
       const name = attestations?.find((a) => a.id === attestationId)?.attestationType.name || "";
       setPending({ status: "ATTESTATION", attestationId, label: `Attestation: ${name}` });
+    } else if (raw === "ATTESTATION") {
+      // §W57: sada "Attestation" — modal mein is case ki attestations ki list
+      // se step chunna lazmi (server bhi bina step ke nahi manta).
+      setPending({ status: "ATTESTATION", attestationId: null, label: "Attestation — step chunein" });
     } else {
       setPending({ status: raw, attestationId: null, label: caseStatusLabel(raw) });
     }
@@ -130,7 +147,7 @@ export default function CaseStatusSelect({
           {FLOW_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s === status && s !== "ATTESTATION" ? "✓ " : ""}
-              {caseStatusLabel(s)}
+              {s === "ATTESTATION" ? "Attestation — step chunein…" : caseStatusLabel(s)}
             </option>
           ))}
           {(attestations || []).map((a) => (
@@ -172,6 +189,57 @@ export default function CaseStatusSelect({
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {/* §W57: Attestation status — is case ki attestations ki list (halat +
+                tareekh) se step chunein; is ke baghair Confirm band. */}
+            {pending.status === "ATTESTATION" && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-slate-600">Kis attestation par case ko le jayein?</p>
+                {(attestations ?? []).length === 0 ? (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Is case par abhi koi attestation nahi — pehle case ke &quot;Attestations&quot; tab se attestation / Set
+                    of Attestations jodein.
+                  </p>
+                ) : (
+                  <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-1.5" role="radiogroup">
+                    {(attestations ?? []).map((a, index) => {
+                      const state = ATTESTATION_STATE[a.status ?? ""] ?? null;
+                      const date = a.completedDate || a.scheduledDate;
+                      const selected = pending.attestationId === a.id;
+                      return (
+                        <label
+                          key={a.id}
+                          className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm ${
+                            selected ? "bg-primary-50 ring-1 ring-primary-300" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`attestation-${caseId}`}
+                            checked={selected}
+                            onChange={() =>
+                              setPending({ status: "ATTESTATION", attestationId: a.id, label: `Attestation: ${a.attestationType.name}` })
+                            }
+                          />
+                          <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}.</span>
+                          <span className="min-w-0 flex-1 truncate font-medium text-slate-800">{a.attestationType.name}</span>
+                          {state && (
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${state.cls}`}>{state.label}</span>
+                          )}
+                          {date && (
+                            <span className="shrink-0 text-[11px] text-slate-400">
+                              {new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400">
+                  Chuni hui se pehle wali attestations Done, chuni hui jaari, baad wali Pending ho jayengi.
+                </p>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs text-slate-500">Wajah / note (optional)</label>
               <textarea
@@ -243,7 +311,7 @@ export default function CaseStatusSelect({
               </button>
               <button
                 type="button"
-                disabled={busy || !answeredAll}
+                disabled={busy || !answeredAll || (pending.status === "ATTESTATION" && !pending.attestationId)}
                 onClick={confirmChange}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >

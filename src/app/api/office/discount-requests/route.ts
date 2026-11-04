@@ -179,7 +179,8 @@ export async function PATCH(request: NextRequest) {
       return row;
     }, { maxWait: 10000, timeout: 30000 });
 
-    const result = await recomputeCaseFinancials(existing.caseId, session);
+    // §W57: agreed kam hui → purane extra faisle khatam (naya faisla).
+    const result = await recomputeCaseFinancials(existing.caseId, session, { resetExtraDecisions: true });
     // §W30: discount se baqi 0 ho gaya → courier stage (forward-only).
     const courierStage = await advanceCourierStage(existing.caseId);
     // W13.2: audit log + requester notification response ke baad.

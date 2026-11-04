@@ -8,9 +8,10 @@ import { dec, round2 } from "@/lib/office/money";
 //   - Tay shuda tukra baad mein dobara nahi khulta — extra service se agreed
 //     barhe to bhi office ka hissa wahi (owner: "pehli settle shuda amount
 //     dubara sy consider nahi ki jay gi").
-//   - Sirf payment wapas ho (received < receivedAt) to tukre ka hissa usi
-//     nisbat se kam: valid = clamp((received − (receivedAt − extraAmount)) /
-//     extraAmount, 0, 1) — purane "extra × %" jaisa natija.
+//   - §W57: payment wapas / kam ho (received < receivedAt, yaani valid < 1)
+//     ya admin asal agreed badle → wo tukra (aur baad wale) recompute mein
+//     PERMANENT delete; nayi extra par naya faisla. valid = clamp((received −
+//     (receivedAt − extraAmount)) / extraAmount, 0, 1).
 //   - Baqi faisla = extra − (tay shuda × valid). Misaal: 55,000 case, 60,000
 //     aaye → 5,000 tay. 10,000 service, 13,000 aur aaye → received 73,000,
 //     agreed 65,000, extra 8,000 − 5,000 = sirf 3,000 ka naya faisla.
@@ -126,9 +127,8 @@ export async function applyExtraDecision(
       });
       log = { trancheId: created.id, extraAmount: state.unsettled, share: share.share, mode };
     }
-    // Purane display / readers ke liye aakhri % (Rs faisle par null).
-    const percent = mode === "PERCENT" ? decisionShare(dec(100), { mode, value: decision.value })?.percent ?? null : null;
-    await tx.case.update({ where: { id: caseId }, data: { extraSharePercent: percent } });
+    // §W57: Case.extraSharePercent ab kabhi nahi likha jata — faisla SIRF
+    // tukron mein (purana % case par reh kar baad mein dobara zinda hota tha).
     return log;
   }, { maxWait: 10000, timeout: 30000 });
 }

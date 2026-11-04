@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { ImagePlus, Loader2, X } from "lucide-react";
 import { formatMoney, officeFetch } from "@/lib/office/client";
 import { announceOfficeChange } from "@/lib/office/live";
+import { formatFileSize, prepareFileForServer } from "@/lib/office/upload-files";
 import type { CaseDetail } from "@/lib/office/types";
 import type { ToastKind } from "@/components/Toast";
 
@@ -80,16 +81,27 @@ export default function ExtraServiceModal({
     let error = "";
     let data: CaseDetail | null = null;
     if (image && reissue) {
+      // Badi phone photo → browser mein chhoti (server ki 4.5 MB limit).
+      const prepared = await prepareFileForServer(image);
+      if (!prepared.file) {
+        setSaving(false);
+        onMessage(prepared.error, "error");
+        return;
+      }
       const form = new FormData();
       Object.entries(fields).forEach(([key, value]) => form.append(key, value));
-      form.append("image", image);
-      const res = await fetch(`/api/office/cases/${detail.id}/services`, { method: "POST", body: form });
-      const body = await res.json().catch(() => ({}));
-      ok = res.ok;
-      if (ok) {
-        data = body as CaseDetail;
-        announceOfficeChange();
-      } else error = body.error || "Extra service book nahi hui";
+      form.append("image", prepared.file);
+      try {
+        const res = await fetch(`/api/office/cases/${detail.id}/services`, { method: "POST", body: form });
+        const body = await res.json().catch(() => ({}));
+        ok = res.ok;
+        if (ok) {
+          data = body as CaseDetail;
+          announceOfficeChange();
+        } else error = body.error || (res.status === 413 ? "Tasveer server ki limit se badi hai" : "Extra service book nahi hui");
+      } catch {
+        error = "Internet / server se rabta nahi ho saka — dobara koshish karein";
+      }
     } else {
       const res = await officeFetch<CaseDetail>(`/api/office/cases/${detail.id}/services`, { method: "POST", json: fields });
       ok = res.ok;
@@ -140,35 +152,54 @@ export default function ExtraServiceModal({
             <input className={input} inputMode="decimal" placeholder="Amount (Rs) *" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
 
-          <label className={`${box} flex cursor-pointer gap-3 ${reissue ? "border-primary-300 bg-primary-50/40" : ""}`}>
-            <input type="checkbox" checked={reissue} onChange={(e) => setReissue(e.target.checked)} className="mt-1" />
-            <span className="flex-1 space-y-2">
-              <span className="block text-sm font-bold text-slate-900">Document reissue</span>
-              <span className="block text-xs text-slate-500">
-                Case dobara filing department ke paas jayega → print → (attestation agar chuni) → courier.
+          {/* §W57 — remarks / tasveer checkbox ke <label> se BAHAR: label ke andar
+              file input ka click (preventDefault) file picker khulne nahi deta tha. */}
+          <div className={`${box} space-y-2 ${reissue ? "border-primary-300 bg-primary-50/40" : ""}`}>
+            <label className="flex cursor-pointer gap-3">
+              <input type="checkbox" checked={reissue} onChange={(e) => setReissue(e.target.checked)} className="mt-1" />
+              <span className="flex-1">
+                <span className="block text-sm font-bold text-slate-900">Document reissue</span>
+                <span className="block text-xs text-slate-500">
+                  Case dobara filing department ke paas jayega → print → (attestation agar chuni) → courier.
+                </span>
               </span>
-              {reissue && (
-                <span className="block space-y-2" onClick={(event) => event.preventDefault()}>
-                  <textarea
-                    className={input}
-                    rows={3}
-                    placeholder="Filing department ke liye remarks (lazmi) — kya theek / dobara karna hai?"
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                  />
-                  <span className="block text-xs text-slate-600">
-                    Nayi tasveer (optional):{" "}
+            </label>
+            {reissue && (
+              <div className="space-y-2 pl-7">
+                <textarea
+                  className={input}
+                  rows={3}
+                  placeholder="Filing department ke liye remarks (lazmi) — kya theek / dobara karna hai?"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50">
+                    <ImagePlus className="h-4 w-4" />
+                    {image ? "Tasveer badlein" : "Nayi tasveer (optional)"}
                     <input
                       type="file"
                       accept="image/*,application/pdf"
-                      onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                      className="mt-1 block w-full text-xs"
+                      className="sr-only"
+                      onChange={(e) => {
+                        setImage(e.target.files?.[0] ?? null);
+                        e.target.value = "";
+                      }}
                     />
-                  </span>
-                </span>
-              )}
-            </span>
-          </label>
+                  </label>
+                  {image && (
+                    <span className="inline-flex min-w-0 items-center gap-1 rounded-lg bg-slate-100 px-2 py-1">
+                      <span className="max-w-[12rem] truncate">{image.name}</span>
+                      <span className="text-slate-400">({formatFileSize(image.size)})</span>
+                      <button type="button" onClick={() => setImage(null)} className="text-slate-400 hover:text-rose-600" aria-label="Tasveer hatayein">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className={box}>
             <p className="text-sm font-bold text-slate-900">Attestations</p>
