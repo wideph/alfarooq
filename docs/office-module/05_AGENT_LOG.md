@@ -2317,3 +2317,29 @@ Investigation-first (live DB audit):
 - **Next step**: owner live par: (a) kisi test case ki payment delete →
   dobara upload → naya extra sawal; (b) status dropdown "Attestation — step chunein…";
   (c) extra service reissue par tasveer chunein (file naam dikhe) aur book karein.
+
+## WAVE 58 (2026-11-09) — Client picture filing department ko (dekhein + download)
+
+- **Owner**: case ke client info mein tasveer attach ho to filing department ko nazar nahi
+  aati — zaroor dikhe, aur filing use dekh aur download bhi kar sake.
+- **Wajah**: filing queue list (jahan filing ka saara kaam hota hai — upload bhi list se)
+  mein tasveer ka koi hissa hi nahi tha; sirf `role = filing` ke detail view mein thumbnail
+  tha (download nahi, signed URL 15 min baad expire); doosre office ka case kholne wale
+  filing-permission user ke limited view mein tasveer thi hi nahi.
+- **Server**: naya route `cases/[id]/client-picture` (GET, `?download=1`, access: apna scope
+  ya cross-office FILING permission; signed URL redirect, Cache-Control 10 min);
+  `clientPictureVersion()` (workflow.ts); payloads mein `hasClientPicture` /
+  `clientPictureVersion` — serializeFilingCase (filing list + detail + dept slim rows),
+  cases list full row, limited detail (sirf FILING), full detail (version).
+- **UI**: naya `ClientPictureButton` (thumbnail, PDF icon, Dekhein → CaseFileViewer zoom +
+  Download, Download link; row click se case nahi khulta) — DeptQueue filing row (dono
+  tabs) + filing / sticker upload modal, FilingCaseView, DeptCaseView (FILING), CaseOverviewTab.
+- **DB**: koi migration nahi.
+- **Verify**: tsc 0, lint 0, build exit 0. Local Postgres + dev server (R2 dummy creds, koi
+  asal upload nahi) HTTP 19/19: filing role view 302 signed URL + cache header, download
+  attachment naam, bina tasveer 404, filing list / detail flags + version, cross-office
+  filing user limited detail + slim row + route 302, cross-office printing user nahi (404),
+  doosra office 404, admin detail / queue / download, bina login 401, filing pages 200.
+  Chrome extension connect nahi tha — screen par thumbnail ka screenshot check nahi.
+- **Next step**: owner live par filing user se: Filing queue → tasveer wale case ki row par
+  "Client picture" thumbnail → Dekhein / Download; "Files upload karein" modal mein bhi.

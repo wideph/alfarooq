@@ -25,6 +25,7 @@ import type { UploadResult } from "@/lib/office/upload-files";
 import { useToast } from "@/hooks/useToast";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import CourierSlipUploader from "@/components/office/case/CourierSlipUploader";
+import ClientPictureButton from "@/components/office/case/ClientPictureButton";
 import { caseDetailHref } from "@/lib/office/case-nav";
 
 // §W18 — department queues (?dept=filing|printing|attestation|courier). Cross-office
@@ -78,6 +79,10 @@ export type DeptQueueRow = {
   // §W55: Bykea kharcha (manzoor / review mein).
   myBykeaExpense?: number;
   myBykeaPending?: number;
+  // §W58: client info ki tasveer (filing queue mein dekhein / download).
+  hasClientPicture?: boolean;
+  clientPictureType?: string | null;
+  clientPictureVersion?: string | null;
   // §W56: extra services (reissue ki hidayat).
   services?: Array<{
     id: string;
@@ -468,6 +473,18 @@ export default function DeptQueue({
             {item.onlineVerificationNumber && (
               <p className="font-semibold text-indigo-600">Online Verification #: {item.onlineVerificationNumber}</p>
             )}
+            {/* §W58: client info ki tasveer — filing list se hi dekhein / download. */}
+            {item.hasClientPicture && (
+              <div className="mt-2">
+                <ClientPictureButton
+                  caseId={item.id}
+                  caseNumber={item.caseNumber}
+                  fileType={item.clientPictureType}
+                  version={item.clientPictureVersion}
+                  size="sm"
+                />
+              </div>
+            )}
           </div>
         );
       case "printing": {
@@ -822,6 +839,18 @@ export default function DeptQueue({
                   Case {uploadFor.item.caseNumber}
                   {uploadFor.item.clientName ? ` · ${uploadFor.item.clientName}` : ""}
                 </p>
+                {/* §W58: filing files banate waqt client picture saamne. */}
+                {(uploadFor.kind === "filing" || uploadFor.kind === "sticker") && uploadFor.item.hasClientPicture && (
+                  <div className="mt-2">
+                    <ClientPictureButton
+                      caseId={uploadFor.item.id}
+                      caseNumber={uploadFor.item.caseNumber}
+                      fileType={uploadFor.item.clientPictureType}
+                      version={uploadFor.item.clientPictureVersion}
+                      size="sm"
+                    />
+                  </div>
+                )}
                 {uploadFor.kind === "printing" && (
                   <p className="text-xs text-slate-500">
                     {uploadFor.item.rollNumber ? `Roll ${uploadFor.item.rollNumber}` : "Roll —"} ·{" "}

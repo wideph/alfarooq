@@ -25,6 +25,7 @@ import CourierExpensesCard from "@/components/office/case/CourierExpensesCard";
 import type { DeptOwnExpense } from "@/lib/office/types";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
 import { originLabel } from "@/lib/office/case-nav";
+import ClientPictureButton from "@/components/office/case/ClientPictureButton";
 import {
   ATTESTATION_STATUS_LABELS,
   ATTESTATION_STATUS_STYLES,
@@ -67,6 +68,10 @@ export type DeptLimitedDetail = {
   customLabelColor?: string | null;
   // §W51: courier user ke is case par apne kharche.
   myDeptExpenses?: DeptOwnExpense[];
+  // §W58: FILING department ko client picture.
+  hasClientPicture?: boolean;
+  clientPictureType?: string | null;
+  clientPictureVersion?: string | null;
 };
 
 export type DeptLimitedResponse = {
@@ -281,6 +286,17 @@ export default function DeptCaseView({
       </div>
 
       <SectionCard icon={Info} title="Case details">
+        {/* §W58: FILING department ko client picture — dekhein + download. */}
+        {detail.hasClientPicture && (
+          <div className="mb-4">
+            <ClientPictureButton
+              caseId={id}
+              caseNumber={detail.caseNumber}
+              fileType={detail.clientPictureType}
+              version={detail.clientPictureVersion}
+            />
+          </div>
+        )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Roll Number</dt>

@@ -174,6 +174,14 @@ export function isFilingLimited(session: AdminSession): boolean {
   return session.role === "filing";
 }
 
+// §W58: client picture ka version (upload ka ms prefix) — stable /client-picture
+// link ke saath ?v= taake tasveer badalne par browser purani cached na dikhaye.
+export function clientPictureVersion(key: string | null | undefined): string | null {
+  if (!key) return null;
+  const base = key.split("/").pop() || key;
+  return base.match(/^\d{10,}/)?.[0] ?? String(base.length);
+}
+
 type FilingCaseRow = {
   id: string;
   caseNumber: string;
@@ -243,6 +251,9 @@ export async function serializeFilingCase(item: FilingCaseRow) {
         }
       : {}),
     services: slimServices(item.services),
+    // §W58: filing queue / view — tasveer stable link (/client-picture) se.
+    hasClientPicture: Boolean(item.clientPictureKey),
+    clientPictureVersion: clientPictureVersion(item.clientPictureKey),
     clientPictureType: item.clientPictureType,
     clientPictureUrl: item.clientPictureKey
       ? await getOfficeFileSignedUrl(item.clientPictureKey)

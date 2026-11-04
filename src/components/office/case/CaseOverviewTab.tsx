@@ -27,6 +27,7 @@ import StatTile from "@/components/ui/StatTile";
 import EmptyState from "@/components/ui/EmptyState";
 import CaseFileViewer from "@/components/office/case/CaseFileViewer";
 import CaseServicesPanel from "@/components/office/case/CaseServicesPanel";
+import ClientPictureButton from "@/components/office/case/ClientPictureButton";
 import AgreedBreakdown from "@/components/office/case/AgreedBreakdown";
 import { formatDateTime, formatMoney, officeFetch } from "@/lib/office/client";
 import { type CaseDetail, ghostBtnClass, inputClass, primaryBtnClass } from "@/lib/office/types";
@@ -106,7 +107,6 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
   const [categories, setCategories] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
   const [picture, setPicture] = useState<File | null>(null);
-  const [viewPicture, setViewPicture] = useState(false);
   const [form, setForm] = useState({
     clientName: detail.clientName,
     rollNumber: detail.rollNumber || "",
@@ -178,15 +178,16 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
     >
       {!editing ? (
         <div className="flex flex-col gap-4 sm:flex-row">
+          {/* §W58: client picture — dekhein + download (stable link, expire nahi). */}
           {detail.clientPictureUrl && (
-            <button onClick={() => setViewPicture(true)} className="shrink-0 self-start" title="Bari tasveer dekhein">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={detail.clientPictureUrl}
-                alt="Client"
-                className="h-24 w-24 rounded-xl border border-slate-200 object-cover transition hover:opacity-80"
+            <div className="shrink-0 self-start">
+              <ClientPictureButton
+                caseId={detail.id}
+                caseNumber={detail.caseNumber}
+                fileType={detail.clientPictureType}
+                version={detail.clientPictureVersion}
               />
-            </button>
+            </div>
           )}
           <dl className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-3">
             <Row label="Roll Number" value={detail.rollNumber} />
@@ -286,12 +287,6 @@ function ClientInfoPanel({ detail, admin, onUpdated, onMessage }: Omit<TabProps,
             </button>
           </div>
         </div>
-      )}
-      {viewPicture && detail.clientPictureUrl && (
-        <CaseFileViewer
-          file={{ url: detail.clientPictureUrl, fileType: "image", title: `Client picture — ${detail.caseNumber}` }}
-          onClose={() => setViewPicture(false)}
-        />
       )}
     </SectionCard>
   );

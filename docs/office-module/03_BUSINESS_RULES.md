@@ -505,3 +505,19 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 - **Reissue tasveer**: file picker checkbox ke label se bahar (pehle click roka jata
   tha); 4 MB se badi JPG / PNG / WebP browser mein chhoti; ghalat qisam / badi file par
   saaf 400 paigham.
+
+## BR26. Client picture filing department ko — §W58
+
+- Case ke client info ki tasveer (Case.clientPictureKey) ka ek STABLE link:
+  `GET /api/office/cases/[id]/client-picture` (dekhne ke liye) aur `?download=1`
+  (download, naam `client-picture-<case #>.<ext>`). Har request par access check, phir
+  taaza signed R2 URL par redirect (10 min browser cache; `?v=` = upload ka waqt, tasveer
+  badle to naya link). Pehle detail payload ka signed URL 15 min baad expire ho jata tha.
+- Kaun dekh sakta hai: jo case dekh sakta hai (apna scope — admin, cashier, filing /
+  department roles, booking office apna case), aur doosre office ka case ho to sirf
+  FILING department permission wala user. Printing / attestation / courier ka cross-office
+  user nahi (limited payload mein bhi `hasClientPicture` sirf FILING ke liye).
+- Kahan nazar aati hai (thumbnail + "Dekhein" (zoom viewer) + "Download"): filing queue
+  ki har row (pending + complete dono tabs), filing ka file-upload modal, filing view
+  (role filing), department limited view (FILING permission), case Overview (admin /
+  booking / same-office department user). PDF ho to PDF icon.

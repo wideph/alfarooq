@@ -87,6 +87,8 @@ export type CaseDetail = {
   customLabelColor?: string | null;
   clientPictureUrl: string | null;
   clientPictureType: string | null;
+  // §W58: stable /client-picture link ka version (?v=).
+  clientPictureVersion?: string | null;
   // §W50: case ki courier slip(s) (COURIER files) — Overview card ke liye.
   courierSlips?: Array<{
     id: string;
@@ -206,6 +208,9 @@ export type FilingCaseDetail = {
   setName: string | null;
   clientPictureType: string | null;
   clientPictureUrl: string | null;
+  // §W58: tasveer hai (stable /client-picture link se dekhein / download).
+  hasClientPicture?: boolean;
+  clientPictureVersion?: string | null;
   customLabel?: string | null;
   customLabelColor?: string | null;
   // §W56: extra services (bina raqam) — reissue ki hidayat / tasveer.

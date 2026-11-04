@@ -7,7 +7,7 @@ import type { AdminNavUser } from "@/components/admin/AdminNav";
 import Toast, { type ToastData, type ToastKind } from "@/components/Toast";
 import SectionCard from "@/components/ui/SectionCard";
 import { SkeletonRows } from "@/components/ui/Skeleton";
-import CaseFileViewer from "@/components/office/case/CaseFileViewer";
+import ClientPictureButton from "@/components/office/case/ClientPictureButton";
 import CaseFilesTab from "@/components/office/case/CaseFilesTab";
 import CaseRemarksTab from "@/components/office/case/CaseRemarksTab";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
@@ -35,7 +35,6 @@ export default function FilingCaseView({
   const [toast, setToast] = useState<ToastData | null>(null);
   const setMessage = (m: string, kind: ToastKind = "success") =>
     setToast(m ? { message: m, kind } : null);
-  const [viewPicture, setViewPicture] = useState(false);
 
   const reload = useCallback(async () => {
     const res = await officeFetch<FilingCaseDetail>(`/api/office/cases/${id}`);
@@ -88,18 +87,17 @@ export default function FilingCaseView({
         <>
           <SectionCard icon={Info} title="Case details">
             <div className="flex flex-col gap-4 sm:flex-row">
-              {detail.clientPictureUrl && (
-                <button onClick={() => setViewPicture(true)} className="shrink-0 self-start" title="Bari tasveer dekhein">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={detail.clientPictureUrl}
-                    alt="Client"
-                    className="h-24 w-24 rounded-xl border border-slate-200 object-cover transition hover:opacity-80"
+              {/* §W58: client picture — dekhein (zoom) + download, stable link
+                  (pehle signed URL 15 min baad expire hota tha, download nahi tha). */}
+              {(detail.hasClientPicture ?? Boolean(detail.clientPictureUrl)) && (
+                <div className="shrink-0 self-start">
+                  <ClientPictureButton
+                    caseId={detail.id}
+                    caseNumber={detail.caseNumber}
+                    fileType={detail.clientPictureType}
+                    version={detail.clientPictureVersion}
                   />
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-primary-700">
-                    <ImageIcon className="h-3.5 w-3.5" /> Bari tasveer dekhein
-                  </span>
-                </button>
+                </div>
               )}
               <dl className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div className="min-w-0">
@@ -160,13 +158,6 @@ export default function FilingCaseView({
           />
 
           <CaseRemarksTab caseId={detail.id} admin={admin} onMessage={setMessage} onChanged={reload} />
-
-          {viewPicture && detail.clientPictureUrl && (
-            <CaseFileViewer
-              file={{ url: detail.clientPictureUrl, fileType: "image", title: `Client picture — ${detail.caseNumber}` }}
-              onClose={() => setViewPicture(false)}
-            />
-          )}
         </>
       )}
     </div>

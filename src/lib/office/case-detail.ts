@@ -6,6 +6,7 @@ import { dec, sum, toNumber } from "@/lib/office/money";
 import { getOfficeFileSignedUrl, originalFilenameFromKey } from "@/lib/office/r2";
 import { toJson } from "@/lib/office/serializers";
 import {
+  clientPictureVersion,
   isFilingLimited,
   roleToRemarkTarget,
   serializeFilingCase,
@@ -213,6 +214,10 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
       customLabel: item.customLabel,
       customLabelColor: item.customLabelColor,
       createdAt: item.createdAt,
+      // §W58: FILING department ko client picture (stable /client-picture link).
+      hasClientPicture: depts.includes("FILING") && Boolean(item.clientPictureKey),
+      clientPictureType: depts.includes("FILING") ? item.clientPictureType : null,
+      clientPictureVersion: depts.includes("FILING") ? clientPictureVersion(item.clientPictureKey) : null,
       attestations: item.attestations.map((a) => ({
         id: a.id,
         status: a.status,
@@ -330,6 +335,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
     setMissingWarning: setMissingWarning(item),
     hasUnseenWarning: Boolean(hasUnseenWarning),
     clientPictureUrl,
+    // §W58: stable /client-picture link ka version.
+    clientPictureVersion: clientPictureVersion(item.clientPictureKey),
     currentAttestation: currentAttestation
       ? {
           id: currentAttestation.id,

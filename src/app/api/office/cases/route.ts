@@ -24,6 +24,7 @@ import {
 } from "@/lib/office/setup-cache";
 import {
   deptQueueWhere,
+  clientPictureVersion,
   isFilingLimited,
   parseCaseInput,
   serializeFilingCase,
@@ -289,6 +290,10 @@ export async function GET(request: NextRequest) {
       // §W56: reissue par WAITING_FOR_FILE — purani files ke bawajood pending.
       row.filingDone = item._count.files > 0 && item.status !== "WAITING_FOR_FILE";
       row.limited = false;
+      // §W58: client picture (filing queue mein dekhein / download).
+      row.hasClientPicture = Boolean(item.clientPictureKey);
+      row.clientPictureVersion = clientPictureVersion(item.clientPictureKey);
+      row.clientPictureType = item.clientPictureType;
       // §W56: extra services — list mein naam + amount (+ musadiqa / custom halat).
       row.services = item.services.map((service) => ({
         id: service.id,
