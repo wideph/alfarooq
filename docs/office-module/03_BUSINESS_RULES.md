@@ -521,3 +521,28 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
   ki har row (pending + complete dono tabs), filing ka file-upload modal, filing view
   (role filing), department limited view (FILING permission), case Overview (admin /
   booking / same-office department user). PDF ho to PDF icon.
+
+## BR27. Extra service ka auto remark — §W59
+
+- Booking office extra service lagaye to **EK** remark banta hai (pehle do — service ka auto
+  naam aur attestation list dohrate thay; "(reissue print ke baad)" / "dobara / nayi" samajh
+  nahi aata tha). Code: `serviceRemark()` (`src/lib/office/case-services.ts`).
+- Har department ki apni line, kaam ki tarteeb se (do ya zyada hon to numbered):
+  1. Filing (reissue): "document dobara banana hai — hidayat: …" (case abhi filing se pehle ho
+     to "file banate waqt dhyan dein"); nayi tasveer lagi ho to zikr.
+  2. Printing (reissue, case pehle print / file ho chuka): "nayi file aane par dobara print".
+  3. Attestation: har attestation ke saath (dobara) = pehle DONE thi, (nayi) = case par nahi
+     thi, (pehle se baqi) = list mein thi magar abhi hui nahi; reissue ho to "(dobara print ke
+     baad)", warna case attestation complete se aage tha to "case wapas attestation queue mein".
+  4. Courier: case pehle DELIVERED (ya aage) tha to "kaam poora hone par dobara bhejna (nayi slip)".
+  - Admin lines: Musadiqa ("Attested" karein), custom ("Complete" karein).
+- Targets = jin departments ki line hai + ADMIN. **Raqam (Rs) sirf tab** jab remark sirf ADMIN
+  ke liye ho (musadiqa / custom) — department walon ko paisa nahi dikhta (§N7). Pehle filing
+  wale remark mein Rs tha.
+- Booking office ka apna naam diya ho to remark mein `Extra service "<naam>"`; auto naam nahi
+  dohraya jata. Auto naam ab `Document reissue + Attestation (A, B) + Musadiqa + <custom>`.
+- Notifications: filing "document dobara banana hai — hidayat case ke Remarks mein";
+  attestation "extra service — attestation A, B (dobara print ke baad)".
+- Migration `20261110120000_office_wave59`: purane auto remarks ka text naye andaz mein
+  (recipients / seen wahi; filing wale se Rs hata) aur purana auto naam (hisson se bilkul
+  barabar ho to) naye format mein. Haath se likhe remarks / apne naam nahi chhuye.

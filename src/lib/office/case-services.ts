@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { AdminSession } from "@/lib/auth";
 import { toNumber } from "@/lib/office/money";
 import { caseDeptCommissionCredits, type DeptCommissionKind } from "@/lib/office/dept-commission";
-import { CASE_STATUS_ORDER } from "@/lib/office/workflow";
+import { CASE_STATUS_ORDER, type RemarkTarget } from "@/lib/office/workflow";
 
 // §W56 — booking office ki EXTRA SERVICE (case banne ke baad). Ek booking mein
 // kai hissay + ek amount (owner ka faisla):
@@ -56,10 +56,90 @@ export function autoServiceName(input: {
 }) {
   const parts: string[] = [];
   if (input.reissue) parts.push("Document reissue");
-  if (input.attestationNames.length) parts.push(input.attestationNames.join(", "));
+  // §W59: "Attestation (A, B)" — pehle "Document reissue + A, B" mein + aur , mil jate thay.
+  if (input.attestationNames.length) parts.push(`Attestation (${input.attestationNames.join(", ")})`);
   if (input.musadiqa) parts.push("Musadiqa");
   if (input.customName) parts.push(input.customName);
   return parts.join(" + ") || "Extra service";
+}
+
+// §W59 — extra service ka EK auto remark (pehle do alag, service ka naam aur
+// attestation list dohraye jate thay — "(reissue print ke baad)" / "dobara /
+// nayi" samajh nahi aata tha). Ab har department ki apni line, kaam ki
+// tarteeb se, aur har attestation ke saath (dobara / nayi). Jis department ka
+// kaam hai wahi target. Department walon ko paisa nahi dikhta (§N7) — raqam
+// sirf tab jab remark sirf admin ke liye ho (musadiqa / custom).
+export type ServiceRemarkAttestation = { name: string; kind: "redo" | "pending" | "new" };
+const ATTESTATION_KIND_LABEL: Record<ServiceRemarkAttestation["kind"], string> = {
+  redo: "dobara",
+  pending: "pehle se baqi",
+  new: "nayi",
+};
+
+export function serviceRemark(input: {
+  // Booking office ka apna diya naam (auto naam nahi — wo hisson ko dohrata hai).
+  label?: string | null;
+  amountText: string;
+  // Service se pehle case ka status.
+  fromStatus: string;
+  reissue: boolean;
+  remarks?: string | null;
+  hasImage: boolean;
+  attestations: ServiceRemarkAttestation[];
+  musadiqa: boolean;
+  customName?: string | null;
+}): { text: string; targets: RemarkTarget[] } {
+  const order = CASE_STATUS_ORDER[input.fromStatus] ?? 0;
+  const steps: string[] = [];
+  const targets = new Set<RemarkTarget>(["ADMIN"]);
+
+  if (input.reissue) {
+    const filed = order > CASE_STATUS_ORDER.WAITING_FOR_FILE;
+    steps.push(
+      `Filing: ${filed ? "document dobara banana hai" : "file banate waqt dhyan dein"} — hidayat: ${input.remarks || "—"}` +
+        (input.hasImage ? " — nayi tasveer bhi lagi hai (case mein \"Document reissue\" box)." : "")
+    );
+    targets.add("FILING");
+    if (order >= CASE_STATUS_ORDER.PRINTED) {
+      steps.push("Printing: nayi file aane par dobara print karein.");
+      targets.add("PRINTING");
+    } else if (filed) {
+      steps.push("Printing: purani file print na karein — nayi file aane par print karein.");
+      targets.add("PRINTING");
+    }
+  }
+  if (input.attestations.length) {
+    const list = input.attestations.map((row) => `${row.name} (${ATTESTATION_KIND_LABEL[row.kind]})`).join(", ");
+    const backToQueue = !input.reissue && order >= CASE_STATUS_ORDER.ATTESTATION_COMPLETE;
+    steps.push(
+      `Attestation${input.reissue ? " (dobara print ke baad)" : ""}: ${list}.` +
+        (backToQueue ? " Case wapas attestation queue mein aa gaya hai." : "")
+    );
+    targets.add("ATTESTATION");
+  }
+  if (steps.length && order >= CASE_STATUS_ORDER.DELIVERED) {
+    steps.push("Courier: case pehle bheja ja chuka hai — ye kaam poora hone par dobara bhejna hai (nayi slip).");
+    targets.add("COURIER");
+  }
+
+  const adminLines: string[] = [];
+  if (input.musadiqa) adminLines.push("Admin: Musadiqa apply ho gaya — Musadiqa queue se \"Attested\" karein.");
+  if (input.customName) {
+    const note = input.remarks && !input.reissue ? ` Note: ${input.remarks}` : "";
+    adminLines.push(`Admin: ${input.customName} — kaam poora hone par "Complete" karein.${note}`);
+  }
+
+  const adminOnly = targets.size === 1;
+  const head = `Extra service${input.label ? ` "${input.label}"` : ""}${adminOnly ? ` (${input.amountText})` : ""}`;
+  const lines =
+    steps.length > 1
+      ? [`${head} — kaam isi tarteeb se:`, ...steps.map((step, index) => `${index + 1}. ${step}`), ...adminLines]
+      : steps.length === 1
+        ? [`${head} — ${steps[0]}`, ...adminLines]
+        : adminLines.length === 1
+          ? [`${head} — ${adminLines[0]}`]
+          : [`${head}:`, ...adminLines];
+  return { text: lines.join("\n"), targets: [...targets] };
 }
 
 // Is kind ka kaam dobara: department commission ek aur dafa (rounds) aur wo
@@ -93,7 +173,7 @@ export async function bookCaseService(session: AdminSession, caseId: string, inp
         status: true,
         deptCommissionRounds: true,
         deptCommissionChargeFrom: true,
-        attestations: { select: { id: true, attestationTypeId: true, order: true } },
+        attestations: { select: { id: true, attestationTypeId: true, order: true, status: true } },
       },
     });
     if (!item) throw new ServiceInputError("Case nahi mila");
@@ -106,6 +186,7 @@ export async function bookCaseService(session: AdminSession, caseId: string, inp
 
     // Attestations: pehle se hon to dobara PENDING, warna nayi.
     const attestationIds: string[] = [];
+    const remarkAttestations: ServiceRemarkAttestation[] = [];
     let nextOrder = Math.max(0, ...item.attestations.map((row) => row.order)) + 1;
     for (const type of types) {
       const existing = item.attestations.find((row) => row.attestationTypeId === type.id);
@@ -115,11 +196,13 @@ export async function bookCaseService(session: AdminSession, caseId: string, inp
           data: { status: "PENDING", completedDate: null, scheduledDate: null },
         });
         attestationIds.push(existing.id);
+        remarkAttestations.push({ name: type.name, kind: existing.status === "DONE" ? "redo" : "pending" });
       } else {
         const created = await tx.caseAttestation.create({
           data: { caseId, attestationTypeId: type.id, order: nextOrder++ },
         });
         attestationIds.push(created.id);
+        remarkAttestations.push({ name: type.name, kind: "new" });
       }
     }
 
@@ -183,34 +266,27 @@ export async function bookCaseService(session: AdminSession, caseId: string, inp
     }
     await tx.case.update({ where: { id: caseId }, data: caseData });
 
-    // Remarks (Remarks tab + notification) — kis ko kya karna hai.
-    const amountText = `Rs ${toNumber(input.amount).toLocaleString("en-PK")}`;
-    const remark = (text: string, targets: string[]) =>
-      tx.caseRemark.create({
-        data: {
-          caseId,
-          text: text.slice(0, 2000),
-          createdById: session.adminId,
-          createdByRole: session.role || "unknown",
-          recipients: { create: targets.map((target) => ({ target })) },
-        },
-      });
-    if (input.reissue) {
-      await remark(`Document reissue (extra service "${name}", ${amountText}): ${input.remarks}`, ["FILING", "ADMIN"]);
-    }
-    if (types.length) {
-      await remark(
-        `Extra service "${name}": attestations ${types.map((type) => type.name).join(", ")} ${input.reissue ? "(reissue print ke baad)" : "dobara / nayi"}`,
-        ["ATTESTATION", "ADMIN"]
-      );
-    }
-    if (input.musadiqa) await remark(`Is case ne Musadiqa apply kar diya hai (extra service "${name}", ${amountText})`, ["ADMIN"]);
-    if (input.customName) {
-      await remark(
-        `Custom extra service: ${input.customName} (${amountText})${input.remarks && !input.reissue ? ` — ${input.remarks}` : ""}`,
-        ["ADMIN"]
-      );
-    }
+    // §W59: EK remark (Remarks tab + warning) — har department ka kaam tarteeb se.
+    const remark = serviceRemark({
+      label: (input.name || "").trim() || null,
+      amountText: `Rs ${toNumber(input.amount).toLocaleString("en-PK")}`,
+      fromStatus: item.status,
+      reissue: input.reissue,
+      remarks: input.remarks,
+      hasImage: Boolean(input.image),
+      attestations: remarkAttestations,
+      musadiqa: input.musadiqa,
+      customName: input.customName,
+    });
+    await tx.caseRemark.create({
+      data: {
+        caseId,
+        text: remark.text.slice(0, 2000),
+        createdById: session.adminId,
+        createdByRole: session.role || "unknown",
+        recipients: { create: remark.targets.map((target) => ({ target })) },
+      },
+    });
 
     return {
       service,

@@ -125,11 +125,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const link = `/office/cases/${id}`;
       const title = `Case ${result.caseNumber}: extra service "${result.service.name}" (Rs ${toNumber(amount).toLocaleString("en-PK")})`;
       await notifyAdmins({ type: "case.service", title, link });
-      if (reissue) await notifyRole("filing", { type: "case.service", title: `Case ${result.caseNumber}: document reissue — filing dobara`, link });
+      // §W59: department ko saaf — kya karna hai (tafseel case ke Remarks mein).
+      if (reissue) {
+        await notifyRole("filing", {
+          type: "case.service",
+          title: `Case ${result.caseNumber}: document dobara banana hai — hidayat case ke Remarks mein`,
+          link,
+        });
+      }
       if (result.attestationIds.length > 0) {
         await notifyPermission("office:attestation-dept:write", {
           type: "case.service",
-          title: `Case ${result.caseNumber}: attestations ${result.attestationNames.join(", ")}`,
+          title: `Case ${result.caseNumber}: extra service — attestation ${result.attestationNames.join(", ")}${reissue ? " (dobara print ke baad)" : ""}`,
           link,
         });
       }

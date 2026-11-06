@@ -2343,3 +2343,26 @@ Investigation-first (live DB audit):
   Chrome extension connect nahi tha — screen par thumbnail ka screenshot check nahi.
 - **Next step**: owner live par filing user se: Filing queue → tasveer wale case ki row par
   "Client picture" thumbnail → Dekhein / Download; "Files upload karein" modal mein bhi.
+
+## WAVE 59 (2026-11-10) — Extra service ka auto remark saaf
+
+- **Owner**: `Extra service "Document reissue + Board, QR code ibcc, Special Mofa": attestations
+  Board, QR code ibcc, Special Mofa (reissue print ke baad)` — "bahot hi confusing".
+- **Wajah**: `bookCaseService` do remark banata tha; auto service naam (jis mein attestations
+  pehle se thin) phir attestation list dohrai jati; "(reissue print ke baad)" / "dobara / nayi"
+  ka matlab wazeh nahi; reissue wale remark (target FILING) mein Rs bhi tha — filing ko paisa
+  nahi dikhna chahiye (§N7).
+- **Code**: `serviceRemark()` (case-services.ts) — EK remark, department lines tarteeb se
+  (Filing → Printing → Attestation har ek ke saath dobara / nayi / pehle se baqi → Courier),
+  admin lines (Musadiqa / custom), targets sirf jin ka kaam + ADMIN, Rs sirf admin-only remark
+  mein; `autoServiceName` → "Attestation (A, B)"; services route notifications (filing /
+  attestation) ke titles saaf. BR27.
+- **DB**: migration `20261110120000_office_wave59` (sirf data, schema nahi): purane auto
+  remarks ka text naye andaz mein (5 pattern; recipients / seen wahi), purana auto naam (hisson
+  se bilkul barabar ho to) naye format mein. Idempotent (dobara chalane par sab UPDATE 0).
+- **Verify**: tsc 0, lint 0, build exit 0. Local Postgres: w59-sim 23/23 (6 purane remark
+  pattern + haath ka remark nahi chhua + recipients wahi; 4 naam soorten; naya booking: ek
+  remark, Rs nahi, tarteeb 1-4, dobara / nayi, tasveer, targets ADMIN / FILING / PRINTING /
+  ATTESTATION / COURIER, status WAITING_FOR_FILE; sirf musadiqa → admin-only + Rs).
+- **Next step**: owner ki ijazat par live `npx prisma migrate deploy` (purane remarks / naam);
+  phir live par naya extra service laga kar Remarks tab dekhein.
