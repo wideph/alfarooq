@@ -2366,3 +2366,5 @@ Investigation-first (live DB audit):
   ATTESTATION / COURIER, status WAITING_FOR_FILE; sirf musadiqa → admin-only + Rs).
 - **Next step**: owner ki ijazat par live `npx prisma migrate deploy` (purane remarks / naam);
   phir live par naya extra service laga kar Remarks tab dekhein.
+- **Live**: owner ki ijazat se `npx prisma migrate deploy` — `20261110120000_office_wave59`
+  live par apply (purane auto remarks / naam naye andaz mein). Code push 9a770cd.
