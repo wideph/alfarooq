@@ -2426,3 +2426,8 @@ Investigation-first (live DB audit):
 - **Next step**: owner ki ijazat par live migrate; phir Setup → Holidays → "Sab dates check
   karein" (AF-2026-000037 printing date 09→10 Nov); AF-2026-000028 QR (DONE, 09-11) admin chahe to
   Attestations tab se badle. CRON_SECRET Vercel env mein ho to roz ka cron chalega.
+- **Live**: owner ki ijazat se `npx prisma migrate deploy` (wave60 — FALLBACK rows 0, OfficeDateScan
+  bani) aur ek dafa `recheckOpenCaseDates` (system actor, AI ke baghair): 12 khule cases check,
+  koi attestation date nahi badli, 22 expected printing dates dobara — AF-2026-000037 09→10 Nov.
+  Audit ab: masle 0, printing band din par 0; sirf AF-2026-000028 QR code ibcc (DONE, 09-11,
+  admin ne 4 Nov haath se di thi) — system DONE nahi badalta. Code push 560ba5e.
