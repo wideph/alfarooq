@@ -5,25 +5,22 @@ import { toHijri } from "@/lib/office/hijri";
 import { nextBoardAttestationNumber } from "@/lib/office/board-attestation";
 import { boardYearForSuffix, parseRollSuffix } from "@/lib/office/rnumber";
 import { revalidateOfficeSetup } from "@/lib/office/setup-cache";
-import {
-  aiChooseMofaCity,
-  aiResearchWorkingDates,
-  cityOpenVerdict,
-  embassyOpenVerdict,
-  pakistanWorkingVerdict,
-  saudiWorkingVerdict,
-  type AiVerdict,
-  type CityName,
-} from "@/lib/office/ai-dates";
+import { aiResearchWorkingDates } from "@/lib/office/ai-dates";
+import { DayResolver, MOFA_CITY_PRIORITY as CITY_PRIORITY, type CityScope as Cities, type DayRule } from "@/lib/office/day-rules";
+import { KIND_INFO, applyAttestationPlan, attestationKind, ruleForKind } from "@/lib/office/attestation-dates";
 
-// docs/office-module/06 §N5/N6 — AI-FIRST set-date engine.
-// Every step formula now validates each candidate date through the attached AI
-// model (src/lib/office/ai-dates.ts): Pakistan working day, city closures
-// (incidents/preparations/strikes), embassy closures in Islamabad and Saudi
-// working days are all RESEARCHED by the AI, cached into HolidayClosure /
-// WorkingDayCache (admin can edit/delete; admin rows always win), and only
-// when the AI key is missing or a call fails does the deterministic weekend +
-// HolidayClosure-table layer below act as the fallback.
+// docs/office-module/06 §N5/N6 — set-date engine.
+// §W60: har date EK qaide se (day-rules.ts): weekend + admin holiday table +
+// BUILT-IN chhuttiyon ka calendar (Iqbal Day, Eid, Ashura… code mein) + AI ke
+// dhoonde band din. Har step apne mulk / sheher / din ke hisaab se
+// (attestation-dates.ts KIND_INFO: Mofa Saudi = Saudi working day, Saudi
+// Embassy = Islamabad + embassies, …). Pehle set ke zyada tar steps sirf
+// holiday TABLE dekhte thay (table mein na ho to chhutti par date) aur baqi AI
+// ke andaze par. Tarteeb ka qaida bhi yahin: har step pichle qadam (Board →
+// ibcc → Mofa → Saudi Embassy → Mofa Saudi) ke BAAD. Aakhir mein planner case
+// ki baqi (set se bahar) attestations ki dates / tarteeb bhi theek karta hai.
+// AI ka intezar yahan nahi (sirf 2019 pool khali ho to) — AI research baad
+// mein background mein (date-recheck.ts).
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -38,161 +35,36 @@ export const HOLIDAY_SCOPES = [
 ] as const;
 export type HolidayScope = (typeof HOLIDAY_SCOPES)[number];
 
-export type CityScope = "ISLAMABAD" | "QUETTA" | "GUJRAT" | "LAHORE";
-
-const PAKISTAN_WEEKEND = new Set([0, 6]); // Sun, Sat
-const SAUDI_WEEKEND = new Set([5, 6]); // Fri, Sat
-
-const MAX_LOOKAHEAD_DAYS = 45;
-
-function dateKey(date: Date): string {
-  return formatDateOnly(date);
-}
+export type CityScope = Cities;
+export const MOFA_CITY_PRIORITY: CityScope[] = CITY_PRIORITY;
 
 function dayOnly(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-// --- Deterministic fallback layer (pure, kept for reference/tests) -----------
-// These pure helpers are the pre-AI engine. The live path is the AI-first loop
-// below; ai-dates.ts reproduces this exact rule (weekend + HolidayClosure) when
-// the AI is unavailable, so behaviour never regresses.
-// Loads HolidayClosure rows covering [from, from + days] once, so the forward
-// iteration below is pure in-memory. Key: "YYYY-MM-DD" → set of scopes.
-async function loadClosures(db: Db, from: Date, days = MAX_LOOKAHEAD_DAYS): Promise<Map<string, Set<string>>> {
-  const rows = await db.holidayClosure.findMany({
-    where: { date: { gte: from, lte: addDays(from, days) } },
-    select: { date: true, scope: true },
-  });
-  const map = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const key = dateKey(row.date);
-    const scopes = map.get(key) ?? new Set<string>();
-    scopes.add(row.scope);
-    map.set(key, scopes);
-  }
-  return map;
-}
-
-function isBlockedDay(
-  date: Date,
-  closures: Map<string, Set<string>>,
-  weekend: Set<number>,
-  scopes: readonly string[]
-): boolean {
-  if (weekend.has(date.getUTCDay())) return true;
-  const dayScopes = closures.get(dateKey(date));
-  if (!dayScopes) return false;
-  return scopes.some((scope) => dayScopes.has(scope));
-}
-
 export type WorkingDayOpts = {
   city?: CityScope;
-  extraScopes?: readonly string[];
-  allowedWeekdays?: readonly number[]; // UTC weekday numbers (0=Sun)
+  extraScopes?: string[];
+  allowedWeekdays?: number[]; // UTC weekday numbers (0=Sun)
 };
 
-// First working day on/after `candidate`.
-// Pakistan rule: Sat+Sun weekend; PAKISTAN-scope closures always block;
-// a city-scope closure blocks only when that city is requested.
-// Saudi rule: Fri+Sat weekend; SAUDI-scope closures block.
-function firstWorkingDayWith(
-  candidateInput: Date,
-  closures: Map<string, Set<string>>,
-  country: "PK" | "SA",
-  opts: WorkingDayOpts = {}
-): Date {
-  const weekend = country === "PK" ? PAKISTAN_WEEKEND : SAUDI_WEEKEND;
-  const scopes: string[] = country === "PK" ? ["PAKISTAN"] : ["SAUDI"];
-  if (opts.city) scopes.push(opts.city);
-  if (opts.extraScopes) scopes.push(...opts.extraScopes);
-
-  let date = dayOnly(candidateInput);
-  for (let i = 0; i < MAX_LOOKAHEAD_DAYS; i += 1) {
-    if (opts.allowedWeekdays && !opts.allowedWeekdays.includes(date.getUTCDay())) {
-      date = addDays(date, 1);
-      continue;
-    }
-    if (!isBlockedDay(date, closures, weekend, scopes)) return date;
-    date = addDays(date, 1);
-  }
-  // Fallback (closures loaded window exhausted): weekend-only rule.
-  while (weekend.has(date.getUTCDay())) date = addDays(date, 1);
-  return date;
+function ruleFrom(opts: WorkingDayOpts & { country?: "PK" | "SA" }): DayRule {
+  return {
+    country: opts.country ?? "PK",
+    city: opts.city,
+    extraScopes: opts.extraScopes,
+    allowedWeekdays: opts.allowedWeekdays,
+  };
 }
 
-// --- AI-first layer ----------------------------------------------------------
-// Each candidate day is decided by the AI research layer (ai-dates.ts). The AI
-// verdict functions already consult the HolidayClosure / WorkingDayCache tables
-// first (admin rows win) and fall back to the deterministic table rule when the
-// AI is unavailable — so this loop IS also the fallback path.
-
-function verdictForScope(date: Date, scope: string, db: Db): Promise<AiVerdict> {
-  switch (scope) {
-    case "PAKISTAN":
-      return pakistanWorkingVerdict(date, db);
-    case "SAUDI":
-      return saudiWorkingVerdict(date, db);
-    case "EMBASSIES_ISB":
-      return embassyOpenVerdict(date, db);
-    default:
-      return cityOpenVerdict(date, scope as CityName, db);
-  }
-}
-
-// First working day on/after `candidate`, every day decided AI-first.
-async function firstWorkingDayAi(
-  candidateInput: Date,
-  country: "PK" | "SA",
-  opts: WorkingDayOpts,
-  db: Db
-): Promise<Date> {
-  const weekend = country === "PK" ? PAKISTAN_WEEKEND : SAUDI_WEEKEND;
-  const scopes: string[] = country === "PK" ? ["PAKISTAN"] : ["SAUDI"];
-  if (opts.city) scopes.push(opts.city);
-  if (opts.extraScopes) scopes.push(...opts.extraScopes);
-
-  let date = dayOnly(candidateInput);
-  for (let i = 0; i < MAX_LOOKAHEAD_DAYS; i += 1) {
-    if (opts.allowedWeekdays && !opts.allowedWeekdays.includes(date.getUTCDay())) {
-      date = addDays(date, 1);
-      continue;
-    }
-    if (weekend.has(date.getUTCDay())) {
-      date = addDays(date, 1);
-      continue;
-    }
-    // All scopes of this day are researched in PARALLEL: each AI call scans a
-    // 14-day window and caches, so the following days are cache hits and one
-    // window costs roughly one AI round-trip instead of one per scope per day.
-    const verdicts = await Promise.all(scopes.map((scope) => verdictForScope(date, scope, db)));
-    if (verdicts.every((verdict) => verdict.open)) return date;
-    date = addDays(date, 1);
-  }
-  // Lookahead exhausted: weekend-only rule (same as the pure fallback).
-  while (weekend.has(date.getUTCDay())) date = addDays(date, 1);
-  return date;
-}
-
-// --- Public single-day checks (AI-first; used by routes/validation) ---------
+// --- Public single-day checks ------------------------------------------------
 
 export async function isPakistanWorkingDay(dateInput: Date, city?: CityScope, db: Db = prisma): Promise<boolean> {
-  const date = dayOnly(dateInput);
-  if (PAKISTAN_WEEKEND.has(date.getUTCDay())) return false;
-  const pakistan = await pakistanWorkingVerdict(date, db);
-  if (!pakistan.open) return false;
-  if (city) {
-    const cityVerdict = await cityOpenVerdict(date, city, db);
-    if (!cityVerdict.open) return false;
-  }
-  return true;
+  return (await new DayResolver(db).verdict(dateInput, { country: "PK", city })).open;
 }
 
 export async function isSaudiWorkingDay(dateInput: Date, db: Db = prisma): Promise<boolean> {
-  const date = dayOnly(dateInput);
-  if (SAUDI_WEEKEND.has(date.getUTCDay())) return false;
-  const verdict = await saudiWorkingVerdict(date, db);
-  return verdict.open;
+  return (await new DayResolver(db).verdict(dateInput, { country: "SA" })).open;
 }
 
 export async function firstWorkingDayOnOrAfter(
@@ -200,11 +72,10 @@ export async function firstWorkingDayOnOrAfter(
   opts: WorkingDayOpts & { country?: "PK" | "SA" } = {},
   db: Db = prisma
 ): Promise<Date> {
-  return firstWorkingDayAi(candidate, opts.country ?? "PK", opts, db);
+  return (await new DayResolver(db).firstOpen(candidate, ruleFrom(opts))).date;
 }
 
-// Offset helper per §N5/N6: candidate = base + N calendar days, then first
-// working day on/after that candidate.
+// candidate = base + N calendar days, phir us din ya baad ka pehla khula din.
 export async function firstWorkingDayAfterOffset(
   base: Date,
   days: number,
@@ -212,56 +83,6 @@ export async function firstWorkingDayAfterOffset(
   db: Db = prisma
 ): Promise<Date> {
   return firstWorkingDayOnOrAfter(addDays(dayOnly(base), days), opts, db);
-}
-
-// --- Specialised formulas (§N5) ----------------------------------------------
-
-export const MOFA_CITY_PRIORITY: CityScope[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
-
-// Special Mofa: first Pakistan working day on/after candidate (AI decides),
-// then the AI picks the first open city (priority Islamabad → Gujrat → Lahore),
-// cross-checked against the admin HolidayClosure table. If all three cities are
-// closed that day, fall back to the earliest city-specific AI-checked working
-// day so a date is always returned.
-export async function specialMofaCityDate(
-  candidate: Date,
-  db: Db = prisma
-): Promise<{ date: Date; city: CityScope }> {
-  const start = dayOnly(candidate);
-  const base = await firstWorkingDayAi(start, "PK", {}, db);
-
-  const choice = await aiChooseMofaCity(base, db);
-  const chosenCheck = await cityOpenVerdict(base, choice.city, db);
-  if (chosenCheck.open) return { date: base, city: choice.city };
-
-  // All three cities closed on the base date (or admin overrode the AI pick):
-  // earliest city-specific working day.
-  let best: { date: Date; city: CityScope } = {
-    date: await firstWorkingDayAi(start, "PK", { city: MOFA_CITY_PRIORITY[0] }, db),
-    city: MOFA_CITY_PRIORITY[0],
-  };
-  for (const city of MOFA_CITY_PRIORITY.slice(1)) {
-    const date = await firstWorkingDayAi(start, "PK", { city }, db);
-    if (date < best.date) best = { date, city };
-  }
-  return best;
-}
-
-// Saudi Embassy: Special Mofa + 2 → first Islamabad working day on Tue/Wed/Thu/Fri
-// with no EMBASSIES_ISB closure that date.
-export async function saudiEmbassyDate(specialMofaDate: Date, db: Db = prisma): Promise<Date> {
-  return firstWorkingDayAfterOffset(
-    specialMofaDate,
-    2,
-    { city: "ISLAMABAD", extraScopes: ["EMBASSIES_ISB"], allowedWeekdays: [2, 3, 4, 5] },
-    db
-  );
-}
-
-// Mofa Saudi: Saudi Embassy + 4 → first Saudi working day on Mon/Tue/Wed
-// (Sunday HATA diya gaya — sirf Monday, Tuesday, Wednesday allowed).
-export async function mofaSaudiDate(saudiEmbassy: Date, db: Db = prisma): Promise<Date> {
-  return firstWorkingDayAfterOffset(saudiEmbassy, 4, { country: "SA", allowedWeekdays: [1, 2, 3] }, db);
 }
 
 export function formatDdMmYy(date: Date): string {
@@ -324,6 +145,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   const stepKeys = steps.map((step) => step.stepKey);
   const family = detectFamily(stepKeys);
   const secondKey = stepKeys[1] ?? null;
+  const labelOf = (key: string) => steps.find((step) => step.stepKey === key)?.label ?? key;
 
   const firstPayment = await db.payment.findFirst({
     where: { caseId, status: "RECEIVED" },
@@ -335,14 +157,24 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
   const pendingReasons = new Set<string>();
   const dates = new Map<string, Date>();
   const notes = new Map<string, string>();
+  const days = new DayResolver(db);
 
-  // Preload closures for the whole window we may touch (payment-based formulas
-  // reach ~payment+20 days; Roll Number years can be anywhere, so those steps load
-  // their own windows via the async helpers).
-  const windowStart = paymentDate ?? new Date(Date.UTC(2019, 0, 1));
-  const closures = await loadClosures(db, windowStart, 400);
-
-  const pkWorking = (candidate: Date, opts: WorkingDayOpts = {}) => firstWorkingDayWith(candidate, closures, "PK", opts);
+  const tierOf = (key: string) => {
+    const kind = attestationKind(labelOf(key), key);
+    return kind ? KIND_INFO[kind].tier : null;
+  };
+  // §W60 — har step ka din us ke apne qaide se, aur pichle qadam ke BAAD.
+  const work = async (key: string, candidate: Date) => {
+    const tier = tierOf(key);
+    let floor = dayOnly(candidate);
+    if (tier !== null) {
+      for (const [otherKey, date] of dates) {
+        const otherTier = tierOf(otherKey);
+        if (otherTier !== null && otherTier < tier && date >= floor) floor = addDays(date, 1);
+      }
+    }
+    return days.firstOpen(floor, ruleForKind(attestationKind(labelOf(key), key)));
+  };
 
   const needsPayment = (): boolean => {
     if (paymentDate) return false;
@@ -365,42 +197,58 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
         // working day on/after it. Without a payment the Board date stays pending.
         if (!needsPayment() && paymentDate) {
           const base = new Date(Date.UTC(forcedYear, paymentDate.getUTCMonth(), paymentDate.getUTCDate()));
-          boardDate = await firstWorkingDayOnOrAfter(base, {}, db);
+          boardDate = (await work("BOARD", base)).date;
         }
       } else {
-        // Any other suffix → random pick from the 2019 working-date pool.
-        let pool = await db.workingDatePool.findMany({
-          where: { year: 2019 },
-          select: { date: true },
+        const boardRule = ruleForKind("BOARD");
+        await days.ensure(new Date(Date.UTC(2019, 0, 1)), new Date(Date.UTC(2019, 11, 31)));
+        // §W60 (N6 "store the pick"): pehle se chuni hui 2019 date sahi ho to
+        // wahi rahe — har payment / regenerate par nayi random date nahi.
+        const current = await db.caseAttestation.findFirst({
+          where: { caseId, attestationType: { name: labelOf("BOARD") } },
+          select: { scheduledDate: true },
         });
-        if (pool.length < POOL_TARGET_2019) {
-          // Owner's brief: the AI RESEARCHES 2019 working dates into the pool
-          // (admin can edit/delete them afterwards). Only when the AI fails do
-          // we continue with whatever the pool already holds.
-          try {
-            const existing = pool.map((row) => formatDateOnly(row.date));
-            const researched = await aiResearchWorkingDates(2019, POOL_TARGET_2019 - pool.length, existing, db);
-            for (const item of researched) {
-              await db.workingDatePool.upsert({
-                where: { year_date: { year: 2019, date: item.date } },
-                update: {},
-                create: { year: 2019, date: item.date, note: item.reason ? `AI: ${item.reason}` : "AI research" },
-              });
-            }
-            if (researched.length > 0) {
-              pool = await db.workingDatePool.findMany({ where: { year: 2019 }, select: { date: true } });
-            }
-          } catch (error) {
-            console.warn("[date-engine] 2019 pool AI fill fail", error instanceof Error ? error.message : error);
-          }
-        }
-        const candidates = pool
-          .map((row) => dayOnly(row.date))
-          .filter((date) => !PAKISTAN_WEEKEND.has(date.getUTCDay()));
-        if (candidates.length === 0) {
-          pendingReasons.add(PENDING_POOL_EMPTY);
+        if (
+          current?.scheduledDate &&
+          current.scheduledDate.getUTCFullYear() === 2019 &&
+          (await days.verdict(current.scheduledDate, boardRule)).open
+        ) {
+          boardDate = dayOnly(current.scheduledDate);
         } else {
-          boardDate = candidates[Math.floor(Math.random() * candidates.length)];
+          // Any other suffix → random pick from the 2019 working-date pool.
+          let pool = await db.workingDatePool.findMany({ where: { year: 2019 }, select: { date: true } });
+          if (pool.length < POOL_TARGET_2019) {
+            // Owner's brief: the AI RESEARCHES 2019 working dates into the pool
+            // (admin can edit/delete them afterwards). Only when the AI fails do
+            // we continue with whatever the pool already holds.
+            try {
+              const existing = pool.map((row) => formatDateOnly(row.date));
+              const researched = await aiResearchWorkingDates(2019, POOL_TARGET_2019 - pool.length, existing, db);
+              for (const researchedItem of researched) {
+                await db.workingDatePool.upsert({
+                  where: { year_date: { year: 2019, date: researchedItem.date } },
+                  update: {},
+                  create: { year: 2019, date: researchedItem.date, note: researchedItem.reason ? `AI: ${researchedItem.reason}` : "AI research" },
+                });
+              }
+              if (researched.length > 0) {
+                pool = await db.workingDatePool.findMany({ where: { year: 2019 }, select: { date: true } });
+              }
+            } catch (error) {
+              console.warn("[date-engine] 2019 pool AI fill fail", error instanceof Error ? error.message : error);
+            }
+          }
+          // §W60: pool ki sirf wo dates jo chhutti / weekend / Quetta band nahi.
+          const candidates: Date[] = [];
+          for (const row of pool) {
+            const date = dayOnly(row.date);
+            if ((await days.verdict(date, boardRule)).open) candidates.push(date);
+          }
+          if (candidates.length === 0) {
+            pendingReasons.add(PENDING_POOL_EMPTY);
+          } else {
+            boardDate = candidates[Math.floor(Math.random() * candidates.length)];
+          }
         }
       }
       if (boardDate) {
@@ -408,7 +256,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
         // UV ibcc / Back Navttc: working day ≥ 3 days after Board (same year).
         const uvKey = stepKeys.includes("UV_IBCC") ? "UV_IBCC" : "BACK_NAVTTC";
         if (stepKeys.includes(uvKey)) {
-          const uvDate = await firstWorkingDayOnOrAfter(addDays(boardDate, 3), {}, db);
+          const uvDate = (await work(uvKey, addDays(boardDate, 3))).date;
           const crossedYear = uvDate.getUTCFullYear() !== boardDate.getUTCFullYear();
           dates.set(uvKey, uvDate);
           const pairNote = `Board pair: ${formatDateOnly(boardDate)}${crossedYear ? " (sal barh gaya)" : ""}`;
@@ -425,8 +273,7 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       // Set-(ii) family (QR / Current Navttc) and Board-only sets (v)/(vii):
       // Board = first payment + 5 days → first working day (PAK + QUETTA rule).
       if (!needsPayment() && paymentDate) {
-        const boardDate = await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" });
-        dates.set("BOARD", boardDate);
+        dates.set("BOARD", (await work("BOARD", addDays(paymentDate, 5))).date);
       }
     }
 
@@ -434,9 +281,33 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     const qrKey = stepKeys.includes("QR_IBCC") ? "QR_IBCC" : "CURRENT_NAVTTC";
     if (stepKeys.includes(qrKey)) {
       const boardDate = dates.get("BOARD");
-      if (boardDate) dates.set(qrKey, await pkWorking(addDays(boardDate, 2), { city: "ISLAMABAD" }));
+      if (boardDate) dates.set(qrKey, (await work(qrKey, addDays(boardDate, 2))).date);
       else if (!pendingReasons.size) pendingReasons.add("Board date ke baghair QR ibcc nahi ban sakta");
     }
+  }
+
+  // -- Medical Bmfq (§W60: Special Mofa se PEHLE — pehle baad mein tha, is liye
+  //    Medical set (i) ki Special Mofa date kabhi nahi banti thi) --------------
+  if (stepKeys.includes("BMFQ_VERIFICATION")) {
+    if (!needsPayment() && paymentDate) {
+      dates.set("BMFQ_VERIFICATION", (await work("BMFQ_VERIFICATION", addDays(paymentDate, 5))).date);
+    }
+  }
+  if (stepKeys.includes("MOH_ATTESTATION")) {
+    const bmfq = dates.get("BMFQ_VERIFICATION");
+    if (bmfq) dates.set("MOH_ATTESTATION", (await work("MOH_ATTESTATION", addDays(bmfq, 2))).date);
+  }
+
+  // -- CPLS / APAC (§W60: Special Mofa se pehle, wahi wajah) -----------------------
+  const attestationKey = stepKeys.includes("CPLS_ATTESTATION") ? "CPLS_ATTESTATION" : "APAC_ATTESTATION";
+  if (stepKeys.includes(attestationKey)) {
+    if (!needsPayment() && paymentDate) {
+      dates.set(attestationKey, (await work(attestationKey, addDays(paymentDate, 3))).date);
+    }
+  }
+  if (stepKeys.includes("NAVTTC")) {
+    const attestation = dates.get(attestationKey);
+    if (attestation) dates.set("NAVTTC", (await work("NAVTTC", addDays(attestation, 1))).date);
   }
 
   // -- SPECIAL_MOFA ------------------------------------------------------------
@@ -455,19 +326,23 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
       if (prev) candidate = addDays(prev, 1);
     }
     if (candidate) {
-      const result = await specialMofaCityDate(candidate, db);
+      // Pakistan working day + Islamabad → Gujrat → Lahore mein pehli khuli city.
+      const result = await work("SPECIAL_MOFA", candidate);
       dates.set("SPECIAL_MOFA", result.date);
-      notes.set("SPECIAL_MOFA", `City: ${result.city}`);
+      notes.set("SPECIAL_MOFA", `City: ${result.city ?? MOFA_CITY_PRIORITY[0]}`);
     } else if (paymentDate && !pendingReasons.size) {
       pendingReasons.add("Special Mofa ka pichla step abhi pending hai");
     }
   }
 
   // -- SAUDI_EMBASSY / MOFA_SAUD -----------------------------------------------------
+  // Saudi Embassy: Special Mofa + 2 → Islamabad working day, Tue/Wed/Thu/Fri,
+  // embassies band na hon. Mofa Saudi: Saudi Embassy + 4 → SAUDI working day,
+  // Mon/Tue/Wed (Saudi chhuttiyan bhi).
   if (stepKeys.includes("SAUDI_EMBASSY")) {
     const mofa = dates.get("SPECIAL_MOFA");
     if (mofa) {
-      const date = await saudiEmbassyDate(mofa, db);
+      const date = (await work("SAUDI_EMBASSY", addDays(mofa, 2))).date;
       dates.set("SAUDI_EMBASSY", date);
       notes.set("SAUDI_EMBASSY", `Hijri: ${toHijri(date).formatted}`);
     } else if (paymentDate) {
@@ -475,41 +350,17 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     }
   }
   // §W24: live DB ke sets stepKey "MOFA_SAUDI" use karte hain jabke purana
-  // seed "MOFA_SAUD" likhta tha — key mismatch ki wajah se Mofa Saudi ki date
-  // KABHI generate nahi hoti thi. Dono keys accept karo (pehli maujood key).
+  // seed "MOFA_SAUD" likhta tha — dono keys accept karo (pehli maujood key).
   const mofaSaudKey = stepKeys.includes("MOFA_SAUDI") ? "MOFA_SAUDI" : "MOFA_SAUD";
   if (stepKeys.includes(mofaSaudKey)) {
     const saudiEmbassy = dates.get("SAUDI_EMBASSY");
     if (saudiEmbassy) {
-      const date = await mofaSaudiDate(saudiEmbassy, db);
+      const date = (await work(mofaSaudKey, addDays(saudiEmbassy, 4))).date;
       dates.set(mofaSaudKey, date);
       notes.set(mofaSaudKey, formatDdMmYy(date));
     } else if (paymentDate) {
       pendingReasons.add("Mofa Saudi ke liye Saudi Embassy date chahiye");
     }
-  }
-
-  // -- Medical Bmfq ---------------------------------------------------------------
-  if (stepKeys.includes("BMFQ_VERIFICATION")) {
-    if (!needsPayment() && paymentDate) {
-      dates.set("BMFQ_VERIFICATION", await pkWorking(addDays(paymentDate, 5), { city: "QUETTA" }));
-    }
-  }
-  if (stepKeys.includes("MOH_ATTESTATION")) {
-    const bmfq = dates.get("BMFQ_VERIFICATION");
-    if (bmfq) dates.set("MOH_ATTESTATION", await pkWorking(addDays(bmfq, 2), { city: "ISLAMABAD" }));
-  }
-
-  // -- CPLS / APAC -----------------------------------------------------------------
-  const attestationKey = stepKeys.includes("CPLS_ATTESTATION") ? "CPLS_ATTESTATION" : "APAC_ATTESTATION";
-  if (stepKeys.includes(attestationKey)) {
-    if (!needsPayment() && paymentDate) {
-      dates.set(attestationKey, await pkWorking(addDays(paymentDate, 3), { city: "ISLAMABAD" }));
-    }
-  }
-  if (stepKeys.includes("NAVTTC")) {
-    const attestation = dates.get(attestationKey);
-    if (attestation) dates.set("NAVTTC", await pkWorking(addDays(attestation, 1), { city: "ISLAMABAD" }));
   }
 
   const computations: StepComputation[] = steps.map((step) => ({
@@ -547,13 +398,17 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
         // Regeneration refreshes dates/notes but never wipes attestation-department
         // progress: an existing status (IN_PROGRESS / DONE) is kept, and an
         // existing date is kept when the new computation had to stay pending.
+        // §W60: DONE step ki date bhi nahi badalti (kaam ho chuka).
         await tx.caseAttestation.update({
           where: { id: existing.id },
-          data: {
-            scheduledDate: step.scheduledDate ?? existing.scheduledDate,
-            notes: step.notes ?? existing.notes,
-            order: step.order,
-          },
+          data:
+            existing.status === "DONE"
+              ? { order: step.order }
+              : {
+                  scheduledDate: step.scheduledDate ?? existing.scheduledDate,
+                  notes: step.notes ?? existing.notes,
+                  order: step.order,
+                },
         });
       }
     }
@@ -572,6 +427,14 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     return attestationNumber;
   }, { maxWait: 10000, timeout: 30000 });
 
+  // §W60: set ke bahar ki attestations (extra / one-by-one) ki date + poore
+  // case ki tarteeb / chhutti ka aakhri check.
+  try {
+    await applyAttestationPlan(caseId);
+  } catch (error) {
+    console.error("[date-engine] attestation plan fail", error);
+  }
+
   // §W20: upsert ne naya AttestationType banaya ho sakta hai — setup cache
   // invalidate (best-effort; generateSetDates after() se bhi call hota hai).
   try {
@@ -586,34 +449,4 @@ export async function generateSetDates(caseId: string, db: Db = prisma): Promise
     steps: computations,
     boardAttestationNumber,
   };
-}
-
-// §W32 — Set of Attestations NA ho aur case par koi attestation (maslan
-// Special Mofa, QR code ibcc, Saudi Embassy, Mofa Saudi) chuni jaye: us ki
-// scheduled date HAMESHA chunne ki tareekh ke BAAD ka pehla Pakistan working
-// day hoti hai — AI working-day engine se (firstWorkingDayAfterOffset; AI na ho
-// to holiday table / weekend fallback). Set wale cases par set ka apna date
-// engine (generateSetDates) hi chalta hai — yahan kuch nahi hota. DONE steps
-// ki date nahi badalti. AI slow ho sakta hai, is liye callers ise after() mein
-// chalate hain. Kabhi throw nahi karta; lagayi gayi date return karta hai.
-export async function scheduleNoSetAttestationDates(
-  caseId: string,
-  attestationIds: string[],
-  selectedOn: Date,
-  db: Db = prisma
-): Promise<Date | null> {
-  try {
-    if (attestationIds.length === 0) return null;
-    const item = await db.case.findUnique({ where: { id: caseId }, select: { setId: true } });
-    if (!item || item.setId) return null;
-    const date = await firstWorkingDayAfterOffset(selectedOn, 1, { country: "PK" }, db);
-    await db.caseAttestation.updateMany({
-      where: { id: { in: attestationIds }, caseId, status: { not: "DONE" } },
-      data: { scheduledDate: date },
-    });
-    return date;
-  } catch (error) {
-    console.error("[office] no-set attestation date fail", error);
-    return null;
-  }
 }

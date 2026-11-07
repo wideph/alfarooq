@@ -152,6 +152,9 @@ money owed but not yet paid out.
     4. Super admin can override a cache row (`source = MANUAL`) from `/office/setup`
        → "Working days"; overriding re-computes `expectedPrintingDate` for open
        cases whose candidate equals that date.
+7.3a §W60: 7.3 ka AI / cache flow ab nahi — din ka faisla BR28 (`DayResolver`: weekend + admin
+     table + built-in chhuttiyan + AI ke band din; admin MANUAL override jeet ta hai). Koi andaza
+     cache nahi hota (FALLBACK rows migration wave60 ne delete kin).
 7.4 Store `Case.expectedPrintingDate` (date only). Show it on every case list/detail
     for every role.
 
@@ -546,3 +549,59 @@ to wapas WAITING_FOR_PRINTING (dobara asal proof par commission phir milta hai).
 - Migration `20261110120000_office_wave59`: purane auto remarks ka text naye andaz mein
   (recipients / seen wahi; filing wale se Rs hata) aur purana auto naam (hisson se bilkul
   barabar ho to) naye format mein. Haath se likhe remarks / apne naam nahi chhuye.
+
+## BR28. Dates ka nizaam: chhuttiyan, mulk, tarteeb — §W60
+
+**Din khula hai ya nahi** — EK qaida (`src/lib/office/day-rules.ts`, `DayResolver`), har date
+par: set engine, bina set attestations, extra service, expected printing date, admin ki haath
+ki date. Tarteeb (pehli band wajah jeet ti hai):
+1. Allowed weekdays (Saudi Embassy Tue–Fri, Mofa Saudi Mon–Wed).
+2. Weekend — Pakistan Sat+Sun, Saudi Fri+Sat.
+3. Admin ki `HolidayClosure` row (country + city + extra scopes) — hamesha band.
+4. **Built-in calendar** (`holiday-calendar.ts`, code mein, DB / AI / internet ke baghair):
+   Pakistan 5 Feb, 23 Mar, 1 May, 28 May (2024 se), 14 Aug, 6 Sep, 9 Nov (Iqbal Day), 25 Dec +
+   Eid ul Fitr (1–3 Shawwal), Eid ul Adha (10–12 Zul Hajj), Ashura (9–10 Muharram), Eid Milad
+   (12 Rabi ul Awal) — Umm al-Qura calendar se, Pakistan ka chand baad mein hota hai is liye har
+   Islamic window 2 din aage tak. Saudi: 22 Feb (2022 se), 23 Sep, Eid ul Fitr 25 Ramzan–10
+   Shawwal, Eid ul Adha 5–15 Zul Hajj (sarkari daftar). Conservative: shak ho to band.
+5. AI ke dhoonde band din (HolidayClosure "AI:" rows, WorkingDayCache AI band).
+- Admin ka MANUAL WorkingDayCache override (candidate = working date) Pakistan ke liye built-in
+  aur AI band din ko khol deta hai (admin ki table row ko nahi).
+- `FALLBACK` cache rows (AI fail par weekend-only andaza) kabhi nahi mani jati — migration
+  wave60 ne delete kar di. Koi andaza cache nahi hota.
+
+**Har attestation ka mulk / sheher** (`attestation-dates.ts` `KIND_INFO`; type ke naam / set
+stepKey se pehchan): Board / bmfq → Pakistan + Quetta; UV / QR ibcc, Back / Current Navttc,
+Navttc, MoH, CPLS / APAC, HEC → Pakistan + Islamabad; Special Mofa → Pakistan + Islamabad /
+Gujrat / Lahore mein se pehli khuli (city note); Saudi Embassy → Islamabad + EMBASSIES_ISB,
+Tue–Fri; Mofa Saudi → **Saudi Arabia** working day, Mon–Wed. Pehchan na ho → Pakistan.
+
+**Tarteeb (owner, sakht)**: Board (bmfq / CPLS / APAC) < UV / QR ibcc (Navttc / MoH / HEC) <
+Special Mofa < Saudi Embassy < Mofa Saudi — har agla pichle se kam az kam ek din BAAD.
+- Set engine: har step ka floor = formula, phir pichle qadam ke baad (`work()`); Medical / CPLS /
+  APAC ke steps ab Special Mofa se pehle bante hain (pehle Special Mofa ki date kabhi nahi banti thi).
+  UV-mode Board ki 2019 date dobara random nahi hoti agar pehle wali sahi ho (N6 "store the pick").
+  DONE step ki date regenerate par nahi badalti.
+- Planner (`computeAttestationPlan` / `applyAttestationPlan`, case advisory lock): nayi / dobara
+  chuni (replanIds) ya khali date → kal se (ya pichle qadam ke baad) pehla sahi din; maujooda
+  date chhutti par ya tarteeb ke khilaf → aage pehla sahi din; baqi wahi. DONE kabhi nahi
+  badalti (magar us ki date agle qadam ki tarteeb mein ginti hai). Set ka step khali ho to set
+  engine bharta hai (payment ke baad).
+- Bina set ke case, one-by-one attestation, extra service: dates **foran** (request ke andar,
+  AI ke intezar ke baghair; pehle after() + AI — function ka waqt khatam ho jata to date kabhi
+  nahi lagti thi; set wale case mein set se bahar ki attestation ki date kabhi nahi lagti thi).
+- Admin ki haath ki scheduled date: chhutti / ghalat din ya pichle qadam se pehle → 400 (wajah ke
+  saath); aage wale pending qadam khud aage khisakte hain (response `dateNotice`). Completed date
+  par koi check nahi (wo asal waqia hai).
+
+**Jaanch / theek karna** (`date-recheck.ts`): admin Holidays panel "Sab dates check karein"
+(`POST /api/office/setup/recheck-dates`), holiday add / edit, working-day override, roz ka cron
+(`/api/cron/office-dates`, 06:10 PKT) — pending dates chhutti / tarteeb ke khilaf → aage + case
+remark (ATTESTATION + ADMIN) "Attestation dates khud theek hui…"; khali dates bhar di jati hain;
+expected printing dates bhi.
+
+**AI** (`ai-dates.ts`): sirf izafi band din dhoondta hai (additive), kabhi "khula" nahi kehta, fail
+par kuch cache nahi. Har scan (scope + 14 din window) `OfficeDateScan` mein; aane wali window 7
+din baad dobara. Dates lagne ke baad after() mein aur roz cron mein; naya band din mile to
+planner. Model internet search nahi karta (apne ilm se) — asal bharosa built-in calendar + admin
+table.

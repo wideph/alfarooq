@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
@@ -8,12 +7,15 @@ import { recomputeCaseFinancials } from "@/lib/office/commission";
 import { parseAmount, toNumber } from "@/lib/office/money";
 import { notifyAdmins, notifyPermission, notifyRole } from "@/lib/office/notifications";
 import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
-import { cleanText, todayPakistan } from "@/lib/office/serializers";
-import { firstWorkingDayAfterOffset } from "@/lib/office/date-engine";
+import { cleanText } from "@/lib/office/serializers";
+import { planCaseDates, researchCaseDates } from "@/lib/office/date-recheck";
 import { advanceCourierStage } from "@/lib/office/workflow";
 import { bookCaseService, ServiceInputError, updateCaseService } from "@/lib/office/case-services";
 
 export const preferredRegion = ["sin1"];
+
+// §W60: after() mein AI date research (90s tak).
+export const maxDuration = 300;
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -92,20 +94,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     await recomputeCaseFinancials(id, session);
     const courierStage = await advanceCourierStage(id);
 
+    // §W60: service ki attestations ki dates FORAN — kal se, har ek apne mulk /
+    // din ke qaide aur tarteeb (Board → ibcc → Mofa → Saudi Embassy → Mofa
+    // Saudi) se (pehle sab ko ek hi din, after() mein AI ke intezar ke saath).
+    if (result.attestationIds.length > 0) {
+      await planCaseDates(id, { replanIds: result.attestationIds }, session);
+    }
+
     after(async () => {
-      // Attestations ki date: AI working-day engine — aaj ke baad pehla
-      // Pakistani working day (bina set wale cases ka teh shuda formula).
-      if (result.attestationIds.length > 0) {
-        try {
-          const date = await firstWorkingDayAfterOffset(todayPakistan(), 1, { country: "PK" });
-          await prisma.caseAttestation.updateMany({
-            where: { id: { in: result.attestationIds }, caseId: id, status: { not: "DONE" } },
-            data: { scheduledDate: date },
-          });
-        } catch (error) {
-          console.error("[office] service attestation date fail", error);
-        }
-      }
+      if (result.attestationIds.length > 0) await researchCaseDates(id);
       await logOfficeAction(session, {
         action: "case.service.book",
         entity: "Case",

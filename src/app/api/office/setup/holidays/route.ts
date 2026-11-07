@@ -1,12 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 import { HOLIDAY_SCOPES, type HolidayScope } from "@/lib/office/date-engine";
 import { getOfficeHolidayClosures, revalidateOfficeSetup } from "@/lib/office/setup-cache";
+import { recheckOpenCaseDates } from "@/lib/office/date-recheck";
+import { builtinHolidaysOfYear } from "@/lib/office/holiday-calendar";
 
 export const preferredRegion = ["sin1"];
+
+// §W60: chhutti add / badalne ke baad us din ki pending dates aage (after()).
+export const maxDuration = 300;
+
+// Is din pending attestation wale cases dobara check (chhutti par date → aage).
+async function recheckCasesOn(session: { adminId: string; role?: string | null }, dates: Date[]) {
+  try {
+    const rows = await prisma.caseAttestation.findMany({
+      where: { status: { not: "DONE" }, scheduledDate: { in: dates } },
+      select: { caseId: true },
+      distinct: ["caseId"],
+    });
+    if (rows.length === 0) return;
+    await recheckOpenCaseDates({ adminId: session.adminId, role: session.role || "admin" }, { caseIds: rows.map((row) => row.caseId) });
+  } catch (error) {
+    console.error("[office] holiday recheck fail", error);
+  }
+}
 
 // Admin-managed holiday / closure table (§N6). Scopes:
 // PAKISTAN | ISLAMABAD | QUETTA | GUJRAT | LAHORE | EMBASSIES_ISB | SAUDI
@@ -16,6 +36,15 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   try {
     const { searchParams } = new URL(request.url);
+    // §W60: ?builtin=YYYY → code ke built-in calendar ki chhuttiyan (sirf dikhane ke liye).
+    const builtinYear = Number(searchParams.get("builtin"));
+    if (Number.isFinite(builtinYear) && builtinYear > 1900 && builtinYear < 2200) {
+      return NextResponse.json({
+        year: builtinYear,
+        pakistan: builtinHolidaysOfYear(builtinYear, "PK"),
+        saudi: builtinHolidaysOfYear(builtinYear, "SA"),
+      });
+    }
     const year = Number(searchParams.get("year"));
     const scope = searchParams.get("scope");
     // §W20: cached (60s + tag invalidation); year/scope filters in-memory.
@@ -54,6 +83,7 @@ export async function POST(request: NextRequest) {
       create: parsed.data,
     });
     revalidateOfficeSetup();
+    after(() => recheckCasesOn(session, [row.date]));
     await logOfficeAction(session, {
       action: "holiday.create",
       entity: "HolidayClosure",
@@ -78,6 +108,7 @@ export async function PATCH(request: NextRequest) {
     if (parsed.error !== undefined) return badRequest(parsed.error);
     const row = await prisma.holidayClosure.update({ where: { id }, data: parsed.data });
     revalidateOfficeSetup();
+    after(() => recheckCasesOn(session, [row.date]));
     await logOfficeAction(session, {
       action: "holiday.update",
       entity: "HolidayClosure",

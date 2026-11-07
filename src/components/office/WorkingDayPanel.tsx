@@ -72,7 +72,7 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
   }
 
   async function remove(row: Row) {
-    if (!confirm("Ye cache row delete karein? Agli baar AI dobara pooche ga.")) return;
+    if (!confirm("Ye row delete karein? Phir is din ka faisla built-in calendar + Holidays table karega.")) return;
     const res = await officeFetch(`/api/office/working-day?date=${row.candidateDate.slice(0, 10)}`, {
       method: "DELETE",
     });
@@ -88,8 +88,11 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
       </div>
       <div className="p-5 sm:p-6 space-y-4">
         <p className="text-xs text-slate-500">
-          Expected printing date = payment date + 6 din ke baad pehla working day. AI (Settings → Bot) se
-          holidays check hoti hain aur result yahan cache hota hai. Ghalat result ko yahan override karein.
+          Expected printing date = payment date + 6 din ke baad pehla working day. Din ka faisla: weekend +
+          built-in chhuttiyan (Iqbal Day, Eid…) + Holidays table + AI ke dhoonde band din. &quot;Check&quot; sirf
+          dikhata hai (kuch save nahi). Override: candidate = working date likhein to wo din KHULA mana jata hai
+          (built-in chhutti ho tab bhi) — har attestation / printing date ke liye; working date baad ki likhein
+          to candidate band.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-2">
@@ -152,7 +155,7 @@ export default function WorkingDayPanel({ onMessage }: { onMessage: (message: st
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
-                    Abhi koi date check nahi hui
+                    Koi override nahi
                   </td>
                 </tr>
               )}

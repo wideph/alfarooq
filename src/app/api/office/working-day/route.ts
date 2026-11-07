@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, guardOffice, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
@@ -7,10 +7,12 @@ import {
   refreshOpenCasesPrintingDates,
   resolvePakistanWorkingDay,
 } from "@/lib/office/working-day";
+import { recheckOpenCaseDates } from "@/lib/office/date-recheck";
 
 export const preferredRegion = ["sin1"];
 
-export const maxDuration = 30;
+// §W60: override ke baad pending attestation dates ki jaanch (after()).
+export const maxDuration = 300;
 
 // GET: cached working-day rows (newest first) for the setup panel.
 export async function GET() {
@@ -69,6 +71,24 @@ export async function PUT(request: NextRequest) {
     });
 
     const refreshed = await refreshOpenCasesPrintingDates();
+    // §W60: is din (ab band ya khula) wali pending attestation dates dobara check.
+    after(async () => {
+      try {
+        const rows = await prisma.caseAttestation.findMany({
+          where: { status: { not: "DONE" }, scheduledDate: candidateDate },
+          select: { caseId: true },
+          distinct: ["caseId"],
+        });
+        if (rows.length) {
+          await recheckOpenCaseDates(
+            { adminId: session.adminId, role: session.role || "admin" },
+            { caseIds: rows.map((item) => item.caseId) }
+          );
+        }
+      } catch (error) {
+        console.error("[office] working-day override recheck fail", error);
+      }
+    });
 
     await logOfficeAction(session, {
       action: "working_day.override",

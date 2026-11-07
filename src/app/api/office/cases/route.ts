@@ -8,8 +8,8 @@ import { caseScope, canSeeOffice, isDeptWorker } from "@/lib/office/case-access"
 import { nextCaseNumber } from "@/lib/office/case-numbers";
 import { parseAmount, toNumber } from "@/lib/office/money";
 import { CASE_DEPT_EXPENSE_KINDS } from "@/lib/office/dept-expenses";
-import { cleanText, toJson, todayPakistan } from "@/lib/office/serializers";
-import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
+import { cleanText, toJson } from "@/lib/office/serializers";
+import { planCaseDates, researchCaseDates } from "@/lib/office/date-recheck";
 import { CASE_STATUSES, CLOSED_CASE_STATUSES, LEGACY_CASE_STATUSES } from "@/lib/office/permissions";
 import { notifyAdmins } from "@/lib/office/notifications";
 import { caseListInclude, serializeCaseRow, stripCaseMoney } from "@/lib/office/case-detail";
@@ -33,6 +33,9 @@ import {
 } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
+
+// §W60: after() mein AI date research (90s tak) — function ko waqt chahiye.
+export const maxDuration = 300;
 
 const PAGE_SIZE = 50;
 
@@ -541,13 +544,13 @@ export async function POST(request: NextRequest) {
       });
     }, { maxWait: 10000, timeout: 30000 });
 
-    // §W32: set ke baghair chuni gayi attestations ki date = aaj ke baad ka
-    // pehla working day (AI) — after() mein (AI slow ho sakta hai).
+    // §W32/§W60: set ke baghair chuni gayi attestations ki dates FORAN (AI ke
+    // intezar ke baghair): kal se, har ek apne mulk / din ke qaide aur tarteeb
+    // (Board → ibcc → Mofa → Saudi Embassy → Mofa Saudi) se. AI research baad mein.
     if (!setId && created.attestations.length > 0) {
-      const selectedOn = todayPakistan();
-      const attestationIds = created.attestations.map((attestation) => attestation.id);
+      await planCaseDates(created.id, {}, session);
       after(async () => {
-        await scheduleNoSetAttestationDates(created.id, attestationIds, selectedOn);
+        await researchCaseDates(created.id);
       });
     }
 

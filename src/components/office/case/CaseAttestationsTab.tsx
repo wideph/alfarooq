@@ -201,10 +201,11 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
 
   async function call(url: string, method: string, json?: unknown, success = "Update ho gaya") {
     setBusy(true);
-    const res = await officeFetch<CaseDetail>(url, { method, json });
+    const res = await officeFetch<CaseDetail & { dateNotice?: string }>(url, { method, json });
     if (res.ok) {
       onUpdated(res.data);
-      onMessage(success);
+      // §W60: date badalne par aage wali attestations khiski hon to bata do.
+      onMessage(res.data.dateNotice || success);
     } else onMessage(res.error, "error");
     setBusy(false);
   }

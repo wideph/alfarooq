@@ -736,6 +736,18 @@ model HolidayClosure {
   @@unique([date, scope])
 }
 
+// §W60 — AI ne kaun si 14-din ki window (scope ke liye) kab scan ki. Sirf
+// kamyab scan yahan aata hai; aane wali window 7 din baad dobara scan hoti hai.
+model OfficeDateScan {
+  id          String   @id @default(cuid())
+  scope       String
+  windowStart DateTime
+  scannedAt   DateTime @default(now())
+  closedCount Int      @default(0)
+
+  @@unique([scope, windowStart])
+}
+
 model WorkingDatePool {
   id        String   @id @default(cuid())
   year      Int

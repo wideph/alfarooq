@@ -1,11 +1,16 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { BOT_QUICK_TIMEOUT_MS, callBotJson } from "@/lib/bot-ai";
-import { fetchPrivateSiteSettingsFromDb } from "@/lib/get-site-settings";
-import { addDays, formatDateOnly } from "@/lib/office/serializers";
+import { addDays } from "@/lib/office/serializers";
+import { DayResolver, PAKISTAN_RULE } from "@/lib/office/day-rules";
 
 // docs/office-module/03_BUSINESS_RULES.md BR7.
 // Expected printing date = first Pakistan working day on/after payment date + 6.
+// §W60: din ka faisla day-rules.ts (weekend + admin table + built-in
+// chhuttiyan + AI ke dhoonde band din; admin ka MANUAL override). Pehle yahan
+// AI se 8 second mein jawab manga jata tha — reasoning model aksar time out,
+// phir weekend-only andaza "FALLBACK" ban kar hamesha ke liye cache ho jata
+// tha (aur set / bina set dates bhi usi cache par bharosa karti thin). Ab koi
+// andaza cache nahi hota.
 
 export const PRINTING_LEAD_DAYS = 6;
 
@@ -16,104 +21,34 @@ export type WorkingDayResult = {
   workingDate: Date;
   isCandidateWorking: boolean;
   reason: string | null;
-  source: "AI" | "FALLBACK" | "MANUAL";
+  // MANUAL = admin override; CALENDAR = built-in calendar + tables.
+  source: "MANUAL" | "CALENDAR";
 };
-
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-function isWeekend(date: Date) {
-  const day = date.getUTCDay();
-  return day === 0 || day === 6;
-}
-
-function fallbackWorkingDay(candidate: Date): WorkingDayResult {
-  let date = candidate;
-  while (isWeekend(date)) date = addDays(date, 1);
-  return {
-    candidateDate: candidate,
-    workingDate: date,
-    isCandidateWorking: date.getTime() === candidate.getTime(),
-    reason: date.getTime() === candidate.getTime() ? null : WEEKDAYS[candidate.getUTCDay()],
-    source: "FALLBACK",
-  };
-}
-
-async function askAi(candidate: Date): Promise<WorkingDayResult | null> {
-  const settings = await fetchPrivateSiteSettingsFromDb();
-  if (!settings.botApiKey || !settings.botModel) return null;
-
-  const candidateText = formatDateOnly(candidate);
-  const system = [
-    "You are an expert on Pakistan's public holidays and government working days.",
-    "Working days are Monday to Friday, excluding Pakistani national/public holidays:",
-    "Eid ul Fitr (3 days), Eid ul Adha (3 days), Ashura (9-10 Muharram), Eid Milad un Nabi (12 Rabi ul Awal),",
-    "Kashmir Day (5 Feb), Pakistan Day (23 Mar), Labour Day (1 May), Independence Day (14 Aug),",
-    "Iqbal Day (9 Nov), Quaid-e-Azam Day (25 Dec), and other federal government announced holidays.",
-    "Use the most accurate Islamic calendar dates you know for the given year.",
-    "Answer with JSON only.",
-  ].join(" ");
-  const user = [
-    `Candidate date: ${candidateText} (${WEEKDAYS[candidate.getUTCDay()]}).`,
-    "Is it a working day in Pakistan? If not, what is the first working day on or after it?",
-    'Return exactly: {"isWorkingDay": true|false, "workingDate": "YYYY-MM-DD", "reason": "short reason or empty"}',
-  ].join(" ");
-
-  try {
-    const raw = await callBotJson(settings, system, user, '{"isWorkingDay"', 300, BOT_QUICK_TIMEOUT_MS);
-    const parsed = JSON.parse(raw) as { isWorkingDay?: boolean; workingDate?: string; reason?: string };
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(parsed.workingDate || ""));
-    if (!match) return null;
-    const workingDate = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-    if (Number.isNaN(workingDate.getTime())) return null;
-    // Sanity limits: never before the candidate, never more than 14 days later,
-    // never a weekend. Anything else means the model drifted → fallback.
-    if (workingDate < candidate || workingDate > addDays(candidate, 14) || isWeekend(workingDate)) return null;
-    const isCandidateWorking = workingDate.getTime() === candidate.getTime();
-    if (parsed.isWorkingDay === true && !isCandidateWorking) return null;
-    return {
-      candidateDate: candidate,
-      workingDate,
-      isCandidateWorking,
-      reason: isCandidateWorking ? null : String(parsed.reason || "").slice(0, 200) || null,
-      source: "AI",
-    };
-  } catch (error) {
-    console.error("[working-day] AI fail", error instanceof Error ? error.message : error);
-    return null;
-  }
-}
 
 export async function resolvePakistanWorkingDay(candidateInput: Date, db: Db = prisma): Promise<WorkingDayResult> {
   const candidate = new Date(
     Date.UTC(candidateInput.getUTCFullYear(), candidateInput.getUTCMonth(), candidateInput.getUTCDate())
   );
-
-  const cached = await db.workingDayCache.findUnique({ where: { candidateDate: candidate } });
-  if (cached) {
+  // Admin ka override (candidate → working date) hamesha jeet ta hai.
+  const manual = await db.workingDayCache.findUnique({ where: { candidateDate: candidate } });
+  if (manual && manual.source === "MANUAL") {
     return {
-      candidateDate: cached.candidateDate,
-      workingDate: cached.workingDate,
-      isCandidateWorking: cached.isCandidateWorking,
-      reason: cached.reason,
-      source: cached.source as WorkingDayResult["source"],
+      candidateDate: manual.candidateDate,
+      workingDate: manual.workingDate,
+      isCandidateWorking: manual.isCandidateWorking,
+      reason: manual.reason,
+      source: "MANUAL",
     };
   }
-
-  const result = (await askAi(candidate)) || fallbackWorkingDay(candidate);
-
-  await db.workingDayCache.upsert({
-    where: { candidateDate: candidate },
-    update: {},
-    create: {
-      candidateDate: candidate,
-      workingDate: result.workingDate,
-      isCandidateWorking: result.isCandidateWorking,
-      reason: result.reason,
-      source: result.source,
-    },
-  });
-
-  return result;
+  const picked = await new DayResolver(db).firstOpen(candidate, PAKISTAN_RULE);
+  const isCandidateWorking = picked.date.getTime() === candidate.getTime();
+  return {
+    candidateDate: candidate,
+    workingDate: picked.date,
+    isCandidateWorking,
+    reason: isCandidateWorking ? null : picked.skipped.map((line) => line.replace(/^\d{4}-\d{2}-\d{2}: /, "")).join(", ") || null,
+    source: "CALENDAR",
+  };
 }
 
 export async function expectedPrintingDateFor(paymentDate: Date, db: Db = prisma) {

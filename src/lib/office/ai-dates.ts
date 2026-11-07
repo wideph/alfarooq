@@ -2,22 +2,25 @@ import type { Prisma, SiteSettings } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PROVIDER_TIMEOUT_MS, callBotJson } from "@/lib/bot-ai";
 import { SITE_SETTINGS_ID } from "@/lib/site-settings";
-import { addDays, formatDateOnly } from "@/lib/office/serializers";
+import { addDays, formatDateOnly, todayPakistan } from "@/lib/office/serializers";
+import { DayResolver, type DayRule } from "@/lib/office/day-rules";
 
-// docs/office-module/06 §N5/N6 — AI-FIRST date research layer.
-// The owner's brief: an attached AI model RESEARCHES and DECIDES the dates —
-// whether a date was a working day in Pakistan / a city, whether Islamabad had
-// closures due to incidents/preparations, whether embassies were closed, which
-// city to use, and it researches 2019 working dates into the admin pool.
-// Every AI verdict is cached: closures are upserted into HolidayClosure (so
-// they show in the admin Holidays panel and stay editable/deletable), and
-// Pakistan working-day verdicts go into WorkingDayCache (source "AI").
-// Admin edits always win: a HolidayClosure row whose reason does NOT start
-// with AI_REASON_PREFIX is treated as MANUAL and is never overwritten, and a
-// MANUAL WorkingDayCache row is never overwritten either.
-// Fallback: only when the AI key is missing or a call fails/returns invalid
-// JSON do we fall back to the deterministic weekend + HolidayClosure-table
-// logic (and log via console.warn).
+// docs/office-module/06 §N5/N6 — AI date research.
+// §W60 — AI ab sirf MAZEED band din dhoondta hai (additive), kabhi kisi din ko
+// "khula" nahi kehta, aur fail ho to kuch cache nahi hota:
+//   • Pehle AI ka "working day" verdict (ya AI fail par weekend-only andaza)
+//     WorkingDayCache mein hamesha ke liye likha jata tha aur baad mein usi par
+//     bharosa hota tha — 9 Nov (Iqbal Day) jaisi pakki chhutti bhi "khuli" ban
+//     jati. Ab pakki chhuttiyan code ka built-in calendar (holiday-calendar.ts)
+//     deta hai; AI ke dhoonde band din HolidayClosure mein "AI:" ke saath jaate
+//     hain (admin panel mein nazar aate / edit / delete hote hain).
+//   • Dates ab AI ke intezar ke baghair FORAN lagti hain (day-rules.ts); AI
+//     baad mein (after() / roz ka cron) research karta hai aur naya band din
+//     mile to planner pending dates aage kar deta hai.
+//   • Har scan (scope + 14 din ki window) OfficeDateScan mein yaad — aane wali
+//     window har 7 din baad dobara (nayi announcement), guzri hui ek dafa.
+// NOTE: model internet search nahi karta — apne ilm se jawab deta hai. Is
+// liye wo sirf izafi hifazat hai; asal bharosa built-in calendar + admin table.
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -31,35 +34,19 @@ export type AiQuestion =
   | { kind: "CITY"; city: CityName }
   | { kind: "EMBASSY" };
 
-export type AiVerdict = {
-  date: string; // YYYY-MM-DD that was asked about
-  kind: AiQuestion["kind"];
-  city: CityName | null;
-  open: boolean; // true = working day / city open / embassies open
-  reason: string | null;
-  source: "AI" | "MANUAL" | "FALLBACK";
-};
-
 export type ResearchedDate = { date: Date; reason: string | null };
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
 const PAKISTAN_WEEKEND = new Set([0, 6]); // Sun, Sat
-const SAUDI_WEEKEND = new Set([5, 6]); // Fri, Sat
 
-// How many days each AI closure-scan covers (one AI call answers the whole
-// window, so the engine does not pay one call per iterated day).
+// Ek AI scan kitne din dekhta hai (ek call poori window ka jawab).
 const SCAN_WINDOW_DAYS = 14;
+// Aane wali window kitne din baad dobara scan ho.
+const RESCAN_FUTURE_DAYS = 7;
 
-// Reasoning models (e.g. deepseek-v4-pro) need far more than the bot's quick
-// 8s budget to answer; verdict scans get 90s (results are cached, so this is a
-// first-call cost only), batch research gets the full provider timeout by
-// default (scripts may pass more).
+// Reasoning models (e.g. deepseek-v4-pro) ko jawab mein waqt lagta hai.
 export const AI_DATES_VERDICT_TIMEOUT_MS = 90_000;
 
-function dayOnly(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
+const CITY_SCOPES = new Set(["ISLAMABAD", "QUETTA", "GUJRAT", "LAHORE"]);
 
 function parseIsoDate(input: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(input.trim());
@@ -68,17 +55,21 @@ function parseIsoDate(input: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function questionScope(question: AiQuestion): string {
-  switch (question.kind) {
-    case "PAKISTAN":
-      return "PAKISTAN";
-    case "SAUDI":
-      return "SAUDI";
-    case "EMBASSY":
-      return "EMBASSIES_ISB";
-    case "CITY":
-      return question.city;
-  }
+function questionForScope(scope: string): AiQuestion | null {
+  if (scope === "PAKISTAN") return { kind: "PAKISTAN" };
+  if (scope === "SAUDI") return { kind: "SAUDI" };
+  if (scope === "EMBASSIES_ISB") return { kind: "EMBASSY" };
+  if (CITY_SCOPES.has(scope)) return { kind: "CITY", city: scope as CityName };
+  return null;
+}
+
+/** Ek DayRule kin scopes par mabni hai (research ke liye). */
+export function scopesOfRule(rule: DayRule): string[] {
+  const scopes = new Set<string>([rule.country === "PK" ? "PAKISTAN" : "SAUDI"]);
+  if (rule.city) scopes.add(rule.city);
+  for (const city of rule.anyCity ?? []) scopes.add(city);
+  for (const scope of rule.extraScopes ?? []) scopes.add(scope);
+  return [...scopes];
 }
 
 async function loadBotSettings(db: Db): Promise<SiteSettings | null> {
@@ -97,18 +88,19 @@ async function loadBotSettings(db: Db): Promise<SiteSettings | null> {
 const PAKISTAN_HOLIDAY_RULES = [
   "Pakistan working days are Monday to Friday (Saturday and Sunday are weekend).",
   "Public/national holidays include: Kashmir Day (5 Feb), Pakistan Day (23 Mar),",
-  "Labour Day (1 May), Eid ul Fitr (about 3 days, Islamic calendar), Independence Day (14 Aug),",
-  "Ashura (9-10 Muharram), Eid Milad un Nabi (12 Rabi ul Awal), Eid ul Adha (about 3 days),",
-  "Defence Day (6 Sep), Iqbal Day (9 Nov), Quaid-e-Azam Day (25 Dec), plus any federal",
+  "Labour Day (1 May), Youm-e-Takbeer (28 May, from 2024), Eid ul Fitr (about 3 days, Islamic calendar),",
+  "Independence Day (14 Aug), Ashura (9-10 Muharram), Eid Milad un Nabi (12 Rabi ul Awal),",
+  "Eid ul Adha (about 3 days), Iqbal Day (9 Nov), Quaid-e-Azam Day (25 Dec), plus any federal",
   "government announced holiday of that year. Use the most accurate Islamic-calendar",
-  "dates you know for the specific year.",
+  "dates you know for the specific year (Pakistan usually sights the moon a day after Saudi Arabia).",
 ].join(" ");
 
 const SAUDI_HOLIDAY_RULES = [
   "Saudi Arabia working days are Sunday to Thursday (Friday and Saturday are weekend).",
   "Saudi public holidays include: Founding Day (22 Feb), Eid ul Fitr holidays,",
-  "Arafat Day + Eid ul Adha holidays, Saudi National Day (23 Sep), plus any officially",
-  "announced holiday of that year. Use the most accurate Islamic-calendar dates you know.",
+  "Arafat Day + Eid ul Adha holidays (government offices close for many days around both Eids),",
+  "Saudi National Day (23 Sep), plus any officially announced holiday of that year.",
+  "Use the most accurate Umm al-Qura dates you know.",
 ].join(" ");
 
 function scanSystemPrompt(question: AiQuestion): string {
@@ -116,68 +108,65 @@ function scanSystemPrompt(question: AiQuestion): string {
     case "PAKISTAN":
       return [
         "You are an expert researcher on Pakistan's government working days and public",
-        `holidays for any year 2019-2026. ${PAKISTAN_HOLIDAY_RULES}`,
+        `holidays for any year 2019-2030. ${PAKISTAN_HOLIDAY_RULES}`,
         "Answer with JSON only.",
       ].join(" ");
     case "SAUDI":
       return [
         "You are an expert researcher on Saudi Arabia's government working days and",
-        `public holidays for any year 2019-2026. ${SAUDI_HOLIDAY_RULES}`,
+        `public holidays for any year 2019-2030. ${SAUDI_HOLIDAY_RULES}`,
         "Answer with JSON only.",
       ].join(" ");
     case "CITY":
       return [
         "You are an expert researcher on city-level administrative closures in Pakistan",
-        "(incidents, security preparations, strikes, protests, local holiday announcements)",
-        "for any year 2019-2026. Answer with JSON only.",
+        "(incidents, security preparations, strikes, protests, lockdowns, local holiday announcements)",
+        "for any year 2019-2030. Answer with JSON only.",
       ].join(" ");
     case "EMBASSY":
       return [
         "You are an expert researcher on foreign embassies in Islamabad, Pakistan —",
         "their closures and work-suspension announcements (security alerts, incidents,",
-        "preparations) for any year 2019-2026. Answer with JSON only.",
+        "preparations, their own national holidays) for any year 2019-2030. Answer with JSON only.",
       ].join(" ");
   }
 }
 
 function scanUserPrompt(question: AiQuestion, from: string, to: string): string {
   const window = `the ${SCAN_WINDOW_DAYS} days from ${from} to ${to}`;
+  const tail = 'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]} — an empty array if none.';
   switch (question.kind) {
     case "PAKISTAN":
       return [
-        `Consider ${window}. Which of these dates were NOT working days in Pakistan`,
+        `Consider ${window}. Which of these dates are/were NOT working days in Pakistan`,
         "(national/public/federal holidays or announced closures)? Ignore Saturdays and",
-        "Sundays (already weekend).",
-        'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]}',
-        "— an empty array if none.",
+        "Sundays (already weekend). Include a date if it is likely a holiday.",
+        tail,
       ].join(" ");
     case "SAUDI":
       return [
-        `Consider ${window}. Which of these dates were NOT working days in Saudi Arabia`,
-        "(public holidays or announced closures)? Ignore Fridays and Saturdays (already",
-        "weekend).",
-        'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]}',
-        "— an empty array if none.",
+        `Consider ${window}. Which of these dates are/were NOT working days for Saudi government`,
+        "offices (Ministry of Foreign Affairs)? Ignore Fridays and Saturdays (already weekend).",
+        "Include a date if it is likely a holiday.",
+        tail,
       ].join(" ");
     case "CITY":
       return [
         `Was the city of ${question.city} (Pakistan) closed for official/business work on`,
-        `any of ${window} — due to any incident, security preparation, strike, protest,`,
+        `any of ${window} — due to any incident, security preparation, strike, protest, lockdown`,
         "or local holiday announcement? Ignore Saturdays/Sundays and nationwide holidays.",
-        'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]}',
-        "— an empty array if none.",
+        tail,
       ].join(" ");
     case "EMBASSY":
       return [
-        `Were embassies in Islamabad closed, or was embassy work suspended/announced, on`,
-        `any of ${window} (security alerts, incidents, preparations, announcements)?`,
-        'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]}',
-        "— an empty array if none.",
+        `Were embassies in Islamabad (especially the Saudi embassy) closed, or was embassy work`,
+        `suspended/announced, on any of ${window} (security alerts, incidents, preparations, Saudi holidays)?`,
+        tail,
       ].join(" ");
   }
 }
 
-// --- AI closure scan (cached into HolidayClosure / WorkingDayCache) ---------
+// --- AI closure scan ---------------------------------------------------------
 
 type ScannedClosure = { date: Date; reason: string | null };
 
@@ -209,7 +198,7 @@ async function scanClosuresWithAi(
       const key = formatDateOnly(date);
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ date, reason: String(item?.reason || "").slice(0, 200) || null });
+      out.push({ date, reason: String(item?.reason || "").slice(0, 180) || null });
     }
     return out;
   } catch (error) {
@@ -218,222 +207,96 @@ async function scanClosuresWithAi(
   }
 }
 
-// Upserts AI-found closures into HolidayClosure. Admin rows (reason without the
-// AI prefix) are never touched — update is a no-op, create only when missing.
-async function cacheClosures(db: Db, scope: string, closures: ScannedClosure[]): Promise<void> {
+// AI ke band din HolidayClosure mein ("AI:" ke saath). Admin ki row kabhi nahi
+// chhuti (update no-op). Kitni NAYI rows bani — wapas.
+async function cacheClosures(db: Db, scope: string, closures: ScannedClosure[]): Promise<number> {
+  let created = 0;
   for (const closure of closures) {
+    const existing = await db.holidayClosure.findUnique({ where: { date_scope: { date: closure.date, scope } } });
+    if (existing) continue;
     const reason = closure.reason ? `${AI_REASON_PREFIX} ${closure.reason}` : AI_REASON_PREFIX;
-    await db.holidayClosure.upsert({
-      where: { date_scope: { date: closure.date, scope } },
-      update: {},
-      create: { date: closure.date, scope, reason },
-    });
+    await db.holidayClosure.create({ data: { date: closure.date, scope, reason } });
+    created += 1;
   }
+  return created;
 }
 
-// For Pakistan scans we also fill WorkingDayCache (source "AI") for every day
-// of the window, so the printing-date helper and future checks reuse the
-// verdict. MANUAL rows are never overwritten.
-async function cachePakistanWindow(db: Db, from: Date, closures: ScannedClosure[]): Promise<void> {
-  const closed = new Map<string, string | null>();
-  for (const closure of closures) closed.set(formatDateOnly(closure.date), closure.reason);
-  const openDates: Date[] = [];
-  for (let i = 0; i < SCAN_WINDOW_DAYS; i += 1) {
-    const date = addDays(from, i);
-    if (!PAKISTAN_WEEKEND.has(date.getUTCDay()) && !closed.has(formatDateOnly(date))) openDates.push(date);
+// 14-din ki mustaqil windows (har date hamesha isi window mein).
+function windowStart(date: Date): Date {
+  const day = Math.floor(date.getTime() / 86_400_000);
+  return new Date((day - (day % SCAN_WINDOW_DAYS)) * 86_400_000);
+}
+
+/**
+ * In dates / scopes ke liye AI research (jo window pehle scan nahi hui ya
+ * purani ho chuki). Sirf band din jodta hai. Kitne naye band din mile — wapas.
+ * AI na ho / fail ho → 0 (kuch cache nahi).
+ */
+export async function researchClosures(
+  targets: Array<{ date: Date; scopes: string[] }>,
+  opts: { maxScans?: number; timeoutMs?: number } = {},
+  db: Db = prisma
+): Promise<number> {
+  const settings = await loadBotSettings(db);
+  if (!settings) return 0;
+  const today = todayPakistan();
+  const wanted = new Map<string, { scope: string; start: Date }>();
+  for (const target of targets) {
+    const start = windowStart(target.date);
+    for (const scope of target.scopes) {
+      if (!questionForScope(scope)) continue;
+      wanted.set(`${scope}|${start.getTime()}`, { scope, start });
+    }
   }
-  for (let i = 0; i < SCAN_WINDOW_DAYS; i += 1) {
-    const candidate = addDays(from, i);
-    const key = formatDateOnly(candidate);
-    const existing = await db.workingDayCache.findUnique({ where: { candidateDate: candidate } });
-    if (existing && existing.source === "MANUAL") continue; // admin override wins
-    const closedReason = closed.get(key);
-    const isWeekend = PAKISTAN_WEEKEND.has(candidate.getUTCDay());
-    const isWorking = !isWeekend && closedReason === undefined;
-    const workingDate = isWorking ? candidate : openDates.find((date) => date > candidate);
-    if (!workingDate) continue; // window exhausted without a working day — do not cache
-    await db.workingDayCache.upsert({
-      where: { candidateDate: candidate },
-      update: {},
-      create: {
-        candidateDate: candidate,
-        workingDate,
-        isCandidateWorking: isWorking,
-        reason: isWorking ? null : closedReason ?? WEEKDAYS[candidate.getUTCDay()],
-        source: "AI",
+  if (wanted.size === 0) return 0;
+  let done: Array<{ scope: string; windowStart: Date; scannedAt: Date }>;
+  try {
+    done = await db.officeDateScan.findMany({
+      where: {
+        OR: [...wanted.values()].map((item) => ({ scope: item.scope, windowStart: item.start })),
       },
     });
-  }
-}
-
-// --- Core verdict helper -----------------------------------------------------
-
-/**
- * aiVerdict(dateISO, question) — the AI-first single-date decision.
- * Order: deterministic weekend rule → HolidayClosure table (admin + previously
- * cached AI rows) → WorkingDayCache (Pakistan kind) → ONE AI scan call whose
- * result is cached → deterministic fallback (console.warn).
- */
-export async function aiVerdict(
-  dateISO: string,
-  question: AiQuestion,
-  db: Db = prisma,
-  timeoutMs: number = AI_DATES_VERDICT_TIMEOUT_MS
-): Promise<AiVerdict> {
-  const date = parseIsoDate(dateISO) ?? dayOnly(new Date());
-  const key = formatDateOnly(date);
-  const city = question.kind === "CITY" ? question.city : null;
-  const scope = questionScope(question);
-
-  const base = { date: key, kind: question.kind, city };
-
-  // Weekend rule stays deterministic (the AI prompts encode the same rule).
-  if (question.kind === "PAKISTAN" && PAKISTAN_WEEKEND.has(date.getUTCDay())) {
-    return { ...base, open: false, reason: WEEKDAYS[date.getUTCDay()], source: "FALLBACK" };
-  }
-  if (question.kind === "SAUDI" && SAUDI_WEEKEND.has(date.getUTCDay())) {
-    return { ...base, open: false, reason: WEEKDAYS[date.getUTCDay()], source: "FALLBACK" };
-  }
-
-  // 1) HolidayClosure table — admin rows and previously cached AI rows.
-  const closure = await db.holidayClosure.findFirst({ where: { date, scope } });
-  if (closure) {
-    const manual = !(closure.reason || "").startsWith(AI_REASON_PREFIX);
-    return {
-      ...base,
-      open: false,
-      reason: (closure.reason || "").replace(/^AI:\s*/, "") || null,
-      source: manual ? "MANUAL" : "AI",
-    };
-  }
-
-  // 2) WorkingDayCache (Pakistan working-day verdicts).
-  if (question.kind === "PAKISTAN") {
-    const cached = await db.workingDayCache.findUnique({ where: { candidateDate: date } });
-    if (cached) {
-      const open = cached.isCandidateWorking && dayOnly(cached.workingDate).getTime() === date.getTime();
-      return {
-        ...base,
-        open,
-        reason: open ? null : cached.reason,
-        source: cached.source === "MANUAL" ? "MANUAL" : cached.source === "AI" ? "AI" : "FALLBACK",
-      };
-    }
-  }
-
-  // 3) AI research (one call covers a 14-day window, everything cached).
-  const settings = await loadBotSettings(db);
-  if (settings) {
-    const closures = await scanClosuresWithAi(settings, question, date, timeoutMs);
-    if (closures) {
-      await cacheClosures(db, scope, closures);
-      if (question.kind === "PAKISTAN") await cachePakistanWindow(db, date, closures);
-      const hit = closures.find((item) => formatDateOnly(item.date) === key);
-      return { ...base, open: !hit, reason: hit?.reason ?? null, source: "AI" };
-    }
-  }
-
-  // 4) Fallback: no key / AI failed → deterministic (weekend already handled;
-  //    no closure row found above → open).
-  console.warn(`[ai-dates] fallback for ${question.kind}${city ? `/${city}` : ""} ${key} — AI unavailable`);
-  return { ...base, open: true, reason: null, source: "FALLBACK" };
-}
-
-// Convenience wrappers used by the date engine.
-export function pakistanWorkingVerdict(date: Date, db: Db = prisma, timeoutMs?: number) {
-  return aiVerdict(formatDateOnly(dayOnly(date)), { kind: "PAKISTAN" }, db, timeoutMs);
-}
-export function saudiWorkingVerdict(date: Date, db: Db = prisma, timeoutMs?: number) {
-  return aiVerdict(formatDateOnly(dayOnly(date)), { kind: "SAUDI" }, db, timeoutMs);
-}
-export function cityOpenVerdict(date: Date, city: CityName, db: Db = prisma, timeoutMs?: number) {
-  return aiVerdict(formatDateOnly(dayOnly(date)), { kind: "CITY", city }, db, timeoutMs);
-}
-export function embassyOpenVerdict(date: Date, db: Db = prisma, timeoutMs?: number) {
-  return aiVerdict(formatDateOnly(dayOnly(date)), { kind: "EMBASSY" }, db, timeoutMs);
-}
-
-// --- City choice (Special Mofa) --------------------------------------------
-
-export const MOFA_CITY_PRIORITY: CityName[] = ["ISLAMABAD", "GUJRAT", "LAHORE"];
-
-/**
- * AI picks the first open city (priority Islamabad → Gujrat → Lahore) for the
- * given date. The AI answer is cross-checked against the HolidayClosure table
- * (admin rows always win); on AI failure the deterministic table rule picks
- * the first city without a closure row.
- */
-export async function aiChooseMofaCity(
-  dateInput: Date,
-  db: Db = prisma
-): Promise<{ city: CityName; reason: string | null; source: "AI" | "MANUAL" | "FALLBACK" }> {
-  const date = dayOnly(dateInput);
-  const key = formatDateOnly(date);
-
-  const rows = await db.holidayClosure.findMany({
-    where: { date, scope: { in: [...MOFA_CITY_PRIORITY] } },
-  });
-  const closedCities = new Set(rows.map((row) => row.scope));
-  const firstTableOpen = MOFA_CITY_PRIORITY.find((c) => !closedCities.has(c)) ?? MOFA_CITY_PRIORITY[0];
-
-  const settings = await loadBotSettings(db);
-  if (!settings) {
-    console.warn(`[ai-dates] city choice fallback for ${key} — AI unavailable`);
-    return { city: firstTableOpen, reason: null, source: "FALLBACK" };
-  }
-
-  const system = "You answer questions about city closures in Pakistan with JSON only. Be brief.";
-  const user = [
-    `On ${key} (${WEEKDAYS[date.getUTCDay()]}), was there any known closure (incident,`,
-    `security preparation, strike, protest, local holiday announcement) in`,
-    `${MOFA_CITY_PRIORITY.join(", ")}? If no known closure, the answer is ISLAMABAD`,
-    "(the first city in priority order). Reply immediately with exactly:",
-    '{"city":"ISLAMABAD|GUJRAT|LAHORE","reason":"short reason"}',
-  ].join(" ");
-
-  try {
-    // Big token budget: reasoning models spend most tokens before the answer.
-    const raw = await callBotJson(settings, system, user, '{"city"', 4000, AI_DATES_VERDICT_TIMEOUT_MS);
-    const parsed = JSON.parse(raw) as { city?: string; reason?: string };
-    const city = String(parsed.city || "").toUpperCase() as CityName;
-    if (!MOFA_CITY_PRIORITY.includes(city)) throw new Error(`AI city invalid: ${parsed.city}`);
-    // Admin table always wins over the AI pick.
-    if (closedCities.has(city)) {
-      return { city: firstTableOpen, reason: "Admin table ne is city ko band mark kiya hai", source: "MANUAL" };
-    }
-    // Record the AI's finding: every city ranked before the chosen one was
-    // closed that day — upsert it so the admin panel shows it (editable/
-    // deletable); existing admin rows are never touched (update: {}).
-    const chosenIdx = MOFA_CITY_PRIORITY.indexOf(city);
-    for (const skipped of MOFA_CITY_PRIORITY.slice(0, chosenIdx)) {
-      await db.holidayClosure.upsert({
-        where: { date_scope: { date, scope: skipped } },
-        update: {},
-        create: { date, scope: skipped, reason: `${AI_REASON_PREFIX} City band thi — AI ne ${city} choose ki` },
-      });
-    }
-    return { city, reason: String(parsed.reason || "").slice(0, 200) || null, source: "AI" };
   } catch (error) {
-    console.warn("[ai-dates] city choice AI fail", key, error instanceof Error ? error.message : error);
-    // Middle layer: derive the choice from per-city AI closure scans (still
-    // AI-researched, and cached) before giving up to the plain table rule.
-    for (const city of MOFA_CITY_PRIORITY) {
-      if (closedCities.has(city)) continue;
-      const verdict = await cityOpenVerdict(date, city, db);
-      if (verdict.open) return { city, reason: verdict.reason, source: verdict.source };
-    }
-    return { city: firstTableOpen, reason: null, source: "FALLBACK" };
+    // Table abhi na ho (migration baqi) → research chhor do; dates phir bhi theek.
+    console.warn("[ai-dates] scan memo unavailable", error instanceof Error ? error.message : error);
+    return 0;
   }
+  const pending = [...wanted.values()].filter((item) => {
+    const scan = done.find((row) => row.scope === item.scope && row.windowStart.getTime() === item.start.getTime());
+    if (!scan) return true;
+    const windowPast = addDays(item.start, SCAN_WINDOW_DAYS) <= today;
+    return !windowPast && scan.scannedAt < addDays(new Date(), -RESCAN_FUTURE_DAYS);
+  });
+  const batch = pending.slice(0, opts.maxScans ?? 6);
+  const results = await Promise.all(
+    batch.map(async (item) => {
+      const closures = await scanClosuresWithAi(
+        settings,
+        questionForScope(item.scope)!,
+        item.start,
+        opts.timeoutMs ?? AI_DATES_VERDICT_TIMEOUT_MS
+      );
+      if (!closures) return 0;
+      const created = await cacheClosures(db, item.scope, closures);
+      await db.officeDateScan.upsert({
+        where: { scope_windowStart: { scope: item.scope, windowStart: item.start } },
+        update: { scannedAt: new Date(), closedCount: closures.length },
+        create: { scope: item.scope, windowStart: item.start, scannedAt: new Date(), closedCount: closures.length },
+      });
+      return created;
+    })
+  );
+  return results.reduce((sum, value) => sum + value, 0);
 }
 
 // --- Batch research: working dates of a year (2019 pool) ---------------------
 
 /**
  * Asks the AI for a list of Pakistan working dates of `year` (any 2019-2026).
- * Validates: right year, Monday-Friday, not in excludeDates, not a known
- * PAKISTAN-scope closure, deduped. Returns at most `count` valid entries;
- * an empty array when the AI is unavailable or everything failed validation
- * (callers must NOT fabricate dates in that case).
+ * Validates: right year, Monday-Friday, not in excludeDates, and (§W60) koi
+ * built-in / table / AI chhutti nahi (DayResolver), deduped. Returns at most
+ * `count` valid entries; an empty array when the AI is unavailable or
+ * everything failed validation (callers must NOT fabricate dates in that case).
  */
 export async function aiResearchWorkingDates(
   year: number,
@@ -450,13 +313,8 @@ export async function aiResearchWorkingDates(
   }
 
   const exclude = new Set(excludeDates);
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const yearEnd = new Date(Date.UTC(year, 11, 31));
-  const closureRows = await db.holidayClosure.findMany({
-    where: { date: { gte: yearStart, lte: yearEnd }, scope: "PAKISTAN" },
-    select: { date: true },
-  });
-  for (const row of closureRows) exclude.add(formatDateOnly(row.date));
+  const days = new DayResolver(db);
+  await days.ensure(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)));
 
   const system = [
     "You are an expert researcher on Pakistan's government working days and public",
@@ -486,6 +344,8 @@ export async function aiResearchWorkingDates(
       if (date.getUTCFullYear() !== year) continue;
       if (PAKISTAN_WEEKEND.has(date.getUTCDay())) continue;
       if (excluded.has(key) || seen.has(key)) continue;
+      // §W60: AI ki "working" date bhi built-in calendar / table se check.
+      if (!(await days.verdict(date, { country: "PK", city: "QUETTA" })).open) continue;
       seen.add(key);
       valid.push({ date, reason: String(item?.reason || "").slice(0, 200) || null });
     }

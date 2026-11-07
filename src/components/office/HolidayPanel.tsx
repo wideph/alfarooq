@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarOff, Loader2, Save, Trash2 } from "lucide-react";
+import { CalendarCheck, CalendarOff, Loader2, RefreshCw, Save, Trash2 } from "lucide-react";
 import { formatDate, officeFetch, toInputDate } from "@/lib/office/client";
 import type { ToastKind } from "@/components/Toast";
 
@@ -19,6 +19,18 @@ const HOLIDAY_SCOPES = [
 ] as const;
 
 type HolidayRow = { id: string; date: string; scope: string; reason: string | null };
+type BuiltinDay = { date: string; reason: string };
+type Builtin = { year: number; pakistan: BuiltinDay[]; saudi: BuiltinDay[] };
+type RecheckResult = {
+  checked: number;
+  printingRefreshed: number;
+  fixes: Array<{
+    caseId: string;
+    caseNumber: string;
+    filled: number;
+    moved: Array<{ name: string; from: string; to: string; why: string }>;
+  }>;
+};
 
 const SCOPE_STYLES: Record<string, string> = {
   PAKISTAN: "bg-red-100 text-red-700",
@@ -42,6 +54,10 @@ export default function HolidayPanel({ onMessage }: { onMessage: (message: strin
   const [rows, setRows] = useState<HolidayRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [builtinYear, setBuiltinYear] = useState(() => new Date().getFullYear());
+  const [builtin, setBuiltin] = useState<Builtin | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [recheck, setRecheck] = useState<RecheckResult | null>(null);
 
   const load = useCallback(async () => {
     const res = await officeFetch<HolidayRow[]>("/api/office/setup/holidays");
@@ -51,6 +67,32 @@ export default function HolidayPanel({ onMessage }: { onMessage: (message: strin
   useEffect(() => {
     void load();
   }, [load]);
+
+  // §W60: code ka built-in calendar (Iqbal Day, Eid, Ashura… khud lagte hain).
+  useEffect(() => {
+    void (async () => {
+      const res = await officeFetch<Builtin>(`/api/office/setup/holidays?builtin=${builtinYear}`);
+      if (res.ok) setBuiltin(res.data);
+    })();
+  }, [builtinYear]);
+
+  // §W60: tamam pending attestation dates dobara check — chhutti / tarteeb ke
+  // khilaf date aage, khali dates bhar di jati hain.
+  async function runRecheck() {
+    setChecking(true);
+    const res = await officeFetch<RecheckResult>("/api/office/setup/recheck-dates", { method: "POST" });
+    if (res.ok) {
+      setRecheck(res.data);
+      const moved = res.data.fixes.reduce((sum, fix) => sum + fix.moved.length, 0);
+      const filled = res.data.fixes.reduce((sum, fix) => sum + fix.filled, 0);
+      onMessage(
+        moved + filled === 0
+          ? `${res.data.checked} cases check — sab dates theek hain`
+          : `${res.data.checked} cases check — ${moved} date(s) aage ki, ${filled} khali date(s) bhari`
+      );
+    } else onMessage(res.error, "error");
+    setChecking(false);
+  }
 
   async function save() {
     setSaving(true);
@@ -96,9 +138,94 @@ export default function HolidayPanel({ onMessage }: { onMessage: (message: strin
       </div>
       <div className="p-5 sm:p-6 space-y-4">
         <p className="text-xs text-slate-500">
-          In dates ko system set dates calculate karte waqt non-working samjhe ga. Eid wali dates
-          approximate hain — zaroorat ho to edit karein.
+          Neeche ki table ki dates system har date (set, bina set, extra service, printing) mein band
+          samjhe ga — upar se built-in calendar ki chhuttiyan hamesha lagti hain. Nayi chhutti add / edit
+          karne par us din ki pending attestation dates khud aage ho jati hain.
         </p>
+
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-900">
+              <CalendarCheck className="w-4 h-4" /> Built-in chhuttiyan (khud lagti hain)
+            </p>
+            <select
+              className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-xs"
+              value={builtinYear}
+              onChange={(e) => setBuiltinYear(Number(e.target.value))}
+            >
+              {Array.from({ length: 10 }, (_, i) => 2019 + i).map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-[11px] text-emerald-800">
+            Pakistan: 5 Feb, 23 Mar, 1 May, 28 May, 14 Aug, 6 Sep, 9 Nov (Iqbal Day), 25 Dec + Eid ul Fitr, Eid ul
+            Adha, Ashura, Eid Milad (Islamic calendar; Pakistan ka chand aksar baad mein — is liye 1-2 din zyada).
+            Saudi (Mofa Saudi): 22 Feb, 23 Sep + Eid ki sarkari chhuttiyan. Koi din asal mein khula ho to
+            &quot;Working days&quot; panel se override karein.
+          </p>
+          {builtin && (
+            <div className="space-y-2">
+              {(
+                [
+                  ["Pakistan", builtin.pakistan],
+                  ["Saudi Arabia", builtin.saudi],
+                ] as const
+              ).map(([label, list]) => (
+                <div key={label}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">
+                    {label} ({list.length})
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {list.map((day) => (
+                      <span
+                        key={day.date}
+                        title={day.reason}
+                        className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] text-slate-700"
+                      >
+                        {formatDate(day.date)} · {day.reason.split(" (")[0]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-amber-900">Pending attestation dates ki jaanch</p>
+            <button className={primaryBtn} disabled={checking} onClick={runRecheck}>
+              {checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Sab dates check karein
+            </button>
+          </div>
+          <p className="text-[11px] text-amber-800">
+            Har khule case ki pending dates: chhutti / band din par ho ya tarteeb (Board → UV / QR ibcc → Special
+            Mofa → Saudi Embassy → Mofa Saudi) ke khilaf ho to aage ki jati hai (case mein attestation department
+            ko remark), aur khali dates bhar di jati hain. Roz subah khud bhi chalta hai.
+          </p>
+          {recheck && recheck.fixes.length > 0 && (
+            <ul className="space-y-1.5 text-xs">
+              {recheck.fixes.map((fix) => (
+                <li key={fix.caseId} className="rounded-lg border border-amber-200 bg-white p-2">
+                  <a href={`/office/cases/${fix.caseId}`} className="font-semibold text-primary-700 hover:underline">
+                    {fix.caseNumber}
+                  </a>
+                  {fix.filled > 0 && <span className="ml-2 text-slate-500">{fix.filled} khali date bhari</span>}
+                  {fix.moved.map((move, index) => (
+                    <p key={index} className="text-slate-700">
+                      {move.name}: {move.from} → <b>{move.to}</b> <span className="text-slate-400">— {move.why}</span>
+                    </p>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
           <p className="text-sm font-semibold text-slate-800">

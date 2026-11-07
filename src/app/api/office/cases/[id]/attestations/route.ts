@@ -7,8 +7,10 @@ import { findAccessibleCase } from "@/lib/office/case-access";
 import { loadCaseDetail } from "@/lib/office/case-detail";
 import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notifications";
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
-import { cleanText, parseDateOnly, todayPakistan } from "@/lib/office/serializers";
-import { scheduleNoSetAttestationDates } from "@/lib/office/date-engine";
+import { cleanText, parseDateOnly } from "@/lib/office/serializers";
+import { generateSetDates } from "@/lib/office/date-engine";
+import { formatDmy, manualDateError } from "@/lib/office/attestation-dates";
+import { planCaseDates, researchCaseDates } from "@/lib/office/date-recheck";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   advanceCourierStage,
@@ -17,6 +19,9 @@ import {
 } from "@/lib/office/workflow";
 
 export const preferredRegion = ["sin1"];
+
+// §W60: after() mein AI date research (90s tak).
+export const maxDuration = 300;
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -35,16 +40,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (item.attestations.some((a) => a.attestationTypeId === attestationTypeId)) {
       return badRequest("Ye attestation pehle se add hai");
     }
-    const order = item.attestations.length + 1;
+    const order = Math.max(0, ...item.attestations.map((a) => a.order)) + 1;
     const row = await prisma.caseAttestation.create({
-      data: { caseId: id, attestationTypeId, order, scheduledDate: parseDateOnly(body.scheduledDate) },
+      data: { caseId: id, attestationTypeId, order },
     });
-    // §W32: set na ho to date = aaj ke baad ka pehla working day (AI) —
-    // after() mein (AI slow ho sakta hai); live refresh date dikha deta hai.
-    const selectedOn = todayPakistan();
-    // W13.2: audit log response ke baad.
+    // §W60: date FORAN (pehle after() mein AI ka intezar — function ka waqt
+    // khatam ho jata to date kabhi nahi lagti thi; set wale case mein set se
+    // bahar ki attestation ki date bhi kabhi nahi lagti thi). Kal se, apne
+    // mulk / din ke qaide aur tarteeb (Board → ibcc → Mofa → Saudi Embassy →
+    // Mofa Saudi) se; zaroorat ho to aage wali pending dates bhi khisakti hain.
+    // Set ka step dobara add hua (payment ho chuki) → set engine se.
+    const isSetStep =
+      Boolean(item.setId) &&
+      (await prisma.categorySetStep.count({ where: { setId: item.setId!, label: { equals: type.name, mode: "insensitive" } } })) > 0;
+    if (isSetStep) await generateSetDates(id).catch((error) => console.error("[office] generateSetDates fail", error));
+    else await planCaseDates(id, {}, session);
+    // W13.2: audit log response ke baad; AI research bhi baad mein.
     after(async () => {
-      if (!item.setId) await scheduleNoSetAttestationDates(id, [row.id], selectedOn);
+      await researchCaseDates(id);
       await logOfficeAction(session, { action: "case.attestation.add", entity: "Case", entityId: id, after: row });
     });
     return NextResponse.json(await loadCaseDetail(session, id), { status: 201 });
@@ -120,7 +133,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (Object.keys(data).length === 0) return badRequest("Kuch change nahi kiya");
 
+    // §W60: haath ki scheduled date bhi qaide mein — chhutti / ghalat din ya
+    // pichle qadam (Board → ibcc → Mofa → Saudi Embassy → Mofa Saudi) se
+    // pehle → error. Aage wale pending qadam khud aage khisak jate hain.
+    if (data.scheduledDate) {
+      const problem = await manualDateError(id, attestationId, data.scheduledDate);
+      if (problem) return badRequest(problem);
+    }
+
     await prisma.caseAttestation.update({ where: { id: attestationId }, data });
+    let dateNotice: string | null = null;
+    if (data.scheduledDate) {
+      const pushed = (await planCaseDates(id, {}, session)).filter((change) => change.id !== attestationId && change.from);
+      if (pushed.length) {
+        dateNotice = `Date update ho gayi. Tarteeb ke liye aage khiski: ${pushed
+          .map((change) => `${change.name} ${formatDmy(change.to)}`)
+          .join(", ")}`;
+      }
+    }
 
     // §W11.1: IN_PROGRESS → case ATTESTATION + currentAttestationId = ye step;
     // DONE (agar current tha) → pointer agle PENDING step par; phir
@@ -188,7 +218,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         after: { ...data, caseStatus: nextStatus },
       });
     });
-    return NextResponse.json(await loadCaseDetail(session, id));
+    const detail = await loadCaseDetail(session, id);
+    return NextResponse.json(dateNotice && detail ? { ...detail, dateNotice } : detail);
   } catch (error) {
     return serverError(error);
   }

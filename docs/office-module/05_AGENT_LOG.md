@@ -2368,3 +2368,61 @@ Investigation-first (live DB audit):
   phir live par naya extra service laga kar Remarks tab dekhein.
 - **Live**: owner ki ijazat se `npx prisma migrate deploy` — `20261110120000_office_wave59`
   live par apply (purane auto remarks / naam naye andaz mein). Code push 9a770cd.
+
+## WAVE 60 (2026-11-11) — Dates ka nizaam mazboot (chhuttiyan, mulk, tarteeb, khali dates)
+
+- **Owner**: ek case ki attestation date 9 Nov (Pakistan chhutti) lagi; AI bot jo "online search"
+  kar ke date check karta tha us ne ghalti ki — poora nizaam investigate kar ke mazboot karo.
+  Tarteeb sakht: Board < UV / QR ibcc < Mofa < Saudi Embassy < Mofa Saudi (kai dafa toota).
+  One-by-one attestations chunne par kai dafa date hi nahi lagti.
+- **Tahqeeq (live, read-only `scripts/office-dates-audit.ts --date 2026-11-09`)**:
+  - AF-2026-000028: 4 Nov extra service (reissue + Board, QR code ibcc, Special Mofa) — purana
+    services route sab attestations ko EK hi din deta tha (tarteeb tooti); admin ne 16:24 par
+    haath se QR code ibcc ko 09-11-2026 di — PATCH par koi chhutti / tarteeb check nahi tha.
+    (Step ab DONE, completed 07-11 — system DONE nahi badalta; audit "DONE (khud nahi badlega)".)
+  - AF-2026-000037: expected printing date 09-11-2026 — `working-day.ts` holiday TABLE dekhta hi
+    nahi tha (sirf WorkingDayCache / AI); 3 Nov AI (8s timeout, reasoning model) fail →
+    weekend-only andaza `FALLBACK working=true` 09-11-2026 hamesha ke liye cache. Set / bina set
+    AI-first dates bhi WorkingDayCache FALLBACK par bharosa karti thin.
+  - AI model internet search NAHI karta (callBotJson = sirf model ka ilm); AI cache mein 4 purani
+    chhuttiyan "working" (2019 Eid ul Fitr / Adha, 2021 Milad).
+  - Set engine ke zyada steps sirf holiday TABLE dekhte thay; bina set / extra service / set case
+    ki extra attestation ki date after() + AI (90s) mein — function ka waqt khatam → date kabhi
+    nahi; set case mein set se bahar ki attestation ki date kabhi nahi lagti thi; Medical / CPLS /
+    APAC sets mein Special Mofa ki date kabhi nahi banti thi (pichla step baad mein compute hota tha);
+    bina set ki sab attestations ko ek hi din (tarteeb + Mofa Saudi ko Pakistan ka din).
+- **Code**:
+  - `holiday-calendar.ts` (naya): built-in PK + SA chhuttiyan (fixed + Umm al-Qura Islamic, PK
+    chand ke liye +2 din; Saudi sarkari Eid windows), `builtinHolidaysOfYear`.
+  - `day-rules.ts` (naya): `DayResolver` — weekday rule → weekend → admin table → built-in →
+    AI band din; MANUAL override; FALLBACK kabhi nahi; `firstOpen` (120 din).
+  - `attestation-dates.ts` (naya): `attestationKind` (naam / stepKey), `KIND_INFO` (tier + mulk /
+    sheher / din), `computeAttestationPlan` / `applyAttestationPlan` (advisory lock),
+    `manualDateError`, `attestationDateProblems`.
+  - `date-recheck.ts` (naya): `planCaseDates` (+ remark ATTESTATION / ADMIN jab purani date
+    khiske), `researchCaseDates` (after() AI), `recheckOpenCaseDates`.
+  - `date-engine.ts`: resolver + `work()` (formula floor + pichle qadam ke baad), Medical / CPLS
+    pehle, 2019 pool pick yaad, pool dates bhi check, DONE nahi badalta, aakhir mein planner;
+    AI-first loops / aiChooseMofaCity / scheduleNoSetAttestationDates hataye.
+  - `ai-dates.ts`: sirf additive `researchClosures` (OfficeDateScan memo, 7 din rescan, fail par
+    kuch cache nahi), aiVerdict / cachePakistanWindow hataye; pool research resolver se check.
+  - `working-day.ts`: resolver; MANUAL override; koi cache nahi; source MANUAL | CALENDAR.
+  - Routes: cases POST, attestations POST (foran; set step dobara → generateSetDates) / PATCH
+    (manual validation + aage khiskao + `dateNotice`), services POST (replanIds), holidays
+    POST / PATCH (+ `?builtin=YYYY`), working-day PUT → recheck; naye: `setup/recheck-dates`,
+    `cron/office-dates` (vercel.json 01:10 UTC). maxDuration 300 (after() research).
+  - UI: HolidayPanel (built-in list, "Sab dates check karein" + natija), WorkingDayPanel likhai,
+    CaseAttestationsTab `dateNotice`.
+  - `scripts/office-dates-audit.ts` (read-only; `--date YYYY-MM-DD`). BR28 + BR7.3a.
+- **DB**: migration `20261111120000_office_wave60` — `OfficeDateScan` table; WorkingDayCache
+  FALLBACK rows delete. Idempotent.
+- **Verify**: tsc 0, lint 0, build exit 0. Local Postgres (holiday table KHALI): w60-sim 50/50
+  (calendar, zehreeli AI cache, printing date, bina set tarteeb + mulk, one-by-one, manual
+  validation, recheck + remark, admin closure → city / aage, set (ii) engine, set case extra,
+  Medical Mofa, extra service, parallel plans, Saudi Eid). Dev server HTTP 23/23 (case create
+  dates foran, one-by-one, manual 400 / dateNotice, built-in list, recheck button + permission,
+  holiday add → khud aage, cron 401 / secret 200, working-day 9→10 Nov, extra service, pages).
+  AI research path sirf "AI band" halat mein test (asal provider call nahi).
+- **Next step**: owner ki ijazat par live migrate; phir Setup → Holidays → "Sab dates check
+  karein" (AF-2026-000037 printing date 09→10 Nov); AF-2026-000028 QR (DONE, 09-11) admin chahe to
+  Attestations tab se badle. CRON_SECRET Vercel env mein ho to roz ka cron chalega.
