@@ -643,3 +643,10 @@ chahiye. Admin ki haath ki date working day na ho to qareeb tareen working day.
   khilaf → **qareeb tareen sahi din** (wahi, +1, −1, +2, −2 …; aaj / aage ki date kabhi aaj se
   pehle nahi; pichle qadam ke BAAD, kisi DONE agle qadam se PEHLE) khud lagta hai + notice; aage
   wale pending qadam khisakte hain; phir online check. Koi sahi din na mile (±60) → 400.
+- **Hifazat — purana nizaam hamesha chalta hai (owner)**: online check sirf IZAFI hai. Har date
+  pehle purane qaide (BR28: built-in calendar + Holidays table + weekend + tarteeb, bina AI) se
+  foran lagti / theek hoti hai. AI credits khatam (error), AI band, AI atak jaye (har scope 150s,
+  khabrein 60s ki had), Tavily key ghalat / credits khatam (→ GDELT → AI ka apna ilm), internet
+  band — kuch nahi likha jata, date "check baqi" ("date purane qaide se sahi hai") rehti hai aur
+  baad mein dobara. Cron PEHLE purani jaanch chalata hai, phir bache waqt mein AI. Case page par AI
+  fail ho to peela note: dates purane qaide se lagi hain aur sahi hain; bekaar dobara koshish band.

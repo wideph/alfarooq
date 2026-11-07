@@ -2478,3 +2478,12 @@ Investigation-first (live DB audit):
   Tavily call test nahi hue (key nahi) — live par owner Tavily key daal kar "Test" dabaye.
 - **Next step**: owner ki ijazat par live migrate; owner tavily.com se key le kar Setup → "Dates
   ka online check" mein save + Test (save hote hi aane wali dates ka check shuru).
+- **Owner ki shart (push se pehle)**: AI credits / koi aur masla ho to purana nizaam chale.
+  Jaanch: dates hamesha W60 ke deterministic qaide se request ke andar lagti hain; AI sirf
+  after() / cron / page mein izafi. Kamzoriyan theek kin: (1) cron ab PEHLE `recheckOpenCaseDates`
+  phir bache waqt (270s − guzra) mein AI; (2) har scope check par 150s had, khabron par 60s
+  (`withTimeout`), naya round tabhi jab poora aa sake; (3) GDELT 1 koshish, 20s; (4) case page par
+  AI fail → peela note + polling band. w61-sim ab 42/42 (I0–I7: credits khatam error, atka AI 2s
+  had, AI band → foran null bina internet, cron jaisa: purani jaanch ne admin chhutti se date aage
+  ki jabke AI atka tha, tarteeb theek, status "check baqi"; H4 Tavily credits khatam). w60-sim 50/50.
+  tsc 0, lint 0, build 0.

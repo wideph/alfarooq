@@ -20,6 +20,11 @@ import { planCaseDates, recheckOpenCaseDates, SYSTEM_ACTOR, type DateActor } fro
 //   • AI / internet fail → kuch nahi likha jata; date "check baqi" dikhti hai
 //     aur dobara koshish hoti hai. Bina online khabron ke AI ka faisla
 //     "OFFLINE" — 3 ghante baad dobara.
+//   • HIFAZAT (owner): ye check sirf IZAFI hai. Har date pehle purane qaide se
+//     (built-in calendar + Holidays table + weekend + tarteeb — W60, bina AI)
+//     foran lagti hai; AI credits khatam / AI band / Tavily fail / internet
+//     band — kuch bhi ho, dates phir bhi lagti, theek hoti aur aage khisakti
+//     hain. Har AI / khabron ki call par waqt ki had (atak nahi sakti).
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -27,6 +32,25 @@ export const VERIFY_HORIZON_DAYS = 20;
 const FRESH_ONLINE_MS = 20 * 3_600_000;
 const FRESH_OFFLINE_MS = 3 * 3_600_000;
 const LEASE_MS = 290_000;
+// Ek scope ka poora check (khabrein + AI) is se zyada nahi; khabrein 60s tak.
+const CHECK_TIMEOUT_MS = 150_000;
+const EVIDENCE_TIMEOUT_MS = 60_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      }
+    );
+  });
+}
 
 export type DateCheckStatus = "VERIFIED" | "OFFLINE" | "PENDING" | "TENTATIVE" | "CLOSED";
 export type DateCheck = {
@@ -114,7 +138,7 @@ async function analyze(items: Item[], db: Db, resolver: DayResolver) {
     statuses.set(item.key, {
       status: closedNote ? "CLOSED" : pending ? "PENDING" : offline ? "OFFLINE" : "VERIFIED",
       checkedAt: oldest ? oldest.toISOString() : null,
-      note: closedNote ?? (pending ? "AI online check baqi" : offline ? "AI ne check kiya (online khabrein nahi mili) — jald dobara" : "AI + online khabrein: khula din"),
+      note: closedNote ?? (pending ? "AI online check baqi — date purane qaide (calendar + Holidays table + weekend) se sahi hai" : offline ? "AI ne check kiya (online khabrein nahi mili) — jald dobara" : "AI + online khabrein: khula din"),
       sources: sources.slice(0, 4),
     });
   }
@@ -135,7 +159,8 @@ export type DayChecker = (
 export const onlineAiChecker: DayChecker = async (scope, dates, today) => {
   // AI band ho to khabrein lane ka faida nahi (faisla AI karta hai).
   if (!(await dateAiAvailable())) return null;
-  const evidence = await onlineEvidence(scope, dates, today);
+  // Khabrein na aayen / atak jayen → AI apne ilm se (OFFLINE), date ruke nahi.
+  const evidence = await withTimeout(onlineEvidence(scope, dates, today), EVIDENCE_TIMEOUT_MS, null);
   const result = await aiCheckDays({ scope, dates, today, news: evidence?.items ?? null, source: evidence?.source ?? null });
   if (!result) return null;
   const titles = new Map((evidence?.items ?? []).map((item) => [item.url, item.title]));
@@ -156,7 +181,12 @@ export const onlineAiChecker: DayChecker = async (scope, dates, today) => {
  * (scope → din) ke checks chalao. Har scope: online khabrein → AI faisla →
  * OfficeDayCheck; band → HolidayClosure "AI:" row. Band mile (date, scope).
  */
-async function runChecks(needs: Map<string, Set<string>>, checker: DayChecker, db: Db = prisma) {
+async function runChecks(
+  needs: Map<string, Set<string>>,
+  checker: DayChecker,
+  timeoutMs: number = CHECK_TIMEOUT_MS,
+  db: Db = prisma
+) {
   const today = todayPakistan();
   const closed: Array<{ date: Date; scope: string }> = [];
   let ok = 0;
@@ -164,10 +194,14 @@ async function runChecks(needs: Map<string, Set<string>>, checker: DayChecker, d
   await Promise.all(
     [...needs.entries()].map(async ([scope, keys]) => {
       const dates = [...keys].sort().map((key) => new Date(`${key}T00:00:00Z`));
-      const result = await checker(scope, dates, today).catch((error) => {
-        console.warn("[office] day check fail", scope, error instanceof Error ? error.message : error);
-        return null;
-      });
+      const result = await withTimeout(
+        checker(scope, dates, today).catch((error) => {
+          console.warn("[office] day check fail", scope, error instanceof Error ? error.message : error);
+          return null;
+        }),
+        timeoutMs,
+        null
+      );
       if (!result || dates.some((date) => !result.verdicts.has(formatDateOnly(date)))) {
         failed += 1;
         return;
@@ -243,8 +277,9 @@ export async function attestationDateChecks(
  */
 export async function verifyCaseDates(
   caseId: string,
-  opts: { budgetMs?: number; actor?: DateActor; checker?: DayChecker } = {}
+  opts: { budgetMs?: number; actor?: DateActor; checker?: DayChecker; checkTimeoutMs?: number } = {}
 ): Promise<{ busy: boolean; rounds: number; moved: boolean; failed: boolean }> {
+  const checkTimeout = opts.checkTimeoutMs ?? CHECK_TIMEOUT_MS;
   const deadline = Date.now() + (opts.budgetMs ?? 230_000);
   const now = new Date();
   const lease = await prisma.case.updateMany({
@@ -256,12 +291,13 @@ export async function verifyCaseDates(
   let moved = false;
   let failed = false;
   try {
-    while (rounds < 6 && Date.now() < deadline) {
+    // Naya round tabhi jab poora round waqt mein aa sake (pehla hamesha).
+    while (rounds < 6 && (rounds === 0 || Date.now() + checkTimeout < deadline)) {
       const items = await caseItems(caseId);
       const { needs } = await analyze(items, prisma, new DayResolver());
       if (needs.size === 0) break;
       rounds += 1;
-      const result = await runChecks(needs, opts.checker ?? onlineAiChecker);
+      const result = await runChecks(needs, opts.checker ?? onlineAiChecker, checkTimeout);
       if (result.closed.length > 0) {
         const changes = await planCaseDates(caseId, {}, opts.actor ?? SYSTEM_ACTOR);
         moved = moved || changes.length > 0;
@@ -296,8 +332,11 @@ export async function safeVerifyCaseDates(caseId: string, actor?: DateActor) {
  * andar + guzri hui) aur expected printing dates ka online check; band mile to
  * dates aage + remark. Phir planner ki aam jaanch.
  */
-export async function verifyAllOpenDates(opts: { budgetMs?: number; actor?: DateActor; checker?: DayChecker } = {}) {
+export async function verifyAllOpenDates(
+  opts: { budgetMs?: number; actor?: DateActor; checker?: DayChecker; checkTimeoutMs?: number } = {}
+) {
   const deadline = Date.now() + (opts.budgetMs ?? 240_000);
+  const checkTimeout = opts.checkTimeoutMs ?? CHECK_TIMEOUT_MS;
   const actor = opts.actor ?? SYSTEM_ACTOR;
   const horizon = addDays(todayPakistan(), VERIFY_HORIZON_DAYS);
   let rounds = 0;
@@ -305,7 +344,7 @@ export async function verifyAllOpenDates(opts: { budgetMs?: number; actor?: Date
   let scopesFailed = 0;
   const closedFound: string[] = [];
   const touched = new Set<string>();
-  while (rounds < 4 && Date.now() < deadline) {
+  while (rounds < 4 && Date.now() + checkTimeout < deadline) {
     const attestations = await prisma.caseAttestation.findMany({
       where: {
         status: { not: "DONE" },
@@ -329,7 +368,7 @@ export async function verifyAllOpenDates(opts: { budgetMs?: number; actor?: Date
     const { needs } = await analyze(items, prisma, new DayResolver());
     if (needs.size === 0) break;
     rounds += 1;
-    const result = await runChecks(needs, opts.checker ?? onlineAiChecker);
+    const result = await runChecks(needs, opts.checker ?? onlineAiChecker, checkTimeout);
     scopesChecked += result.ok;
     scopesFailed += result.failed;
     if (result.closed.length === 0) break;

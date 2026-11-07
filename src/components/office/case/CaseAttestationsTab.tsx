@@ -232,15 +232,18 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
   // (Tavily khabrein + AI) jab tak confirm na ho — kuch minute lag sakte hain.
   const [checking, setChecking] = useState(false);
   const [checkTries, setCheckTries] = useState(0);
+  // AI / internet abhi kaam nahi kar raha (credits, setting, network) — dates
+  // phir bhi purane qaide se lagi hain; bekaar koshishein band.
+  const [aiDown, setAiDown] = useState(false);
   const updatedRef = useRef(onUpdated);
   updatedRef.current = onUpdated;
   const needsCheck = detail.attestations.some((a) => a.dateCheck?.status === "PENDING" || a.dateCheck?.status === "CLOSED");
   useEffect(() => {
-    if (!needsCheck || checking || checkTries >= 4) return;
+    if (!needsCheck || checking || aiDown || checkTries >= 4) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setChecking(true);
-      const res = await officeFetch<{ verify: { busy: boolean }; detail: CaseDetail }>(
+      const res = await officeFetch<{ verify: { busy: boolean; failed: boolean }; detail: CaseDetail }>(
         `/api/office/cases/${detail.id}/verify-dates`,
         { method: "POST" }
       );
@@ -248,12 +251,13 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
       setChecking(false);
       setCheckTries((value) => value + 1);
       if (res.ok && res.data.detail) updatedRef.current(res.data.detail);
+      if (!res.ok || res.data.verify?.failed) setAiDown(true);
     }, checkTries === 0 ? 1500 : 25_000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [needsCheck, checking, checkTries, detail.id]);
+  }, [needsCheck, checking, aiDown, checkTries, detail.id]);
 
   return (
     <SectionCard
@@ -292,6 +296,13 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
         <p className="mb-2 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI online check kar raha hai (taaza khabrein + AI) — kuch minute lag
           sakte hain. Chhutti mili to date khud aage hogi.
+        </p>
+      )}
+      {aiDown && needsCheck && !checking && (
+        <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          AI online check abhi nahi ho saka (AI credits / setting / internet). Dates phir bhi purane qaide se lagi hain
+          aur sahi hain — built-in chhuttiyan (Iqbal Day, Eid…) + Holidays table + weekend + tarteeb. AI theek hote hi
+          roz ka check inhe dobara dekhega.
         </p>
       )}
       {detail.attestations.length === 0 ? (

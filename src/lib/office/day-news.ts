@@ -60,10 +60,10 @@ export async function gdeltSearch(query: string, from: Date, to: Date, max = 40)
     startdatetime: gdeltStamp(from),
     enddatetime: gdeltStamp(to),
   });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 1; attempt += 1) {
     const result = await throttled(async () => {
       try {
-        const response = await fetch(`${GDELT_URL}?${params}`, { signal: AbortSignal.timeout(30_000) });
+        const response = await fetch(`${GDELT_URL}?${params}`, { signal: AbortSignal.timeout(20_000) });
         const text = await response.text();
         if (!response.ok || /limit requests/i.test(text)) return "retry" as const;
         if (!text.trim().startsWith("{")) return [] as NewsItem[]; // khali natija
