@@ -296,27 +296,59 @@ export async function safeApplyAttestationPlan(caseId: string, opts: { replanIds
 }
 
 /**
- * Admin ki haath se di gayi scheduled date: chhutti / ghalat din ya pichle
- * qadam se pehle → error (Roman Urdu). Aage wale qadam baad mein planner
- * khud aage kar deta hai (applyAttestationPlan).
+ * §W61 — admin ki haath se di gayi scheduled date (owner): working day na ho
+ * (chhutti / band / ghalat din) ya tarteeb ke khilaf ho to us ke QAREEB TAREEN
+ * sahi din par khud adjust — pehle wahi din, phir +1, -1, +2, -2 … (aaj ya baad
+ * ki date kabhi aaj se pehle nahi jati). Sahi = us attestation ke qaide ka khula
+ * din + pichle qadam (DONE samait) ke BAAD + kisi DONE agle qadam se PEHLE.
+ * Aage wale pending qadam baad mein planner khud khiskata hai. Koi din na mile
+ * → error.
  */
-export async function manualDateError(caseId: string, attestationId: string, date: Date, db: Db = prisma): Promise<string | null> {
+export async function nearestAllowedDate(
+  caseId: string,
+  attestationId: string,
+  wanted: Date,
+  db: Db = prisma
+): Promise<{ date: Date; note: string | null } | { error: string }> {
   const rows = await loadRows(db, caseId);
   const row = rows?.find((item) => item.id === attestationId);
-  if (!rows || !row) return null;
-  const verdict = await new DayResolver(db).verdict(date, ruleForKind(row.kind));
-  if (!verdict.open) return `${formatDmy(date)} ko ${row.name} ki date nahi lag sakti — ${verdict.reason}`;
-  if (row.tier === null) return null;
-  for (const other of rows) {
-    if (other.id === row.id || other.tier === null || !other.scheduledDate) continue;
-    if (other.tier < row.tier && other.scheduledDate >= date) {
-      return `${row.name} ki date ${other.name} (${formatDmy(other.scheduledDate)}) ke BAAD honi chahiye — tarteeb: ${ORDER_RULE_TEXT}`;
-    }
-    if (other.tier > row.tier && other.status === "DONE" && other.scheduledDate <= date) {
-      return `${row.name} ki date ${other.name} (${formatDmy(other.scheduledDate)}, done) se PEHLE honi chahiye — tarteeb: ${ORDER_RULE_TEXT}`;
+  if (!rows || !row) return { date: wanted, note: null };
+  const resolver = new DayResolver(db);
+  const rule = ruleForKind(row.kind);
+  const today = todayPakistan();
+  let after: { date: Date; name: string } | null = null; // is se BAAD
+  let before: { date: Date; name: string } | null = null; // is se PEHLE (DONE agla qadam)
+  if (row.tier !== null) {
+    for (const other of rows) {
+      if (other.id === row.id || other.tier === null || !other.scheduledDate) continue;
+      if (other.tier < row.tier && (!after || other.scheduledDate > after.date)) after = { date: other.scheduledDate, name: other.name };
+      if (other.tier > row.tier && other.status === "DONE" && (!before || other.scheduledDate < before.date)) {
+        before = { date: other.scheduledDate, name: other.name };
+      }
     }
   }
-  return null;
+  const allowed = async (date: Date) => {
+    if (wanted >= today && date < today) return false;
+    if (after && date <= after.date) return false;
+    if (before && date >= before.date) return false;
+    return (await resolver.verdict(date, rule)).open;
+  };
+  if (await allowed(wanted)) return { date: wanted, note: null };
+  const why = (await resolver.verdict(wanted, rule)).reason;
+  for (let step = 1; step <= 60; step += 1) {
+    for (const candidate of [addDays(wanted, step), addDays(wanted, -step)]) {
+      if (await allowed(candidate)) {
+        const reason =
+          after && wanted <= after.date
+            ? `${row.name} ko ${after.name} (${formatDmy(after.date)}) ke BAAD hona hai`
+            : before && wanted >= before.date
+              ? `${row.name} ko ${before.name} (${formatDmy(before.date)}, done) se PEHLE hona hai`
+              : `${formatDmy(wanted)} ko ${why ?? "band"}`;
+        return { date: candidate, note: `${reason} — qareeb tareen sahi din ${formatDmy(candidate)} lagaya` };
+      }
+    }
+  }
+  return { error: `${row.name} ke liye ${formatDmy(wanted)} ke aas paas koi sahi din nahi mila — tarteeb: ${ORDER_RULE_TEXT}` };
 }
 
 /** Tarteeb / chhutti ki khilaf warzi (audit + tests ke liye) — har case ki list. */

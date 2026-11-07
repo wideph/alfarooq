@@ -9,8 +9,9 @@ import { notifyAdmins, notifyCourierStage, notifyRole } from "@/lib/office/notif
 import { ATTESTATION_STATUSES, type AttestationStatus } from "@/lib/office/permissions";
 import { cleanText, parseDateOnly } from "@/lib/office/serializers";
 import { generateSetDates } from "@/lib/office/date-engine";
-import { formatDmy, manualDateError } from "@/lib/office/attestation-dates";
-import { planCaseDates, researchCaseDates } from "@/lib/office/date-recheck";
+import { formatDmy, nearestAllowedDate } from "@/lib/office/attestation-dates";
+import { planCaseDates } from "@/lib/office/date-recheck";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { creditDeptCommission } from "@/lib/office/dept-commission";
 import {
   advanceCourierStage,
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     else await planCaseDates(id, {}, session);
     // W13.2: audit log response ke baad; AI research bhi baad mein.
     after(async () => {
-      await researchCaseDates(id);
+      await safeVerifyCaseDates(id, session);
       await logOfficeAction(session, { action: "case.attestation.add", entity: "Case", entityId: id, after: row });
     });
     return NextResponse.json(await loadCaseDetail(session, id), { status: 201 });
@@ -133,24 +134,27 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (Object.keys(data).length === 0) return badRequest("Kuch change nahi kiya");
 
-    // §W60: haath ki scheduled date bhi qaide mein — chhutti / ghalat din ya
-    // pichle qadam (Board → ibcc → Mofa → Saudi Embassy → Mofa Saudi) se
-    // pehle → error. Aage wale pending qadam khud aage khisak jate hain.
+    // §W60/§W61: haath ki scheduled date — working day na ho (chhutti / band /
+    // ghalat din) ya tarteeb (Board → ibcc → Mofa → Saudi Embassy → Mofa Saudi)
+    // ke khilaf → admin ki date ke QAREEB TAREEN sahi din par khud adjust. Aage
+    // wale pending qadam khud aage khisakte hain; phir online AI check (after()).
+    const notices: string[] = [];
     if (data.scheduledDate) {
-      const problem = await manualDateError(id, attestationId, data.scheduledDate);
-      if (problem) return badRequest(problem);
+      const nearest = await nearestAllowedDate(id, attestationId, data.scheduledDate);
+      if ("error" in nearest) return badRequest(nearest.error);
+      if (nearest.note) notices.push(nearest.note);
+      data.scheduledDate = nearest.date;
     }
 
     await prisma.caseAttestation.update({ where: { id: attestationId }, data });
-    let dateNotice: string | null = null;
     if (data.scheduledDate) {
       const pushed = (await planCaseDates(id, {}, session)).filter((change) => change.id !== attestationId && change.from);
       if (pushed.length) {
-        dateNotice = `Date update ho gayi. Tarteeb ke liye aage khiski: ${pushed
-          .map((change) => `${change.name} ${formatDmy(change.to)}`)
-          .join(", ")}`;
+        notices.push(`Tarteeb ke liye aage khiski: ${pushed.map((change) => `${change.name} ${formatDmy(change.to)}`).join(", ")}`);
       }
+      after(() => safeVerifyCaseDates(id, session));
     }
+    const dateNotice = notices.length ? `Date update ho gayi. ${notices.join(". ")}` : null;
 
     // §W11.1: IN_PROGRESS → case ATTESTATION + currentAttestationId = ye step;
     // DONE (agar current tha) → pointer agle PENDING step par; phir

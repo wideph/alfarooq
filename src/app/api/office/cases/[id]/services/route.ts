@@ -8,7 +8,8 @@ import { parseAmount, toNumber } from "@/lib/office/money";
 import { notifyAdmins, notifyPermission, notifyRole } from "@/lib/office/notifications";
 import { uploadOfficeFile, deleteOfficeFile } from "@/lib/office/r2";
 import { cleanText } from "@/lib/office/serializers";
-import { planCaseDates, researchCaseDates } from "@/lib/office/date-recheck";
+import { planCaseDates } from "@/lib/office/date-recheck";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { advanceCourierStage } from "@/lib/office/workflow";
 import { bookCaseService, ServiceInputError, updateCaseService } from "@/lib/office/case-services";
 
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     after(async () => {
-      if (result.attestationIds.length > 0) await researchCaseDates(id);
+      if (result.attestationIds.length > 0) await safeVerifyCaseDates(id, session);
       await logOfficeAction(session, {
         action: "case.service.book",
         entity: "Case",

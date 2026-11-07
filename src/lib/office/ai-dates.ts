@@ -2,25 +2,17 @@ import type { Prisma, SiteSettings } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PROVIDER_TIMEOUT_MS, callBotJson } from "@/lib/bot-ai";
 import { SITE_SETTINGS_ID } from "@/lib/site-settings";
-import { addDays, formatDateOnly, todayPakistan } from "@/lib/office/serializers";
+import { formatDateOnly } from "@/lib/office/serializers";
 import { DayResolver, type DayRule } from "@/lib/office/day-rules";
 
 // docs/office-module/06 §N5/N6 — AI date research.
-// §W60 — AI ab sirf MAZEED band din dhoondta hai (additive), kabhi kisi din ko
-// "khula" nahi kehta, aur fail ho to kuch cache nahi hota:
-//   • Pehle AI ka "working day" verdict (ya AI fail par weekend-only andaza)
-//     WorkingDayCache mein hamesha ke liye likha jata tha aur baad mein usi par
-//     bharosa hota tha — 9 Nov (Iqbal Day) jaisi pakki chhutti bhi "khuli" ban
-//     jati. Ab pakki chhuttiyan code ka built-in calendar (holiday-calendar.ts)
-//     deta hai; AI ke dhoonde band din HolidayClosure mein "AI:" ke saath jaate
-//     hain (admin panel mein nazar aate / edit / delete hote hain).
-//   • Dates ab AI ke intezar ke baghair FORAN lagti hain (day-rules.ts); AI
-//     baad mein (after() / roz ka cron) research karta hai aur naya band din
-//     mile to planner pending dates aage kar deta hai.
-//   • Har scan (scope + 14 din ki window) OfficeDateScan mein yaad — aane wali
-//     window har 7 din baad dobara (nayi announcement), guzri hui ek dafa.
-// NOTE: model internet search nahi karta — apne ilm se jawab deta hai. Is
-// liye wo sirf izafi hifazat hai; asal bharosa built-in calendar + admin table.
+// §W60 — AI kabhi kisi din ko "khula" nahi bana sakta (built-in calendar /
+// admin table hamesha jeet te hain), fail ho to kuch cache nahi hota.
+// §W61 — har din ka ONLINE check (date-verify.ts): system Tavily (owner ka
+// chuna hua; warna GDELT) se taaza khabrein lata hai, attached AI (DeepSeek
+// — khud internet nahi dekh sakta) un khabron ko parh kar har din ka faisla
+// deta hai (saboot ke saath). Band mila → HolidayClosure "AI:" row (admin
+// panel mein, edit / delete) + planner date aage karta hai.
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -28,39 +20,18 @@ export const AI_REASON_PREFIX = "AI:";
 
 export type CityName = "ISLAMABAD" | "QUETTA" | "GUJRAT" | "LAHORE";
 
-export type AiQuestion =
-  | { kind: "PAKISTAN" }
-  | { kind: "SAUDI" }
-  | { kind: "CITY"; city: CityName }
-  | { kind: "EMBASSY" };
-
 export type ResearchedDate = { date: Date; reason: string | null };
 
 const PAKISTAN_WEEKEND = new Set([0, 6]); // Sun, Sat
 
-// Ek AI scan kitne din dekhta hai (ek call poori window ka jawab).
-const SCAN_WINDOW_DAYS = 14;
-// Aane wali window kitne din baad dobara scan ho.
-const RESCAN_FUTURE_DAYS = 7;
-
 // Reasoning models (e.g. deepseek-v4-pro) ko jawab mein waqt lagta hai.
 export const AI_DATES_VERDICT_TIMEOUT_MS = 90_000;
-
-const CITY_SCOPES = new Set(["ISLAMABAD", "QUETTA", "GUJRAT", "LAHORE"]);
 
 function parseIsoDate(input: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(input.trim());
   if (!match) return null;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function questionForScope(scope: string): AiQuestion | null {
-  if (scope === "PAKISTAN") return { kind: "PAKISTAN" };
-  if (scope === "SAUDI") return { kind: "SAUDI" };
-  if (scope === "EMBASSIES_ISB") return { kind: "EMBASSY" };
-  if (CITY_SCOPES.has(scope)) return { kind: "CITY", city: scope as CityName };
-  return null;
 }
 
 /** Ek DayRule kin scopes par mabni hai (research ke liye). */
@@ -103,190 +74,99 @@ const SAUDI_HOLIDAY_RULES = [
   "Use the most accurate Umm al-Qura dates you know.",
 ].join(" ");
 
-function scanSystemPrompt(question: AiQuestion): string {
-  switch (question.kind) {
-    case "PAKISTAN":
-      return [
-        "You are an expert researcher on Pakistan's government working days and public",
-        `holidays for any year 2019-2030. ${PAKISTAN_HOLIDAY_RULES}`,
-        "Answer with JSON only.",
-      ].join(" ");
-    case "SAUDI":
-      return [
-        "You are an expert researcher on Saudi Arabia's government working days and",
-        `public holidays for any year 2019-2030. ${SAUDI_HOLIDAY_RULES}`,
-        "Answer with JSON only.",
-      ].join(" ");
-    case "CITY":
-      return [
-        "You are an expert researcher on city-level administrative closures in Pakistan",
-        "(incidents, security preparations, strikes, protests, lockdowns, local holiday announcements)",
-        "for any year 2019-2030. Answer with JSON only.",
-      ].join(" ");
-    case "EMBASSY":
-      return [
-        "You are an expert researcher on foreign embassies in Islamabad, Pakistan —",
-        "their closures and work-suspension announcements (security alerts, incidents,",
-        "preparations, their own national holidays) for any year 2019-2030. Answer with JSON only.",
-      ].join(" ");
-  }
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const SCOPE_TEXT: Record<string, string> = {
+  PAKISTAN: "Pakistan — federal / provincial government offices nationwide (public holidays, announced closures)",
+  ISLAMABAD: "Islamabad (federal capital) — government offices incl. IBCC, MOFA, HEC (local holidays, security closures, section 144, protests)",
+  QUETTA: "Quetta (Balochistan) — government offices incl. the education board (local holidays, strikes, security closures)",
+  GUJRAT: "Gujrat (Punjab) — MOFA camp office / government offices (local holidays, closures)",
+  LAHORE: "Lahore (Punjab) — MOFA camp office / government offices (local holidays, closures)",
+  EMBASSIES_ISB: "Embassies in Islamabad, especially the Saudi Embassy (closures, Saudi holidays, security alerts)",
+  SAUDI: "Saudi Arabia — government offices incl. the Ministry of Foreign Affairs (public holidays, Eid government holidays)",
+};
+
+/** Attached AI chalu hai (key + model + enabled)? */
+export async function dateAiAvailable(db: Db = prisma): Promise<boolean> {
+  return Boolean(await loadBotSettings(db));
 }
 
-function scanUserPrompt(question: AiQuestion, from: string, to: string): string {
-  const window = `the ${SCAN_WINDOW_DAYS} days from ${from} to ${to}`;
-  const tail = 'Return exactly: {"closedDates":[{"date":"YYYY-MM-DD","reason":"short reason"}]} — an empty array if none.';
-  switch (question.kind) {
-    case "PAKISTAN":
-      return [
-        `Consider ${window}. Which of these dates are/were NOT working days in Pakistan`,
-        "(national/public/federal holidays or announced closures)? Ignore Saturdays and",
-        "Sundays (already weekend). Include a date if it is likely a holiday.",
-        tail,
-      ].join(" ");
-    case "SAUDI":
-      return [
-        `Consider ${window}. Which of these dates are/were NOT working days for Saudi government`,
-        "offices (Ministry of Foreign Affairs)? Ignore Fridays and Saturdays (already weekend).",
-        "Include a date if it is likely a holiday.",
-        tail,
-      ].join(" ");
-    case "CITY":
-      return [
-        `Was the city of ${question.city} (Pakistan) closed for official/business work on`,
-        `any of ${window} — due to any incident, security preparation, strike, protest, lockdown`,
-        "or local holiday announcement? Ignore Saturdays/Sundays and nationwide holidays.",
-        tail,
-      ].join(" ");
-    case "EMBASSY":
-      return [
-        `Were embassies in Islamabad (especially the Saudi embassy) closed, or was embassy work`,
-        `suspended/announced, on any of ${window} (security alerts, incidents, preparations, Saudi holidays)?`,
-        tail,
-      ].join(" ");
-  }
-}
+export type DayAiVerdict = { closed: boolean; reason: string | null; evidence: string[] };
 
-// --- AI closure scan ---------------------------------------------------------
-
-type ScannedClosure = { date: Date; reason: string | null };
-
-async function scanClosuresWithAi(
-  settings: SiteSettings,
-  question: AiQuestion,
-  from: Date,
-  timeoutMs: number
-): Promise<ScannedClosure[] | null> {
-  const fromText = formatDateOnly(from);
-  const toText = formatDateOnly(addDays(from, SCAN_WINDOW_DAYS - 1));
-  try {
-    const raw = await callBotJson(
-      settings,
-      scanSystemPrompt(question),
-      scanUserPrompt(question, fromText, toText),
-      '{"closedDates"',
-      6000,
-      timeoutMs
-    );
-    const parsed = JSON.parse(raw) as { closedDates?: Array<{ date?: string; reason?: string }> };
-    if (!Array.isArray(parsed.closedDates)) return null;
-    const end = addDays(from, SCAN_WINDOW_DAYS);
-    const out: ScannedClosure[] = [];
-    const seen = new Set<string>();
-    for (const item of parsed.closedDates) {
-      const date = parseIsoDate(String(item?.date || ""));
-      if (!date || date < from || date >= end) continue;
-      const key = formatDateOnly(date);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ date, reason: String(item?.reason || "").slice(0, 180) || null });
-    }
-    return out;
-  } catch (error) {
-    console.warn("[ai-dates] AI scan fail", question.kind, fromText, error instanceof Error ? error.message : error);
-    return null;
-  }
-}
-
-// AI ke band din HolidayClosure mein ("AI:" ke saath). Admin ki row kabhi nahi
-// chhuti (update no-op). Kitni NAYI rows bani — wapas.
-async function cacheClosures(db: Db, scope: string, closures: ScannedClosure[]): Promise<number> {
-  let created = 0;
-  for (const closure of closures) {
-    const existing = await db.holidayClosure.findUnique({ where: { date_scope: { date: closure.date, scope } } });
-    if (existing) continue;
-    const reason = closure.reason ? `${AI_REASON_PREFIX} ${closure.reason}` : AI_REASON_PREFIX;
-    await db.holidayClosure.create({ data: { date: closure.date, scope, reason } });
-    created += 1;
-  }
-  return created;
-}
-
-// 14-din ki mustaqil windows (har date hamesha isi window mein).
-function windowStart(date: Date): Date {
-  const day = Math.floor(date.getTime() / 86_400_000);
-  return new Date((day - (day % SCAN_WINDOW_DAYS)) * 86_400_000);
-}
+type Evidence = { title: string; url: string; domain: string; seen: string; excerpt?: string };
 
 /**
- * In dates / scopes ke liye AI research (jo window pehle scan nahi hui ya
- * purani ho chuki). Sirf band din jodta hai. Kitne naye band din mile — wapas.
- * AI na ho / fail ho → 0 (kuch cache nahi).
+ * Attached AI se in dates ka faisla (is scope ke liye), online khabron ki
+ * roshni mein. Har date ka jawab lazmi; koi date reh jaye ya AI fail ho →
+ * null (kuch likha nahi jata, baad mein dobara).
  */
-export async function researchClosures(
-  targets: Array<{ date: Date; scopes: string[] }>,
-  opts: { maxScans?: number; timeoutMs?: number } = {},
+export async function aiCheckDays(
+  input: { scope: string; dates: Date[]; today: Date; news: Evidence[] | null; source: string | null },
   db: Db = prisma
-): Promise<number> {
+): Promise<{ verdicts: Map<string, DayAiVerdict>; model: string } | null> {
   const settings = await loadBotSettings(db);
-  if (!settings) return 0;
-  const today = todayPakistan();
-  const wanted = new Map<string, { scope: string; start: Date }>();
-  for (const target of targets) {
-    const start = windowStart(target.date);
-    for (const scope of target.scopes) {
-      if (!questionForScope(scope)) continue;
-      wanted.set(`${scope}|${start.getTime()}`, { scope, start });
-    }
-  }
-  if (wanted.size === 0) return 0;
-  let done: Array<{ scope: string; windowStart: Date; scannedAt: Date }>;
+  if (!settings || input.dates.length === 0) return null;
+  const keys = [...new Set(input.dates.map((date) => formatDateOnly(date)))].sort();
+  const rules = input.scope === "SAUDI" || input.scope === "EMBASSIES_ISB" ? `${SAUDI_HOLIDAY_RULES} ${PAKISTAN_HOLIDAY_RULES}` : PAKISTAN_HOLIDAY_RULES;
+  const system = [
+    "You verify whether specific dates are WORKING days for offices that attest documents.",
+    "You are given online news search results collected today. Read them carefully: a holiday or",
+    "closure is often announced only a few days before (e.g. sudden local holidays in Islamabad,",
+    "security closures, government notifications, Eid dates fixed by moon sighting).",
+    rules,
+    "Mark a date CLOSED if any news, official notification or certain knowledge shows the offices of",
+    "this scope are/were closed that day (or very likely closed). If a news item says a holiday is",
+    "cancelled or that a day is NOT a holiday, treat it as open. Weekends are already handled.",
+    "Answer with JSON only.",
+  ].join(" ");
+  const news = (input.news ?? [])
+    .slice(0, 30)
+    .map((item, index) =>
+      [
+        `[${index + 1}] ${item.title} — ${item.domain}${item.seen ? `, ${item.seen}` : ""}`,
+        `    ${item.url}`,
+        item.excerpt ? `    ${item.excerpt.replace(/\s+/g, " ").slice(0, 900)}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    )
+    .join("\n");
+  const user = [
+    `Today is ${formatDateOnly(input.today)}.`,
+    `Scope: ${SCOPE_TEXT[input.scope] ?? input.scope}.`,
+    `Dates to decide: ${keys.map((key) => `${key} (${WEEKDAY_NAMES[new Date(`${key}T00:00:00Z`).getUTCDay()]})`).join(", ")}.`,
+    input.news === null
+      ? "Online news could NOT be fetched right now — decide from your own knowledge only."
+      : `Online news results (${input.source}):\n${news || "(no matching news found)"}`,
+    'Return exactly: {"days":[{"date":"YYYY-MM-DD","closed":true|false,"reason":"short reason (holiday name / closure) or empty","evidence":[news numbers like 1, 3]}]}',
+    "— one entry for EVERY date listed above.",
+  ].join("\n");
+
   try {
-    done = await db.officeDateScan.findMany({
-      where: {
-        OR: [...wanted.values()].map((item) => ({ scope: item.scope, windowStart: item.start })),
-      },
-    });
+    const raw = await callBotJson(settings, system, user, '{"days"', 8000, AI_DATES_VERDICT_TIMEOUT_MS);
+    const parsed = JSON.parse(raw) as {
+      days?: Array<{ date?: string; closed?: unknown; reason?: string; evidence?: unknown }>;
+    };
+    if (!Array.isArray(parsed.days)) return null;
+    const verdicts = new Map<string, DayAiVerdict>();
+    for (const day of parsed.days) {
+      const date = parseIsoDate(String(day?.date || ""));
+      if (!date) continue;
+      const key = formatDateOnly(date);
+      if (!keys.includes(key) || typeof day.closed !== "boolean") continue;
+      const evidence = (Array.isArray(day.evidence) ? day.evidence : [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 1 && value <= (input.news?.length ?? 0))
+        .map((value) => input.news![value - 1].url);
+      verdicts.set(key, { closed: day.closed, reason: String(day.reason || "").slice(0, 180) || null, evidence });
+    }
+    // Har date ka jawab na ho to poora natija na-qabil (aadha faisla nahi).
+    if (keys.some((key) => !verdicts.has(key))) return null;
+    return { verdicts, model: `${settings.botProvider}/${settings.botModel}` };
   } catch (error) {
-    // Table abhi na ho (migration baqi) → research chhor do; dates phir bhi theek.
-    console.warn("[ai-dates] scan memo unavailable", error instanceof Error ? error.message : error);
-    return 0;
+    console.warn("[ai-dates] day check fail", input.scope, error instanceof Error ? error.message : error);
+    return null;
   }
-  const pending = [...wanted.values()].filter((item) => {
-    const scan = done.find((row) => row.scope === item.scope && row.windowStart.getTime() === item.start.getTime());
-    if (!scan) return true;
-    const windowPast = addDays(item.start, SCAN_WINDOW_DAYS) <= today;
-    return !windowPast && scan.scannedAt < addDays(new Date(), -RESCAN_FUTURE_DAYS);
-  });
-  const batch = pending.slice(0, opts.maxScans ?? 6);
-  const results = await Promise.all(
-    batch.map(async (item) => {
-      const closures = await scanClosuresWithAi(
-        settings,
-        questionForScope(item.scope)!,
-        item.start,
-        opts.timeoutMs ?? AI_DATES_VERDICT_TIMEOUT_MS
-      );
-      if (!closures) return 0;
-      const created = await cacheClosures(db, item.scope, closures);
-      await db.officeDateScan.upsert({
-        where: { scope_windowStart: { scope: item.scope, windowStart: item.start } },
-        update: { scannedAt: new Date(), closedCount: closures.length },
-        create: { scope: item.scope, windowStart: item.start, scannedAt: new Date(), closedCount: closures.length },
-      });
-      return created;
-    })
-  );
-  return results.reduce((sum, value) => sum + value, 0);
 }
 
 // --- Batch research: working dates of a year (2019 pool) ---------------------

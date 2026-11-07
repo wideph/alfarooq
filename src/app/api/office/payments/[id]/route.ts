@@ -13,6 +13,7 @@ import { PAYMENT_STATUS_LABELS } from "@/lib/office/labels";
 import { deleteOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment, advanceCourierStage, regressStageAfterPaymentLoss } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -116,6 +117,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         } catch (error) {
           console.error("[office] generateSetDates fail", error);
         }
+        // §W61: nayi dates ka online check (Tavily khabrein + AI).
+        await safeVerifyCaseDates(existing.caseId, session);
       }
     });
 

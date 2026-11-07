@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { generateSetDates } from "@/lib/office/date-engine";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { isSetDimmed, DIMMED_REASON } from "@/lib/office/rnumber";
 
 export const preferredRegion = ["sin1"];
@@ -57,6 +58,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       } catch (error) {
         console.error("[office] generateSetDates fail", error);
       }
+      // §W61: nayi dates ka online check (response ke baad).
+      after(() => safeVerifyCaseDates(id, session));
     }
 
     return NextResponse.json({

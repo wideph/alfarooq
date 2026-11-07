@@ -2431,3 +2431,50 @@ Investigation-first (live DB audit):
   koi attestation date nahi badli, 22 expected printing dates dobara — AF-2026-000037 09→10 Nov.
   Audit ab: masle 0, printing band din par 0; sirf AF-2026-000028 QR code ibcc (DONE, 09-11,
   admin ne 4 Nov haath se di thi) — system DONE nahi badalta. Code push 560ba5e.
+
+## WAVE 61 (2026-11-12) — Har date ka ONLINE check (Tavily khabrein + attached AI)
+
+- **Owner**: 9 Nov kyun chhutti thi (Iqbal Day — jawab diya); har date jo pehle se tay nahi us par
+  attached AI online data se check kare ke chhutti ka elaan to nahi hua (khaas kar Islamabad);
+  20 din se aage ki date par faisla nahi; waqt / AI credits ki parwah nahi, galti nahi; admin ki
+  date working day na ho to qareeb tareen working day.
+- **Tahqeeq**: live AI = deepseek / deepseek-v4-pro — API mein internet search nahi. Google News
+  RSS chalta hai magar shart "personal, non-commercial" (istemal nahi kiya). GDELT (muft, khula)
+  chalta hai magar baar baar 429 limit (20s ruk kar bhi). Owner se poocha → **Tavily key +
+  DeepSeek** chuna.
+- **Code**:
+  - `day-news.ts` (naya): Tavily search (Bearer key; topic news, advanced; start/end date na
+    chale to `days`, phir general; 401/403 / 429/432/433 saaf error; `TAVILY_API_URL` sirf test
+    ke liye), scope-wise queries (English + Urdu), GDELT fallback (5.5s qatar, 2 koshish), article
+    text helper; `onlineEvidence`, `tavilyKey` (DB `OfficeDateConfig` ya env TAVILY_API_KEY).
+  - `ai-dates.ts`: `aiCheckDays` (khabrein + scope + dates → har date closed / reason / saboot
+    numbers; har date ka jawab lazmi), `dateAiAvailable`; W60 window-scan (researchClosures /
+    OfficeDateScan) hataya.
+  - `date-verify.ts` (naya): `analyze` (TENTATIVE > 20 din, CLOSED, PENDING / OFFLINE / VERIFIED;
+    taazgi 20h online / 3h offline / guzra din ek dafa; admin ka khula override = PAKISTAN skip;
+    Special Mofa = Pakistan + chuni city), `runChecks` (DayChecker injectable; OfficeDayCheck +
+    HolidayClosure "AI: … (online)"), `verifyCaseDates` (lease `Case.datesCheckingUntil`, 6 rounds:
+    band → planCaseDates + remark → nayi dates ka check), `verifyAllOpenDates` (cron: attestations +
+    printing dates), `attestationDateChecks` (UI).
+  - `attestation-dates.ts`: `nearestAllowedDate` (manualDateError ki jagah).
+  - `date-recheck.ts`: research hataya (verify alag).
+  - Routes: cases POST / attestations POST + PATCH (qareeb tareen + dateNotice + after verify) /
+    services / set / generate-dates / payments (2) → after `safeVerifyCaseDates`; naye
+    `cases/[id]/verify-dates` (POST, 300s), `setup/date-ai` (GET halat / PUT key / POST test);
+    recheck-dates + cron → `verifyAllOpenDates`.
+  - case-detail: attestations par `dateCheck` (full + department limited). UI: `DateCheckBadge`,
+    CaseAttestationsTab (badge + khud verify-dates bulana, 4 dafa, banner), DeptCaseView badge,
+    Setup `DateAiPanel` (AI / Tavily halat, key save / test / hatayein, 7 din ke checks).
+- **DB**: migration `20261112120000_office_wave61` — OfficeDateScan drop; OfficeDayCheck,
+  OfficeDateConfig; Case.datesCheckingUntil.
+- **Verify**: tsc 0, lint 0, build exit 0. Local: w61-sim 33/33 (plan + PENDING, Islamabad achanak
+  band → QR / Mofa / Embassy / Mofa Saudi tarteeb se aage + remark + closure row + sab VERIFIED,
+  taaza check par AI nahi, 21h baad dobara, TENTATIVE par AI nahi, AI fail → kuch nahi likha,
+  OFFLINE + 3h, lease busy, manual qareeb tareen 5 soorten, cron Pakistan band → kai case,
+  Tavily parse / fallback / ghalat key — nakli local Tavily server); w60-sim 50/50 (manual hisse
+  nayi soorat mein). Dev server HTTP 16/17 (1 test-data artifact: pehle ke checks share hue):
+  case → dateCheck, verify-dates (AI band → jaldi), booking / 404, manual 9 Nov → 10 Nov notice,
+  date-ai GET / PUT / masked / test / permission, cron, recheck, pages. Asal DeepSeek + asal
+  Tavily call test nahi hue (key nahi) — live par owner Tavily key daal kar "Test" dabaye.
+- **Next step**: owner ki ijazat par live migrate; owner tavily.com se key le kar Setup → "Dates
+  ka online check" mein save + Test (save hote hi aane wali dates ka check shuru).

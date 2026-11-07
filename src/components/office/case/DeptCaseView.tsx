@@ -22,10 +22,11 @@ import FileUploadBox from "@/components/office/case/FileUploadBox";
 import StickerChip, { isVerificationSticker } from "@/components/office/case/StickerChip";
 import CustomLabelChip from "@/components/office/case/CustomLabelChip";
 import CourierExpensesCard from "@/components/office/case/CourierExpensesCard";
-import type { DeptOwnExpense } from "@/lib/office/types";
+import type { AttestationDateCheck, DeptOwnExpense } from "@/lib/office/types";
 import { formatDate, formatDateTime, officeFetch } from "@/lib/office/client";
 import { originLabel } from "@/lib/office/case-nav";
 import ClientPictureButton from "@/components/office/case/ClientPictureButton";
+import DateCheckBadge from "@/components/office/case/DateCheckBadge";
 import {
   ATTESTATION_STATUS_LABELS,
   ATTESTATION_STATUS_STYLES,
@@ -46,6 +47,8 @@ export type DeptLimitedAttestation = {
   scheduledDate: string | null;
   completedDate: string | null;
   attestationType: { name: string };
+  // §W61: date ki online check halat.
+  dateCheck?: AttestationDateCheck | null;
 };
 
 export type DeptLimitedDetail = {
@@ -393,6 +396,7 @@ export default function DeptCaseView({
                         : attestation.scheduledDate
                           ? `Scheduled ${formatDate(attestation.scheduledDate)}`
                           : ""}
+                      {!attestation.completedDate && <DateCheckBadge check={attestation.dateCheck} />}
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ATTESTATION_STATUS_STYLES[attestation.status] || "bg-slate-100 text-slate-700"}`}
                       >

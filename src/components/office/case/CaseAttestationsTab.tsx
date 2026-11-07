@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarClock, Check, Layers, Loader2, Plus, Printer, Stamp, Trash2 } from "lucide-react";
 import type { AdminNavUser, AdminPermission } from "@/components/admin/AdminNav";
 import { adminCanAny } from "@/components/admin/AdminNav";
@@ -12,6 +12,7 @@ import { formatDate, officeFetch, toInputDate } from "@/lib/office/client";
 import { ATTESTATION_STATUS_LABELS, ATTESTATION_STATUS_STYLES } from "@/lib/office/labels";
 import { ATTESTATION_STATUSES } from "@/lib/office/permissions";
 import { type CaseDetail, type CategorySetWithSteps, inputClass, primaryBtnClass } from "@/lib/office/types";
+import DateCheckBadge from "@/components/office/case/DateCheckBadge";
 import type { ToastKind } from "@/components/Toast";
 
 type AttestationType = { id: string; name: string; isActive: boolean };
@@ -227,6 +228,33 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
 
   const available = types.filter((t) => !detail.attestations.some((a) => a.attestationType.id === t.id));
 
+  // §W61: koi date "AI check baqi" ho to page khud online check chalata hai
+  // (Tavily khabrein + AI) jab tak confirm na ho — kuch minute lag sakte hain.
+  const [checking, setChecking] = useState(false);
+  const [checkTries, setCheckTries] = useState(0);
+  const updatedRef = useRef(onUpdated);
+  updatedRef.current = onUpdated;
+  const needsCheck = detail.attestations.some((a) => a.dateCheck?.status === "PENDING" || a.dateCheck?.status === "CLOSED");
+  useEffect(() => {
+    if (!needsCheck || checking || checkTries >= 4) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setChecking(true);
+      const res = await officeFetch<{ verify: { busy: boolean }; detail: CaseDetail }>(
+        `/api/office/cases/${detail.id}/verify-dates`,
+        { method: "POST" }
+      );
+      if (cancelled) return;
+      setChecking(false);
+      setCheckTries((value) => value + 1);
+      if (res.ok && res.data.detail) updatedRef.current(res.data.detail);
+    }, checkTries === 0 ? 1500 : 25_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [needsCheck, checking, checkTries, detail.id]);
+
   return (
     <SectionCard
       icon={Stamp}
@@ -260,6 +288,12 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
         />
       </div>
 
+      {checking && (
+        <p className="mb-2 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI online check kar raha hai (taaza khabrein + AI) — kuch minute lag
+          sakte hain. Chhutti mili to date khud aage hogi.
+        </p>
+      )}
       {detail.attestations.length === 0 ? (
         <EmptyState icon={Stamp} hint="Koi attestation required nahi — Set of Attestations select karein ya neeche add karein" />
       ) : (
@@ -295,6 +329,11 @@ function StepsPanel({ detail, admin, onUpdated, onReload, onMessage }: Props) {
                   {a.completedDate ? ` · Completed at ${formatDate(a.completedDate)}` : ""}
                   {a.notes ? ` · ${a.notes}` : ""}
                 </p>
+                {a.dateCheck && (
+                  <div className="mt-1">
+                    <DateCheckBadge check={a.dateCheck} checking={checking} />
+                  </div>
+                )}
               </div>
 
               {canStatus ? (

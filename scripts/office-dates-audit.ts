@@ -62,6 +62,11 @@ async function inspectDate(text: string) {
 }
 
 async function main() {
+  // Attached AI (key kabhi print nahi hoti).
+  const bot = await prisma.siteSettings.findFirst({ select: { botEnabled: true, botProvider: true, botModel: true, botApiKey: true } });
+  console.log(
+    `AI: provider=${bot?.botProvider ?? "-"} model=${bot?.botModel || "-"} enabled=${bot?.botEnabled ?? false} key=${bot?.botApiKey ? "hai" : "nahi"}`
+  );
   const dateArg = process.argv.indexOf("--date");
   if (dateArg > 0 && /^\d{4}-\d{2}-\d{2}$/.test(process.argv[dateArg + 1] || "")) {
     await inspectDate(process.argv[dateArg + 1]);

@@ -15,6 +15,7 @@ import {
 import { DEPT_COMMISSION_TYPE, parseDeptCommissionKind } from "@/lib/office/dept-commission";
 import { commissionExpenseTag, effectiveDeductPercent } from "@/lib/office/expense-deduction";
 import { extraShareState, trancheValidFraction } from "@/lib/office/extra-share";
+import { attestationDateChecks } from "@/lib/office/date-verify";
 import { serializeService } from "@/lib/office/case-services";
 
 export const caseListInclude = {
@@ -189,6 +190,8 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
   // §W51 / §W52: apne courier kharche (cross-office courier user bhi) —
   // manzoor + review mein + wapas.
   const myDeptExpenses = depts.includes("COURIER") ? await loadMyCourierItems(session.adminId, caseId) : [];
+  // §W61: attestation department ko bhi date ki online check halat.
+  const dateChecks = await attestationDateChecks(item.attestations);
 
   return toJson({
     ok: true,
@@ -225,6 +228,7 @@ export async function loadDeptLimitedCaseDetail(session: AdminSession, caseId: s
         completedDate: a.completedDate,
         notes: a.notes,
         attestationType: { id: a.attestationType.id, name: a.attestationType.name },
+        dateCheck: dateChecks[a.id] ?? null,
       })),
     },
   });
@@ -272,7 +276,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   // (GET /api/office/cases/[id]/audit) — is loader mein nahi. Baqi lookups
   // parallel Promise.all se chalti hain.
   const remarkTarget = roleToRemarkTarget(session.role);
-  const [names, hasUnseenWarning, clientPictureUrl, deptCommissions, courierFiles] = await Promise.all([
+  const [names, hasUnseenWarning, clientPictureUrl, deptCommissions, courierFiles, dateChecks] = await Promise.all([
     adminNameMap([
       item.createdByAdminId,
       ...item.payments.flatMap((p) => [p.submittedById, p.verifiedById]),
@@ -300,6 +304,8 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
       orderBy: { createdAt: "asc" },
       select: { id: true, fileKey: true, fileType: true, title: true, createdAt: true },
     }),
+    // §W61: har pending attestation date ki online check halat.
+    attestationDateChecks(item.attestations),
   ]);
 
   const totals = computeTotals(item.payments, item.agreedAmount);
@@ -329,6 +335,7 @@ export async function loadCaseDetail(session: AdminSession, caseId: string) {
   const payload = {
     profitStale,
     ...item,
+    attestations: item.attestations.map((a) => ({ ...a, dateCheck: dateChecks[a.id] ?? null })),
     // §W14.2 — detail mein bhi wahi summary (expenses asc loaded hain → reverse).
     expenseSummary: expenseSummaryOf([...item.expenses].reverse()),
     setName: item.set?.name ?? null,

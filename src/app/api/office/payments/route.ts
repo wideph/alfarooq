@@ -13,6 +13,7 @@ import { syncProfitShare } from "@/lib/office/profit-share";
 import { uploadOfficeFile } from "@/lib/office/r2";
 import { activateWorkflowOnFirstPayment, advanceCourierStage } from "@/lib/office/workflow";
 import { generateSetDates } from "@/lib/office/date-engine";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { cleanText, parseDateOnly, toJson } from "@/lib/office/serializers";
 
 export const preferredRegion = ["sin1"];
@@ -239,6 +240,8 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error("[office] generateSetDates fail", error);
         }
+        // §W61: nayi dates ka online check (Tavily khabrein + AI).
+        await safeVerifyCaseDates(caseId, session);
       }
     });
 

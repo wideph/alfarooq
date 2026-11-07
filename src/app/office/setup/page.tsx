@@ -11,6 +11,7 @@ import {
   HolidayPanel,
 } from "@/components/office/SetupPanels";
 import WorkingDayPanel from "@/components/office/WorkingDayPanel";
+import DateAiPanel from "@/components/office/DateAiPanel";
 import DepartmentLinksPanel from "@/components/office/DepartmentLinksPanel";
 
 export default function OfficeSetupPage() {
@@ -33,6 +34,7 @@ export default function OfficeSetupPage() {
           <CategoriesPanel onMessage={setMessage} />
           <AttestationTypesPanel onMessage={setMessage} />
         </div>
+        <DateAiPanel onMessage={setMessage} />
         <WorkingDayPanel onMessage={setMessage} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <HolidayPanel onMessage={setMessage} />

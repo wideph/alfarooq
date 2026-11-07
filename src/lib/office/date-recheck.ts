@@ -1,14 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { todayPakistan } from "@/lib/office/serializers";
-import { researchClosures, scopesOfRule } from "@/lib/office/ai-dates";
 import { refreshOpenCasesPrintingDates } from "@/lib/office/working-day";
-import {
-  applyAttestationPlan,
-  attestationKind,
-  formatDmy,
-  ruleForKind,
-  type PlannedChange,
-} from "@/lib/office/attestation-dates";
+import { applyAttestationPlan, formatDmy, type PlannedChange } from "@/lib/office/attestation-dates";
 
 // §W60 — maujooda dates ki dobara jaanch:
 //   • naya band din (admin table / AI) mile ya tarteeb toote → pending
@@ -16,7 +8,7 @@ import {
 //   • bina set ke case ki khali dates bhar di jati hain;
 //   • expected printing dates naye calendar se.
 // Chalta hai: admin ka "Sab dates check karein" button, holiday add / edit,
-// working-day override, roz ka cron, aur har nayi date ke baad AI research.
+// working-day override, roz ka cron, aur online AI check (date-verify.ts) ke baad.
 
 export type DateActor = { adminId: string; role?: string | null };
 export const SYSTEM_ACTOR: DateActor = { adminId: "system", role: "system" };
@@ -44,32 +36,6 @@ export async function noteMovedDates(caseId: string, changes: PlannedChange[], a
   });
 }
 
-/**
- * Case ki pending dates par AI research (background). Naya band din mila to
- * planner dates aage karta hai + remark. Kabhi throw nahi karta.
- */
-export async function researchCaseDates(caseId: string, actor: DateActor = SYSTEM_ACTOR): Promise<number> {
-  try {
-    const rows = await prisma.caseAttestation.findMany({
-      where: { caseId, status: { not: "DONE" }, scheduledDate: { not: null } },
-      select: { scheduledDate: true, attestationType: { select: { name: true } } },
-    });
-    const targets = rows.map((row) => ({
-      date: row.scheduledDate!,
-      scopes: scopesOfRule(ruleForKind(attestationKind(row.attestationType.name))),
-    }));
-    const created = await researchClosures(targets);
-    if (created > 0) {
-      const changes = await applyAttestationPlan(caseId);
-      await noteMovedDates(caseId, changes, actor);
-    }
-    return created;
-  } catch (error) {
-    console.error("[office] case date research fail", caseId, error);
-    return 0;
-  }
-}
-
 /** Plan + remark (pehle se lagi date badli ho to). Kabhi throw nahi karta. */
 export async function planCaseDates(
   caseId: string,
@@ -92,13 +58,14 @@ export async function planCaseDates(
 }
 
 /**
- * Tamam khule cases ki pending attestation dates dobara check (aur research=true
- * ho to pehle AI se aane wali dates ki research).
+ * Tamam (ya diye gaye) khule cases ki pending attestation dates dobara check
+ * (chhutti / band din / tarteeb → aage + remark; khali → bhari) + expected
+ * printing dates. Online AI check alag (date-verify.ts verifyAllOpenDates).
  */
 export async function recheckOpenCaseDates(
   actor: DateActor,
-  opts: { research?: boolean; caseIds?: string[] } = {}
-): Promise<{ checked: number; fixes: CaseDateFix[]; newClosures: number; printingRefreshed: number }> {
+  opts: { caseIds?: string[] } = {}
+): Promise<{ checked: number; fixes: CaseDateFix[]; printingRefreshed: number }> {
   const cases = await prisma.case.findMany({
     where: {
       status: { not: "CANCELLED" },
@@ -107,25 +74,6 @@ export async function recheckOpenCaseDates(
     },
     select: { id: true, caseNumber: true },
   });
-
-  let newClosures = 0;
-  if (opts.research) {
-    const rows = await prisma.caseAttestation.findMany({
-      where: {
-        caseId: { in: cases.map((item) => item.id) },
-        status: { not: "DONE" },
-        scheduledDate: { gte: todayPakistan() },
-      },
-      select: { scheduledDate: true, attestationType: { select: { name: true } } },
-    });
-    newClosures = await researchClosures(
-      rows.map((row) => ({
-        date: row.scheduledDate!,
-        scopes: scopesOfRule(ruleForKind(attestationKind(row.attestationType.name))),
-      })),
-      { maxScans: 8 }
-    );
-  }
 
   const fixes: CaseDateFix[] = [];
   const CHUNK = 5;
@@ -150,5 +98,5 @@ export async function recheckOpenCaseDates(
   }
 
   const printingRefreshed = await refreshOpenCasesPrintingDates();
-  return { checked: cases.length, fixes, newClosures, printingRefreshed };
+  return { checked: cases.length, fixes, printingRefreshed };
 }

@@ -89,6 +89,13 @@ export class DayResolver {
     this.ranges.push([start.getTime(), end.getTime()]);
   }
 
+  /** Admin ne "Working days" panel se ye din KHULA mark kiya? (Pakistan) */
+  async isManualOpen(dateInput: Date): Promise<boolean> {
+    const date = dayOnly(dateInput);
+    await this.ensure(date, date);
+    return this.manualOpen(formatDateOnly(date), date);
+  }
+
   // Admin ne "Working days" panel se ye din khula mark kiya (Pakistan)?
   private manualOpen(key: string, date: Date) {
     const row = this.cache.get(key);

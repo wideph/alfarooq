@@ -605,3 +605,41 @@ par kuch cache nahi. Har scan (scope + 14 din window) `OfficeDateScan` mein; aan
 din baad dobara. Dates lagne ke baad after() mein aur roz cron mein; naya band din mile to
 planner. Model internet search nahi karta (apne ilm se) — asal bharosa built-in calendar + admin
 table.
+
+## BR29. Har date ka ONLINE check (internet khabrein + attached AI) — §W61
+
+Owner: har woh date jo pehle se tay nahi, us par attached AI internet ki taaza maloomat se
+check kare ke chhutti ka elaan to nahi hua (khaas kar Islamabad mein achanak chhuttiyan);
+20 din se aage ki date par faisla nahi; waqt aur AI credits ki parwah nahi — galti nahi honi
+chahiye. Admin ki haath ki date working day na ho to qareeb tareen working day.
+
+- **Pehle se tay din** (AI nahi): weekend, built-in calendar, admin Holidays table (BR28), admin
+  ka Working-day "khula" override.
+- **Baqi har din**, har zaroori scope (attestation ke qaide se: PAKISTAN + sheher / EMBASSIES_ISB
+  / SAUDI; Special Mofa: Pakistan + chuni hui city) ke liye (`date-verify.ts`):
+  1. Online khabrein (`day-news.ts`): **Tavily** (owner ka chuna hua; key Setup → "Dates ka
+     online check" panel mein, ya env TAVILY_API_KEY; topic news, advanced; aane wali dates:
+     pichle 45 din ki khabrein, guzri dates: us waqt ki) — Tavily na ho / fail → GDELT (muft,
+     aksar limit) — wo bhi na ho → AI sirf apne ilm se ("OFFLINE").
+  2. Attached AI (Settings → Bot; live DeepSeek — khud internet nahi dekhta) khabrein parh kar
+     har din ka faisla + saboot (khabar ke link) — `aiCheckDays`; har date ka jawab lazmi warna
+     natija radd.
+  3. `OfficeDayCheck` (date + scope) mein; band → HolidayClosure "AI: … (online)" row (admin
+     panel mein, delete ho sakti) → planner date aage + remark (ATTESTATION + ADMIN) → nayi date
+     ka bhi check, jab tak sab confirm na ho.
+- **20 din**: is se aage ki date TENTATIVE (koi faisla / AI nahi). 20 din ke andar: check; phir
+  har **20 ghante** baad dobara (roz) jab tak din guzar na jaye. Guzra din: us din ya baad ka ek
+  check kaafi. OFFLINE faisla 3 ghante baad dobara. AI / internet fail → kuch nahi likha jata,
+  "check baqi" rehta hai.
+- **Kab chalta hai**: case banne / attestation add / extra service / set dates / payment ke baad
+  (after(), 300s); case kholne par page khud `POST /cases/[id]/verify-dates` bulata hai (jab tak
+  "check baqi" ho, 4 dafa tak); roz ka cron (`verifyAllOpenDates` — 20 din ke andar ki tamam
+  pending attestation + expected printing dates); admin "Sab dates check karein"; nayi Tavily key
+  save karne par. Ek case par ek waqt mein ek check (`Case.datesCheckingUntil` lease).
+- **UI**: har pending date ke saath badge — "AI ✓ online" (waqt + saboot link) / "AI ✓ (bina
+  online)" / "AI check baqi" / "Tentative (20+ din)" / "Band — date badal rahi" (admin / booking
+  Attestations tab + department view).
+- **Admin ki haath ki date** (§W61, BR28 ka 400 wala hissa badla): working day na ho ya tarteeb ke
+  khilaf → **qareeb tareen sahi din** (wahi, +1, −1, +2, −2 …; aaj / aage ki date kabhi aaj se
+  pehle nahi; pichle qadam ke BAAD, kisi DONE agle qadam se PEHLE) khud lagta hai + notice; aage
+  wale pending qadam khisakte hain; phir online check. Koi sahi din na mile (±60) → 400.

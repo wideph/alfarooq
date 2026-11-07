@@ -109,6 +109,8 @@ export type CaseDetail = {
     notes: string | null;
     order: number;
     attestationType: { id: string; name: string };
+    // §W61: date ki online check halat (pending / DONE na ho to null).
+    dateCheck?: AttestationDateCheck | null;
   }>;
   payments: Array<{
     id: string;
@@ -298,3 +300,11 @@ export const inputClass =
 export const primaryBtnClass =
   "inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50";
 export const ghostBtnClass = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700";
+
+// §W61 — attestation date ka online check (Tavily khabrein + attached AI).
+export type AttestationDateCheck = {
+  status: "VERIFIED" | "OFFLINE" | "PENDING" | "TENTATIVE" | "CLOSED";
+  checkedAt: string | null;
+  note: string | null;
+  sources: Array<{ title: string; url: string }>;
+};

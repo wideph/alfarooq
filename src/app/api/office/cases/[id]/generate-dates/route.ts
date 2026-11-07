@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { badRequest, forbidden, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { generateSetDates } from "@/lib/office/date-engine";
+import { safeVerifyCaseDates } from "@/lib/office/date-verify";
 import { toJson } from "@/lib/office/serializers";
 import { getFreshAdminSession, hasPermission } from "@/lib/auth";
 
@@ -28,6 +29,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (!item.setId) return badRequest("Pehle Set of Attestations select karein");
 
     const result = await generateSetDates(id);
+    // §W61: nayi dates ka online check (response ke baad).
+    after(() => safeVerifyCaseDates(id, session));
     await logOfficeAction(session, {
       action: "case.generate-dates",
       entity: "Case",

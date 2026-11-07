@@ -397,6 +397,8 @@ model Case {
   // §W56: reissue par filing dobara — is waqt ke baad wali pehli filing file
   // case ko printing par bhejti hai.
   filingRoundAt            DateTime?
+  // §W61: dates ka online check chal raha hai (is waqt tak) — do check saath na chalen.
+  datesCheckingUntil       DateTime?
   notes                    String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -736,16 +738,31 @@ model HolidayClosure {
   @@unique([date, scope])
 }
 
-// §W60 — AI ne kaun si 14-din ki window (scope ke liye) kab scan ki. Sirf
-// kamyab scan yahan aata hai; aane wali window 7 din baad dobara scan hoti hai.
-model OfficeDateScan {
-  id          String   @id @default(cuid())
-  scope       String
-  windowStart DateTime
-  scannedAt   DateTime @default(now())
-  closedCount Int      @default(0)
+// §W61 — har din (scope ke liye) ka ONLINE check: Tavily (ya GDELT) ki
+// khabrein + attached AI ka faisla. Sirf kamyab AI faisla likha jata hai.
+// Aane wali date (20 din ke andar) roz dobara check hoti hai.
+model OfficeDayCheck {
+  id        String   @id @default(cuid())
+  date      DateTime
+  // PAKISTAN | ISLAMABAD | QUETTA | GUJRAT | LAHORE | EMBASSIES_ISB | SAUDI
+  scope     String
+  open      Boolean
+  reason    String?
+  // [{ title, url }] — jin khabron par faisla hua
+  sources   Json?
+  // online khabrein mili thin? (false = sirf AI ka apna ilm)
+  online    Boolean  @default(false)
+  model     String?
+  checkedAt DateTime @default(now())
 
-  @@unique([scope, windowStart])
+  @@unique([date, scope])
+}
+
+// §W61 — dates ke online check ki settings (ek hi row "global").
+model OfficeDateConfig {
+  id           String   @id @default("global")
+  tavilyApiKey String   @default("")
+  updatedAt    DateTime @updatedAt
 }
 
 model WorkingDatePool {
