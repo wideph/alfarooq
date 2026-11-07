@@ -2487,3 +2487,7 @@ Investigation-first (live DB audit):
   had, AI band → foran null bina internet, cron jaisa: purani jaanch ne admin chhutti se date aage
   ki jabke AI atka tha, tarteeb theek, status "check baqi"; H4 Tavily credits khatam). w60-sim 50/50.
   tsc 0, lint 0, build 0.
+- **Live**: owner ki seedhi ijazat ("haan, live migration chalao aur push karo") se `npx prisma
+  migrate deploy` (wave61) phir push ebb5710. Live audit (read-only): 12 khule cases, masle 0,
+  printing band din par 0. Tavily key abhi nahi — owner Setup → "Dates ka online check" mein
+  daale + Test; tab tak AI GDELT / apne ilm se (ya check baqi), dates purane qaide se.
