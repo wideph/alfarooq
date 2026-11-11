@@ -98,7 +98,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         before: existing,
         after: { ...data, ...(stageBack ? { caseStatus: stageBack } : {}), ...(result.droppedExtraDecisions ? { extraFaislaKhatam: result.droppedExtraDecisions } : {}) },
       });
-      await notifyCourierStage(existing.caseId, courierStage);
+      await notifyCourierStage(existing.caseId, courierStage, session.adminId);
       // §W11.8: verify decision → payment submitter + case creator.
       if (newStatus && statusChanged) {
         const caseRow = await prisma.case.findUnique({
@@ -106,6 +106,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           select: { caseNumber: true, createdByAdminId: true },
         });
         await notifyUsers([existing.submittedById, caseRow?.createdByAdminId], {
+          exclude: session.adminId,
           type: "payment.verify",
           title: `Payment ${PAYMENT_STATUS_LABELS[newStatus] || newStatus} — case ${caseRow?.caseNumber || ""}`,
           link: `/office/cases/${existing.caseId}`,

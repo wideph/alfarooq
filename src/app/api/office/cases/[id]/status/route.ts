@@ -218,6 +218,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         const link = `/office/cases/${id}`;
         sideEffects.push(
           notifyUsers([item.createdByAdminId], {
+            exclude: session.adminId,
             type: "case.status",
             title: `Case ${item.caseNumber}: ${label}`,
             body: adminNote,
@@ -228,6 +229,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         if (role) {
           sideEffects.push(
             notifyRole(role, {
+              exclude: session.adminId,
               type: "case.status",
               title: `Case ${item.caseNumber}: ${label}`,
               body: adminNote,
@@ -238,7 +240,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
       // §W30: courier stage (address / slip) ki notification permission ke hisaab se.
       if (newStatus === "WAITING_FOR_COURIER" || newStatus === "WAITING_FOR_COURIER_ADDRESS") {
-        sideEffects.push(notifyCourierStage(id, newStatus));
+        sideEffects.push(notifyCourierStage(id, newStatus, session.adminId));
       }
       await Promise.all(sideEffects);
     });

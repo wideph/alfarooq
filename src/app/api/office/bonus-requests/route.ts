@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
 
       // §W11.8 — nayi bonus request par admins ko notification.
       await notifyAdmins({
+        exclude: session.adminId,
         type: "request",
         title: `Bonus request: ${office.name}`,
         body: created.reason || null,
@@ -145,6 +146,7 @@ export async function PATCH(request: NextRequest) {
         });
         // §W11.8 — decision par requester ko notification.
         await notifyUsers([existing.createdById], {
+          exclude: session.adminId,
           type: "request.decided",
           title: "Bonus request reject ho gayi",
           body: existing.reason || null,
@@ -214,6 +216,7 @@ export async function PATCH(request: NextRequest) {
       });
       // §W11.8 — decision par requester ko notification.
       await notifyUsers([existing.createdById], {
+        exclude: session.adminId,
         type: "request.decided",
         title: "Bonus request accept ho gayi",
         body: existing.reason || null,

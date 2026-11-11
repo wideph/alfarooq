@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
       // §W14.5: member ka linked admin user hi accept/reject karega — usi ko notify.
       if (payout.member.adminId) {
         await notifyUsers([payout.member.adminId], {
+          exclude: session.adminId,
           type: "request",
           title: `Payout request: Rs ${toNumber(amount)}`,
           body: remarks,

@@ -63,6 +63,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           after: { kind, caseId: id, caseNumber: item.caseNumber, amount, expenseDate },
         });
         await notifyAdmins({
+          exclude: session.adminId,
           type: "dept.expense",
           title: `Review: ${kindLabel.toLowerCase()} kharcha Rs ${toNumber(amount).toLocaleString("en-PK")} — Case ${item.caseNumber}`,
           body: `${session.name} ne bheja — manzoor / wapas karein`,

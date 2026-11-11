@@ -215,6 +215,7 @@ export async function POST(request: NextRequest) {
         after: { kind: "OTHER", amount, description, expenseDate },
       });
       await notifyAdmins({
+        exclude: session.adminId,
         type: "dept.expense",
         title: `Review: other expenses Rs ${toNumber(amount).toLocaleString("en-PK")} — ${session.name}`,
         body: description,

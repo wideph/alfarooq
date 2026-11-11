@@ -572,6 +572,7 @@ export async function POST(request: NextRequest) {
 
     // §W11.8: case.create → tamam admins ko notification.
     await notifyAdmins({
+      exclude: session.adminId,
       type: "case.create",
       title: `New case ${created.caseNumber}`,
       link: `/office/cases/${created.id}`,

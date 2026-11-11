@@ -103,6 +103,7 @@ export async function PATCH(request: NextRequest) {
         });
         // §W11.8 — decision par requester ko notification.
         await notifyUsers([existing.createdById], {
+          exclude: session.adminId,
           type: "request.decided",
           title: `Case ${existing.case.caseNumber}: discount request reject ho gayi`,
           link: `/office/cases/${existing.caseId}`,
@@ -185,7 +186,7 @@ export async function PATCH(request: NextRequest) {
     const courierStage = await advanceCourierStage(existing.caseId);
     // W13.2: audit log + requester notification response ke baad.
     after(async () => {
-      await notifyCourierStage(existing.caseId, courierStage);
+      await notifyCourierStage(existing.caseId, courierStage, session.adminId);
       await logOfficeAction(session, {
         action: "discount.accept",
         entity: "DiscountRequest",
@@ -201,6 +202,7 @@ export async function PATCH(request: NextRequest) {
       });
       // §W11.8 — decision par requester ko notification.
       await notifyUsers([existing.createdById], {
+        exclude: session.adminId,
         type: "request.decided",
         title: `Case ${existing.case.caseNumber}: discount request accept ho gayi`,
         link: `/office/cases/${existing.caseId}`,

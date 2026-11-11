@@ -94,6 +94,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
         // Request creator ko notify (wo linked admin nahi bhi ho sakta).
         await notifyUsers([payout.createdById], {
+          exclude: session.adminId,
           type: "request.decided",
           title: `Payout accept ho gaya: Rs ${toNumber(payout.amount)}`,
           link: "/office/finance",
@@ -136,6 +137,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         after: updated,
       });
       await notifyUsers([payout.createdById], {
+        exclude: session.adminId,
         type: "request.decided",
         title: `Payout reject hui: Rs ${toNumber(payout.amount)}`,
         link: "/office/finance",

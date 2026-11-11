@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, guardOffice, notFound, serverError } from "@/lib/office/guard";
 import { logOfficeAction } from "@/lib/office/audit";
-import { notifyAdmins, notifyRole } from "@/lib/office/notifications";
+import { notifyRemarkRecipients } from "@/lib/office/remark-inbox";
 import { findAccessibleCase } from "@/lib/office/case-access";
 import { cleanText, toJson } from "@/lib/office/serializers";
 import {
@@ -143,28 +143,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         after: { remarkId: remark.id, targets, text },
       });
 
-      // §W11.8 — har remark target department ke users ko notification.
-      // §W25: ATTESTATION target dono roles ko jata hai ("attestation" office
-      // role + "attestation_dept") — live dept user attestation role par hai.
-      const TARGET_ROLES: Record<Exclude<RemarkTarget, "ADMIN">, string[]> = {
-        BOOKING: ["booking_office"],
-        FILING: ["filing"],
-        PRINTING: ["printing"],
-        ATTESTATION: ["attestation_dept", "attestation"],
-        COURIER: ["courier"],
-      };
-      const notice = {
-        type: "remark",
-        title: `Case ${item.caseNumber}: new remarks`,
-        body: text,
-        link: `/office/cases/${id}`,
-      };
-      await Promise.all(
-        targets.flatMap((target) =>
-          target === "ADMIN"
-            ? [notifyAdmins(notice)]
-            : TARGET_ROLES[target as Exclude<RemarkTarget, "ADMIN">].map((role) => notifyRole(role, notice))
-        )
+      // §W11.8 / §W62 — notification SIRF unhi ko jin ke Remarks inbox mein ye
+      // remark aata hai: BOOKING → sirf isi case ke office ke booking users
+      // (pehle har office ke booking users ko jati thi), departments → role ya
+      // department permission wale, ADMIN → super admins; likhne wala khud nahi.
+      await notifyRemarkRecipients(
+        id,
+        targets as RemarkTarget[], // upar validate ho chuke (REMARK_TARGETS + allowed)
+        { type: "remark", title: `Case ${item.caseNumber}: new remarks`, body: text, link: `/office/cases/${id}` },
+        session.adminId
       );
     });
 

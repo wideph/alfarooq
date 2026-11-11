@@ -208,11 +208,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (data.status === "DONE") {
         const link = `/office/cases/${id}`;
         const title = `Case ${item.caseNumber}: attestation done`;
-        await notifyRole("attestation_dept", { type: "attestation", title, link });
-        await notifyAdmins({ type: "attestation", title, link });
+        await notifyRole("attestation_dept", { exclude: session.adminId, type: "attestation", title, link });
+        await notifyAdmins({ exclude: session.adminId, type: "attestation", title, link });
       }
       // §W30: completion ke saath courier stage aaya ho to notification.
-      await notifyCourierStage(id, courierStage);
+      await notifyCourierStage(id, courierStage, session.adminId);
 
       await logOfficeAction(session, {
         action: "case.attestation.update",

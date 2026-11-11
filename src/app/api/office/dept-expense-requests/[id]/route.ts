@@ -82,6 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // Partner office ka case → pool dobara (shares % ke mutabiq minus).
         if (result.caseId) await syncProfitShare(result.caseId, session.adminId);
         await notifyUsers([review.adminId], {
+          exclude: session.adminId,
           type: "request.decided",
           title: `${label} manzoor: Rs ${finalAmount.toLocaleString("en-PK")}${where}`,
           body: result.request.requestedAmount
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         after: { status: "REJECTED", decisionNote: note },
       });
       await notifyUsers([review.adminId], {
+        exclude: session.adminId,
         type: "request.decided",
         title: `${label} wapas: Rs ${toNumber(review.amount).toLocaleString("en-PK")}${where}`,
         body: note ? `Wajah: ${note}` : "Admin ne manzoor nahi kiya",

@@ -227,13 +227,14 @@ export async function POST(request: NextRequest) {
       // §W11.8: payment submit → verify permission walon ko notification.
       if (status === "PENDING") {
         await notifyPermission("office:payments:verify", {
+          exclude: session.adminId,
           type: "payment.submit",
           title: `Payment submit — case ${item.caseNumber}`,
           body: `Rs ${amount} ki payment verify karein`,
           link: `/office/cases/${caseId}`,
         });
       }
-      await notifyCourierStage(caseId, courierStage);
+      await notifyCourierStage(caseId, courierStage, session.adminId);
       if (datesNeeded) {
         try {
           await generateSetDates(caseId);

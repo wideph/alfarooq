@@ -2491,3 +2491,31 @@ Investigation-first (live DB audit):
   migrate deploy` (wave61) phir push ebb5710. Live audit (read-only): 12 khule cases, masle 0,
   printing band din par 0. Tavily key abhi nahi — owner Setup → "Dates ka online check" mein
   daale + Test; tab tak AI GDELT / apne ilm se (ya check baqi), dates purane qaide se.
+
+## WAVE 62 (2026-11-11) — Notifications sirf mutaliqa users ko
+
+- **Owner**: tamam users ko ek doosre ke notifications dikh rahe hain — har user ko sirf us ke
+  mutaliqa notifications.
+- **Tahqeeq**: bell / list route (`/api/office/notifications`) aur mark-read hamesha `userId =
+  session` — sahi; client par koi cache nahi. Masla BHEJNE mein: naya read-only
+  `scripts/office-notifications-audit.ts` (live, 14 din, 303 notifications): remark ki
+  notification `notifyRole("booking_office")` se HAR office ke booking users ko jati thi (17
+  doosre office ke case ki, remark ki text samait — AF-2026-000037 / 39 / 42); baqi types mein
+  doosre office ko 0. Saath mein: kaam karne wala khud apne kaam ki notification paata tha; files
+  route `notifyRole("atta")` — ye role hai hi nahi (attestation dept ko kuch nahi); live attestation
+  dept user role "attestation" par hai jabke status / DONE notifications sirf "attestation_dept" ko.
+- **Code**: `remark-inbox.ts` `notifyRemarkRecipients` (inbox ka qaida: BOOKING sirf case ke office
+  / read-all, departments role + permission, ADMIN, likhne wala nahi) — remarks route isi par;
+  `notifications.ts` `exclude` field + `notifyCourierStage(…, actorId)` + `rolesFor`
+  (attestation_dept / atta → attestation_dept + attestation); 21 office routes mein 44 notify calls
+  par `exclude: session.adminId` (script, diff dekha). BR30.
+- **DB**: koi migration nahi.
+- **Verify**: tsc 0, lint 0, build 0. Local dev server HTTP 9/9: attestation → BOOKING+ADMIN = sirf
+  isi office ke a1,a2 + admin (doosra office nahi, likhne wala nahi); admin → FILING+ATTESTATION =
+  filer, attestation user, doosre office ka filing-permission user (admin khud nahi); booking →
+  ATTESTATION+ADMIN; filing → BOOKING = sirf apna office; admin status → sirf case creator (admin
+  khud nahi); PRINTED → "attestation" role tak; notifyRole("atta") → attestation dept; har bell
+  sirf apni.
+- **Next step**: purani (pehle ki) ghalat notifications DB mein hain — owner kahe to unhein hataya
+  ja sakta hai (abhi nahi chhuya). Live par: ek office se remark booking ko bhej kar doosre office
+  ke user se bell check.

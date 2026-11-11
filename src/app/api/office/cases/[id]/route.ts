@@ -179,7 +179,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         before: existing,
         after: data,
       });
-      await notifyCourierStage(id, courierStage);
+      await notifyCourierStage(id, courierStage, session.adminId);
     });
 
     // Full detail is intentionally returned here: multiple detail-tab callers

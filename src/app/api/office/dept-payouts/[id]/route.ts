@@ -104,6 +104,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           after: updated,
         });
         await notifyUsers([payout.createdById], {
+          exclude: session.adminId,
           type: "request.decided",
           title: `${label} ki payment accept ho gayi: Rs ${toNumber(payout.amount).toLocaleString("en-PK")}`,
           link: "/office/finance",
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
       // User ne reject ki → admin ko; admin ne cancel ki → user ko.
       await notifyUsers([isReceiver ? payout.createdById : payout.adminId], {
+        exclude: session.adminId,
         type: "request.decided",
         title: isReceiver
           ? `${label} ki payment reject hui: Rs ${toNumber(payout.amount).toLocaleString("en-PK")}`

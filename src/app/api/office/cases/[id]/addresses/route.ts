@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       entityId: id,
       after: courierStage ? { ...row, caseStatus: courierStage } : row,
     });
-    after(() => notifyCourierStage(id, courierStage));
+    after(() => notifyCourierStage(id, courierStage, session.adminId));
     return NextResponse.json({ ...row, caseStatus: courierStage }, { status: 201 });
   } catch (error) {
     return serverError(error);

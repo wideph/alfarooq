@@ -271,16 +271,16 @@ async function afterUpload(
       const link = `/office/cases/${id}`;
       const title = `Case ${item.caseNumber}: ${department} file uploaded`;
       if (result.nextStatus === "WAITING_FOR_PRINTING") {
-        await notifyRole("printing", { type: "file.upload", title, link });
-        await notifyAdmins({ type: "file.upload", title, link });
+        await notifyRole("printing", { exclude: session.adminId, type: "file.upload", title, link });
+        await notifyAdmins({ exclude: session.adminId, type: "file.upload", title, link });
       } else if (result.nextStatus === "PRINTED") {
-        await notifyRole("atta", { type: "file.upload", title, link });
-        await notifyAdmins({ type: "file.upload", title, link });
+        await notifyRole("attestation_dept", { exclude: session.adminId, type: "file.upload", title, link });
+        await notifyAdmins({ exclude: session.adminId, type: "file.upload", title, link });
       } else {
-        await notifyAdmins({ type: "file.upload", title, link });
+        await notifyAdmins({ exclude: session.adminId, type: "file.upload", title, link });
       }
       // §W30: attestation complete + payment pehle se poori → courier stage.
-      await notifyCourierStage(id, result.nextStatus);
+      await notifyCourierStage(id, result.nextStatus, session.adminId);
     }
 
     // §W50: courier slip → case ke booking office ko (pehle sirf admins ko
@@ -288,6 +288,7 @@ async function afterUpload(
     // mein upar "Courier slip" card.
     if (department === "COURIER") {
       await notifyCaseOffice(id, {
+        exclude: session.adminId,
         type: "file.upload",
         title: result.delivered
           ? `Case ${item.caseNumber}: Delivered — courier slip upload ho gayi`

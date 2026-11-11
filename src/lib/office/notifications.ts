@@ -9,10 +9,12 @@ export type NotificationInput = {
   title: string;
   body?: string | null;
   link?: string | null;
+  // §W62: jis user ne ye kaam kiya — use apne hi kaam ki notification nahi.
+  exclude?: string | null;
 };
 
 async function createMany(userIds: string[], n: NotificationInput) {
-  const unique = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  const unique = [...new Set(userIds.filter((id): id is string => Boolean(id) && id !== n.exclude))];
   if (unique.length === 0) return;
   await prisma.notification.createMany({
     data: unique.map((userId) => ({
@@ -37,11 +39,18 @@ export async function notifyUsers(
   }
 }
 
+// §W62: attestation department do roles mein hai — "attestation_dept" aur
+// "attestation" (live dept user isi par; remarks ka ATTESTATION target bhi
+// dono, §W25). Purana "atta" naam bhi isi ko (pehle kisi ko nahi jata tha).
+function rolesFor(role: string): string[] {
+  return role === "attestation_dept" || role === "atta" ? ["attestation_dept", "attestation"] : [role];
+}
+
 /** Ek role ke tamam ACTIVE users ko (filing | printing | attestation_dept | courier | booking_office | cashier | admin). */
 export async function notifyRole(role: string, n: NotificationInput): Promise<void> {
   try {
     const users = await prisma.admin.findMany({
-      where: { role, isActive: true },
+      where: { role: { in: rolesFor(role) }, isActive: true },
       select: { id: true },
     });
     await createMany(users.map((u) => u.id), n);
@@ -101,7 +110,11 @@ export async function notifyCaseOffice(caseId: string, n: NotificationInput): Pr
  *     permission) bhi courier ka kaam karte hain.
  * Kabhi throw nahi karta.
  */
-export async function notifyCourierStage(caseId: string, stage: string | null | undefined): Promise<void> {
+export async function notifyCourierStage(
+  caseId: string,
+  stage: string | null | undefined,
+  actorId?: string | null
+): Promise<void> {
   if (stage !== "WAITING_FOR_COURIER" && stage !== "WAITING_FOR_COURIER_ADDRESS") return;
   try {
     const item = await prisma.case.findUnique({
@@ -115,12 +128,14 @@ export async function notifyCourierStage(caseId: string, stage: string | null | 
         type: "case.status",
         title: `Case ${item.caseNumber}: payment complete — courier slip upload karein`,
         link,
+        exclude: actorId,
       });
     } else {
       const n = {
         type: "case.status",
         title: `Case ${item.caseNumber}: payment complete — courier address add karein`,
         link,
+        exclude: actorId,
       };
       await notifyUsers([item.createdByAdminId], n);
       await notifyAdmins(n);

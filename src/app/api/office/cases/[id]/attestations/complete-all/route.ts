@@ -157,10 +157,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (result.completed) {
         const link = `/office/cases/${id}`;
         const title = `Case ${item.caseNumber}: attestation complete${reasonPath ? " (wajah ke saath)" : ""}`;
-        await notifyRole("attestation_dept", { type: "attestation", title, body: reasonPath ? reason : null, link });
-        await notifyAdmins({ type: "attestation", title, body: reasonPath ? reason : null, link });
+        await notifyRole("attestation_dept", { exclude: session.adminId, type: "attestation", title, body: reasonPath ? reason : null, link });
+        await notifyAdmins({ exclude: session.adminId, type: "attestation", title, body: reasonPath ? reason : null, link });
       }
-      await notifyCourierStage(id, result.courierStage);
+      await notifyCourierStage(id, result.courierStage, session.adminId);
     });
 
     return NextResponse.json(

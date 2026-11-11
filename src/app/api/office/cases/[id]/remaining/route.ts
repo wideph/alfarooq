@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const result = await recomputeCaseFinancials(id, session, { resetExtraDecisions: true });
       // §W30: agreed badalne se baqi 0 ho gaya → courier stage (forward-only).
       const courierStage = await advanceCourierStage(id);
-      after(() => notifyCourierStage(id, courierStage));
+      after(() => notifyCourierStage(id, courierStage, session.adminId));
       const detail = await loadCaseDetail(session, id);
       return NextResponse.json({ ...(detail as object), needsExtraDecision: result.needsExtraDecision });
     }

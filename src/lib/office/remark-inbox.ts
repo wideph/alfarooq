@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { hasPermission, type AdminSession } from "@/lib/auth";
+import { hasPermission, parsePermissions, type AdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { caseScope } from "@/lib/office/case-access";
+import { canSeeOffice, caseScope } from "@/lib/office/case-access";
+import { notifyUsers, type NotificationInput } from "@/lib/office/notifications";
 import { roleToRemarkTarget, type RemarkTarget } from "@/lib/office/workflow";
 
 // §W32 — user ka "Remarks" tab: kisi bhi case mein jo remarks is user ke
@@ -44,4 +45,49 @@ export function remarkInboxWhere(session: AdminSession): Prisma.CaseRemarkWhereI
 export async function remarkInboxCount(session: AdminSession): Promise<number> {
   const where = remarkInboxWhere(session);
   return where ? prisma.caseRemark.count({ where }) : 0;
+}
+
+/**
+ * §W62 — remark ki notification SIRF unhi users ko jin ke "Remarks" inbox mein
+ * ye remark aata hai (remarkTargetsForSession + remarkInboxWhere ka wahi qaida):
+ *   • ADMIN → super admins;
+ *   • BOOKING → sirf ISI case ke office ke booking users (pehle har office ke
+ *     booking users ko jati thi — doosre office ke case ka remark bhi);
+ *   • FILING / PRINTING / ATTESTATION / COURIER → us department ka role YA us
+ *     department ki write permission wale (cross-office, jaise un ki queues).
+ * Likhne wala khud nahi. Kabhi throw nahi karta.
+ */
+export async function notifyRemarkRecipients(
+  caseId: string,
+  targets: RemarkTarget[],
+  notice: Omit<NotificationInput, "exclude">,
+  authorId: string
+): Promise<void> {
+  try {
+    const item = await prisma.case.findUnique({ where: { id: caseId }, select: { bookingOfficeId: true } });
+    if (!item || targets.length === 0) return;
+    const wanted = new Set(targets);
+    const users = await prisma.admin.findMany({
+      where: { isActive: true, id: { not: authorId } },
+      select: { id: true, email: true, name: true, role: true, permissions: true, bookingOfficeId: true },
+    });
+    const recipients = users
+      .filter((user) => {
+        const session: AdminSession = {
+          adminId: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          permissions: parsePermissions(user.permissions),
+          bookingOfficeId: user.bookingOfficeId,
+        };
+        return remarkTargetsForSession(session).some(
+          (target) => wanted.has(target) && (target !== "BOOKING" || canSeeOffice(session, item.bookingOfficeId))
+        );
+      })
+      .map((user) => user.id);
+    await notifyUsers(recipients, { ...notice, exclude: authorId });
+  } catch (error) {
+    console.error("[notify] remark recipients fail", error);
+  }
 }

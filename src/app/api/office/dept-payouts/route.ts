@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
         after: { ...payout, userName: user.name },
       });
       await notifyUsers([adminId], {
+        exclude: session.adminId,
         type: "request",
         title: `${DEPT_PAYOUT_KIND_LABELS[kind]} ki payment: Rs ${toNumber(amount).toLocaleString("en-PK")} — accept karein`,
         body: remarks,

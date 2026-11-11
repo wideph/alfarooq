@@ -70,6 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // §W11.8 — nayi discount request par admins ko notification.
     await notifyAdmins({
+      exclude: session.adminId,
       type: "request",
       title: `Case ${item.caseNumber}: discount request`,
       body: created.reason || null,

@@ -650,3 +650,22 @@ chahiye. Admin ki haath ki date working day na ho to qareeb tareen working day.
   band — kuch nahi likha jata, date "check baqi" ("date purane qaide se sahi hai") rehti hai aur
   baad mein dobara. Cron PEHLE purani jaanch chalata hai, phir bache waqt mein AI. Case page par AI
   fail ho to peela note: dates purane qaide se lagi hain aur sahi hain; bekaar dobara koshish band.
+
+## BR30. Notifications sirf mutaliqa users ko — §W62
+
+- Bell / list hamesha sirf apni (`Notification.userId = session`) — ye pehle se sahi tha. Masla
+  BHEJNE mein tha.
+- **Remark** ki notification (`notifyRemarkRecipients`, `remark-inbox.ts`) theek unhi users ko
+  jin ke "Remarks" inbox mein wo remark aata hai: ADMIN → super admins; **BOOKING → sirf isi
+  case ke office ke booking users** (+ `office:cases:read-all` wale) — pehle `notifyRole
+  ("booking_office")` har office ke booking users ko remark ki text samait bhejta tha (live:
+  14 din mein 17 aisi); FILING / PRINTING / ATTESTATION / COURIER → us department ka role ya us
+  department ki write permission wale (cross-office, jaise queues). Likhne wala khud nahi.
+- **Kaam karne wala khud nahi**: har notify helper `exclude` leta hai; tamam office routes
+  `exclude: session.adminId` bhejte hain (status, files, payments, requests, payouts, courier
+  stage…) — apne hi kaam ki notification nahi.
+- **Attestation department** = roles `attestation_dept` + `attestation` (`notifyRole` dono ko;
+  purana "atta" naam bhi — pehle printing ke baad attestation dept ko file notification kisi ko
+  nahi jati thi).
+- Read-only jaanch: `npx tsx scripts/office-notifications-audit.ts [din]` (role / office wise;
+  doosre office ke case ki notification booking users ko).
