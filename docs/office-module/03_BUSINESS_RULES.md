@@ -669,3 +669,15 @@ chahiye. Admin ki haath ki date working day na ho to qareeb tareen working day.
   nahi jati thi).
 - Read-only jaanch: `npx tsx scripts/office-notifications-audit.ts [din]` (role / office wise;
   doosre office ke case ki notification booking users ko).
+
+## BR31. Roll Number 22–29: DO sets dim + date badge par waqt nahi — §W63
+
+- DAE 3Y BBTE / DBA 3Y BBTE, Roll Number ke aakhri do hindse 22..29: **(i)** Board + UV ibcc +
+  Special Mofa + Saudi Embassy + Mofa Saudi **aur (v)** Board + UV ibcc — dono dim (chun nahi
+  sakte; set route 403). Pehle sirf naam mein "(i)" wala dim hota tha. Pehchan set ke STEPS se
+  (`isSetDimmed`, rnumber.ts — admin naam badle to bhi), steps na hon to naam "(i)" / "(v)".
+  (iii) Board + UV ibcc + Special Mofa aur QR / Board-only sets khule.
+- Attestation date ka online-check badge (BR29) par check ka waqt / tareekh **nahi** (na badge,
+  na tooltip) — attestation ki date ke saath doosri date confusion banati thi. Labels: "✓ Khula din
+  (online check)", "✓ Khula din (bina online)", "Chhutti check baqi", "Tentative (20+ din)",
+  "Chhutti — date badal rahi".

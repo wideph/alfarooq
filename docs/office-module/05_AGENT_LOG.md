@@ -2519,3 +2519,19 @@ Investigation-first (live DB audit):
 - **Next step**: purani (pehle ki) ghalat notifications DB mein hain — owner kahe to unhein hataya
   ja sakta hai (abhi nahi chhuya). Live par: ek office se remark booking ko bhej kar doosre office
   ke user se bell check.
+
+## WAVE 63 (2026-11-13) — Set (v) bhi dim, date badge se waqt hataya
+
+- **Owner**: Roll Number wale cases mein (i) Board + UV ibcc + Special Mofa + Saudi Embassy + Mofa
+  Saudi dim hota hai magar Board + UV ibcc dikhta rehta hai — usi formula se ye bhi dim ho.
+  Attestation dates ke neeche "AI" aur AI ke check ka waqt / tareekh dikhta hai — confusion, na
+  dikhe.
+- **Wajah**: `isSetDimmed` sirf naam mein "(i)" dekhta tha; N5 "(i)/(v)" kehta hai. Badge (W61)
+  `checkedAt` dikhata tha.
+- **Code**: rnumber.ts `isSetDimmed(category, roll, set)` — steps signature (BOARD+UV_IBCC+
+  SPECIAL_MOFA+SAUDI_EMBASSY+MOFA_SAUDI ya BOARD+UV_IBCC, MOFA_SAUD bhi), fallback naam "(i)"/"(v)";
+  callers (set route, setup/sets) poora set dete hain. DateCheckBadge: waqt / tareekh hata, saaf
+  labels. BR31.
+- **DB**: koi migration nahi.
+- **Verify**: tsc 0, lint 0, build 0; w63-dim 14/14 (7 seed sets suffix 25, renamed full set,
+  suffix 21 / 30, doosri category, bina steps naam).

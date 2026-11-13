@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (item.categoryId && set.categoryId !== item.categoryId) {
       return badRequest("Ye Set of Attestations is category ka nahi hai");
     }
-    if (isSetDimmed(item.category?.name, item.rollNumber, set.name)) {
+    if (isSetDimmed(item.category?.name, item.rollNumber, set)) {
       return forbidden(DIMMED_REASON);
     }
 
